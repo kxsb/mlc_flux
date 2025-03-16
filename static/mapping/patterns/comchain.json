@@ -1,0 +1,20 @@
+{
+  "name": "Comchain",
+  "horizontalMapping": {
+    "Date": "Date",
+    "Montant": "Montant",
+    "Expéditeur": "Source",
+    "Destinataire": "Destination"
+  },
+  "verticalMappingRules": {
+    "keywords": {
+      "Professionnel": ["professionnel", "prestataire"],
+      "Particulier": ["particulier"]
+    },
+    "tolerance": {
+      "ignoreCase": true,
+      "ignoreSpaces": true,
+      "ignoreSpecialChars": true
+    }
+  }
+}

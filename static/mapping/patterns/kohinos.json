@@ -1,0 +1,31 @@
+{
+  "name": "Kohinos",
+  "horizontalMapping": {
+    "Date": "date",
+    "Expéditeur": "exp_idmlc|exp",
+    "Destinataire": "dest_idmlc|dest",
+    "Montant": "montant"
+  },
+  "verticalMappingRules": {
+    "useTypeColumns": true,
+    "expTypeMapping": {
+      "prestataire": "Professionnel",
+      "adherent": "Particulier",
+      "comptoir": "Particulier",
+      "groupe": "Particulier",
+      "siege": "Professionnel"
+    },
+    "destTypeMapping": {
+      "prestataire": "Professionnel",
+      "adherent": "Particulier",
+      "comptoir": "Particulier",
+      "groupe": "Particulier",
+      "siege": "Professionnel"
+    },
+    "tolerance": {
+      "ignoreCase": true,
+      "ignoreSpaces": true,
+      "ignoreSpecialChars": true
+    }
+  }
+}

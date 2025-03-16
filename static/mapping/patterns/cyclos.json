@@ -1,0 +1,24 @@
+{
+  "name": "Cyclos",
+  "horizontalMapping": {
+    "Date": "Date",
+    "Expéditeur": "De",
+    "Groupe Expéditeur": "Depuis le groupe",
+    "Destinataire": "Vers",
+    "Groupe Destinataire": "Vers le groupe",
+    "Montant": "Montant"
+  },
+  "verticalMappingRules": {
+    "groupColumns": {
+      "fromGroup": "Depuis le groupe",
+      "toGroup": "Vers le groupe"
+    },
+    "keywords": {
+      "Coffre": ["coffre", "émission", "emission", "banque", "change", "conversion"],
+      "Professionnel": ["prestataire", "entreprise", "pro", "commerce"],
+      "Particulier": ["utilisateur", "user", "u", "particulier"]
+    },
+    "emptyMeansCoffre": true,
+    "fallback": "manual"
+  }
+}
