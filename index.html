@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MLC Flux</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <div id="sidebar" class="sidebar">
+    <h2>MLC Flux</h2>
+
+    <button id="reloadButton" class="primary-btn">Recharger les données</button>
+    <button id="themeToggleBtn" class="secondary-btn theme-toggle-btn" type="button">
+      🌙 Mode sombre
+    </button>
+
+    <div class="filters">
+      <h3>Vues</h3>
+      <label><input type="radio" name="dataView" value="stats" checked> Statistiques globales</label>
+      <label><input type="radio" name="dataView" value="pros"> Activité des professionnels</label>
+      <label><input type="radio" name="dataView" value="network"> Network global</label>
+    </div>
+
+    <div class="filters">
+      <h3>Année d’analyse</h3>
+      <select id="yearFilterSelect" class="sidebar-select">
+      </select>
+    </div>
+  </div>
+
+  <div id="mainContent" class="main-content">
+    <div id="pageTitle"></div>
+    <div id="content"></div>
+  </div>
+
+  <script src="https://unpkg.com/cytoscape@3.27.0/dist/cytoscape.min.js"></script>
+  <script src="/static/js/chart.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
