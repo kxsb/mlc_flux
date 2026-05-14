@@ -1,0 +1,30 @@
+# Secrets / configuration locale
+.env
+
+# Bases et données locales
+*.db
+*.sqlite
+*.sqlite3
+server/data/user_mapping.json
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Logs
+logs/
+*.log
+
+# Backups de patch / fichiers de travail
+*.bak_*
+*.bak_patch*
+*.bak
+
+# Contrôles et sockets locaux éventuels
+gunicorn.ctl
+
+# Anciens reliquats de refactorisation locale
+static/js_old/
+static/utils_old/

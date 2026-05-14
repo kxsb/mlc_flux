@@ -1,0 +1,174 @@
+import base64
+from datetime import datetime, timedelta, UTC
+
+import requests
+from flask import current_app
+
+
+def build_basic_auth(username, password):
+    raw = f"{username}:{password}"
+    encoded = base64.b64encode(raw.encode("utf-8")).decode("utf-8")
+    return f"Basic {encoded}"
+
+
+def create_session_token():
+    base_url = current_app.config["CYCLOS_BASE_URL"]
+    username = current_app.config["CYCLOS_USERNAME"]
+    password = current_app.config["CYCLOS_PASSWORD"]
+
+    if not username or not password:
+        raise ValueError("CYCLOS_USERNAME ou CYCLOS_PASSWORD manquant dans .env")
+
+    url = f"{base_url}/auth/session?cookie=true&fields=sessionToken"
+    headers = {
+        "Authorization": build_basic_auth(username, password)
+    }
+
+    response = requests.post(url, headers=headers, timeout=30)
+    response.raise_for_status()
+
+    data = response.json()
+    session_token_json = data.get("sessionToken", "")
+    session_token_cookie = response.cookies.get("Session-Token", "")
+
+    if not session_token_json or not session_token_cookie:
+        raise ValueError("Session-Token incomplet récupéré depuis Cyclos")
+
+    return f"{session_token_json}{session_token_cookie}"
+
+
+def _parse_date(value):
+    if not value:
+        return None
+
+    value = value.strip()
+
+    # accepte YYYY-MM-DD
+    try:
+        dt = datetime.strptime(value, "%Y-%m-%d")
+        return dt.replace(tzinfo=UTC)
+    except ValueError:
+        pass
+
+    # accepte aussi ISO complet
+    try:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=UTC)
+        return dt.astimezone(UTC)
+    except ValueError:
+        raise ValueError(f"Format de date invalide: {value}")
+
+
+def _extract_transaction_items(data):
+    """
+    Normalise les formats de réponse possibles.
+    Sur l'instance Cyclos de la Gonette, /transactions renvoie normalement une liste.
+    """
+    if isinstance(data, list):
+        return data
+
+    if isinstance(data, dict):
+        if "list" in data and isinstance(data["list"], list):
+            return data["list"]
+        if "pageItems" in data and isinstance(data["pageItems"], list):
+            return data["pageItems"]
+
+    return []
+
+
+def get_transactions(days=None, date_from=None, date_to=None):
+    """
+    Récupère les transactions Cyclos sur une période donnée, avec pagination complète.
+
+    Paramètres exposés côté MLCFlux :
+    - days=N : période glissante de N jours
+    - date_from=YYYY-MM-DD ou ISO
+    - date_to=YYYY-MM-DD ou ISO
+
+    Paramètres utilisés côté Cyclos :
+    - datePeriod : filtre temporel
+    - page / pageSize : pagination
+    - orderBy=dateDesc : transactions les plus récentes d'abord
+    """
+    base_url = current_app.config["CYCLOS_BASE_URL"]
+    session_token = create_session_token()
+
+    now = datetime.now(UTC)
+
+    if date_from:
+        start_date = _parse_date(date_from)
+    elif days is not None:
+        start_date = now - timedelta(days=days)
+    else:
+        start_date = now - timedelta(hours=48)
+
+    end_date = _parse_date(date_to) if date_to else None
+
+    if end_date and end_date < start_date:
+        raise ValueError("date_to doit être postérieure ou égale à date_from")
+
+    url = f"{base_url}/transactions"
+
+    headers = {
+        "Session-Token": session_token,
+        "Accept": "application/json",
+    }
+
+    page_size = 500
+    page = 0
+    max_pages = 10000
+    all_transactions = []
+
+    while True:
+        params = {
+            "datePeriod": [start_date.isoformat(timespec="seconds")],
+            "pageSize": page_size,
+            "page": page,
+            "orderBy": "dateDesc",
+        }
+
+        if end_date:
+            params["datePeriod"].append(end_date.isoformat(timespec="seconds"))
+
+        response = requests.get(
+            url,
+            headers=headers,
+            params=params,
+            timeout=60,
+        )
+        response.raise_for_status()
+
+        page_items = _extract_transaction_items(response.json())
+        all_transactions.extend(page_items)
+
+        has_next = str(
+            response.headers.get("X-Has-Next-Page", "")
+        ).strip().lower()
+
+        if has_next == "true":
+            page += 1
+
+            if page >= max_pages:
+                raise RuntimeError(
+                    f"Pagination Cyclos interrompue : plus de {max_pages} pages demandées."
+                )
+
+            continue
+
+        if has_next == "false":
+            break
+
+        # Fallback défensif si l'en-tête disparaissait :
+        # une page incomplète implique généralement la fin des résultats.
+        if len(page_items) < page_size:
+            break
+
+        # Si l'en-tête est absent et que la page est pleine,
+        # mieux vaut échouer que tronquer silencieusement.
+        raise RuntimeError(
+            "Pagination Cyclos indéterminée : header X-Has-Next-Page absent "
+            "alors que la page est pleine."
+        )
+
+    return all_transactions

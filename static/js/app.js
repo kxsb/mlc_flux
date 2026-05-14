@@ -4,8 +4,22 @@ const reloadButton = document.getElementById("reloadButton");
 
 const appState = {
   currentView: "stats",
-  selectedYear: null,
-  availableYears: [],
+
+  periodBounds: {
+    min: null,
+    max: null
+  },
+
+  analysisPeriod: {
+    preset: "all",
+    start: null,
+    end: null
+  },
+
+  // Préparation de l'analyse comparative : non exploitée pour l'instant,
+  // mais l'état est déjà distinct de la période principale.
+  comparisonPeriod: null,
+
   statsCache: {},
 
   prosSearch: "",
@@ -17,15 +31,12 @@ const appState = {
 
   detailSortBy: "Date",
   detailSortDir: "desc",
+  detailPage: 1,
+  detailPageSize: 50,
   detailMode: "all",
   detailData: null,
   currentPro: null,
   proTab: "data",
-
-  periodFilterEnabled: false,
-  periodPanelOpen: false,
-  periodMinIndex: 0,
-  periodMaxIndex: 0,
 
   charts: {
     activity: null,
@@ -111,7 +122,7 @@ async function renderNetworkView() {
     </div>
   `;
 
-  const data = await apiGet(`/api/network${getYearQueryParam()}`);
+  const data = await apiGet(`/api/network${getPeriodQueryParam()}`);
   appState.network.rawData = data;
   appState.network.enrichedData = enrichNetworkData(data);
 
@@ -714,8 +725,31 @@ function euro(value) {
   }).format(Number(value || 0));
 }
 
+function percent(value) {
+  return new Intl.NumberFormat("fr-FR", {
+    style: "percent",
+    maximumFractionDigits: 1
+  }).format(Number(value || 0) / 100);
+}
+
 function setTitle(title) {
   pageTitle.innerHTML = `<h1>${title}</h1>`;
+}
+
+function formatProfessionalPageTitle(numProf, fullname) {
+  const code = String(numProf || "").trim();
+  const rawFullname = String(fullname || "").trim();
+
+  if (!rawFullname || rawFullname === code) {
+    return escapeHtml(code);
+  }
+
+  const prefix = `${code} - `;
+  const name = rawFullname.startsWith(prefix)
+    ? rawFullname.slice(prefix.length).trim()
+    : rawFullname;
+
+  return `${escapeHtml(code)} — ${escapeHtml(name)}`;
 }
 
 function normalizeText(value) {
@@ -761,6 +795,13 @@ function toggleDetailSort(column) {
     appState.detailSortDir = column === "Date" ? "desc" : "asc";
   }
 
+  appState.detailPage = 1;
+  drawDetailSection();
+}
+
+function changeDetailTransactionPage(delta) {
+  const currentPage = Number(appState.detailPage || 1);
+  appState.detailPage = Math.max(1, currentPage + delta);
   drawDetailSection();
 }
 
@@ -1246,18 +1287,10 @@ function getPeriodBounds(rows) {
 }
 
 function getFilteredTransactionsByPeriod(rows) {
-  if (!rows.length) return rows;
-
-  const { dates } = getPeriodBounds(rows);
-  if (!dates.length) return rows;
-
-  const minDate = dates[appState.periodMinIndex] || dates[0];
-  const maxDate = dates[appState.periodMaxIndex] || dates[dates.length - 1];
-
-  return rows.filter(row => {
-    const d = parseFrDate(row.Date);
-    return d >= parseFrDate(minDate) && d <= parseFrDate(maxDate);
-  });
+  // Le filtrage temporel est désormais global et appliqué côté API
+  // depuis le volet latéral. Les transactions reçues ici sont déjà
+  // bornées à la période active.
+  return rows;
 }
 
 function computeStatsFromTransactions(allTx, numProf) {
@@ -1300,6 +1333,49 @@ function computeStatsFromTransactions(allTx, numProf) {
     isConversion(row["Réalisé par"])
   );
 
+  const montantRecuParticuliers = particuliersPayeurs.reduce(
+    (s, r) => s + Number(r["Montant"] || 0),
+    0
+  );
+
+  const montantRecuProfessionnels = professionnelsPayeurs.reduce(
+    (s, r) => s + Number(r["Montant"] || 0),
+    0
+  );
+
+  const montantTotalRecu = received.reduce(
+    (s, r) => s + Number(r["Montant"] || 0),
+    0
+  );
+
+  const montantEmisVersPro = emisVersPro.reduce(
+    (s, r) => s + Number(r["Montant"] || 0),
+    0
+  );
+
+  const montantEmisVersParticuliers = emisVersParticuliers.reduce(
+    (s, r) => s + Number(r["Montant"] || 0),
+    0
+  );
+
+  const montantReconverti = reconverti.reduce(
+    (s, r) => s + Number(r["Montant"] || 0),
+    0
+  );
+
+  const montantConverti = converti.reduce(
+    (s, r) => s + Number(r["Montant"] || 0),
+    0
+  );
+
+  const totalMontantEmisSansReconversion =
+    montantEmisVersPro + montantEmisVersParticuliers;
+
+  const baseReutilisation = montantTotalRecu + montantConverti;
+  const tauxReutilisation = baseReutilisation > 0
+    ? (totalMontantEmisSansReconversion / baseReutilisation) * 100
+    : 0;
+
   const bounds = getPeriodBounds(tx);
 
   return {
@@ -1307,16 +1383,24 @@ function computeStatsFromTransactions(allTx, numProf) {
     periode_debut: bounds.min || "-",
     periode_fin: bounds.max || "-",
     nb_transactions_recues: received.length,
-    somme_transactions_recues: received.reduce((s, r) => s + Number(r["Montant"] || 0), 0),
+
+    // Répartition des montants reçus
+    montant_recu_particuliers: montantRecuParticuliers,
+    montant_recu_professionnels: montantRecuProfessionnels,
+    montant_total_recu: montantTotalRecu,
+
+    // Clé historique conservée pour compatibilité pendant la refonte UI
+    somme_transactions_recues: montantTotalRecu,
+
     nb_particuliers: new Set(particuliersPayeurs.map(r => r["Réalisé par"])).size,
     nb_professionnels: new Set(professionnelsPayeurs.map(r => r["Réalisé par"])).size,
-    montant_emis_vers_pro: emisVersPro.reduce((s, r) => s + Number(r["Montant"] || 0), 0),
-    montant_emis_vers_particuliers: emisVersParticuliers.reduce((s, r) => s + Number(r["Montant"] || 0), 0),
-    montant_reconverti: reconverti.reduce((s, r) => s + Number(r["Montant"] || 0), 0),
-    montant_converti: converti.reduce((s, r) => s + Number(r["Montant"] || 0), 0),
-    total_montant_emis_sans_reconversion:
-      emisVersPro.reduce((s, r) => s + Number(r["Montant"] || 0), 0) +
-      emisVersParticuliers.reduce((s, r) => s + Number(r["Montant"] || 0), 0)
+
+    montant_emis_vers_pro: montantEmisVersPro,
+    montant_emis_vers_particuliers: montantEmisVersParticuliers,
+    montant_reconverti: montantReconverti,
+    montant_converti: montantConverti,
+    total_montant_emis_sans_reconversion: totalMontantEmisSansReconversion,
+    taux_reutilisation: tauxReutilisation
   };
 }
 
@@ -1339,13 +1423,88 @@ function transactionTable(rows) {
           <th>${detailSortableHeader("Date", "Date")}</th>
           <th>${detailSortableHeader("Réalisé par", "Réalisé par")}</th>
           <th>${detailSortableHeader("Vers", "Vers")}</th>
-          <th>${detailSortableHeader("Montant", "Montant")}</th>
+          <th class="num">${detailSortableHeader("Montant", "Montant")}</th>
         </tr>
       </thead>
       <tbody>
         ${body || `<tr><td colspan="4">Aucune ligne</td></tr>`}
       </tbody>
     </table>
+  `;
+}
+
+function paginatedTransactionTable(rows) {
+  const sortedRows = sortRows(rows);
+  const totalRows = sortedRows.length;
+  const pageSize = Number(appState.detailPageSize || 50);
+  const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
+
+  const requestedPage = Number(appState.detailPage || 1);
+  const currentPage = Math.min(Math.max(requestedPage, 1), totalPages);
+  appState.detailPage = currentPage;
+
+  const startIndex = (currentPage - 1) * pageSize;
+  const pageRows = sortedRows.slice(startIndex, startIndex + pageSize);
+
+  const startDisplay = totalRows ? startIndex + 1 : 0;
+  const endDisplay = totalRows ? Math.min(startIndex + pageRows.length, totalRows) : 0;
+
+  const body = pageRows.map(row => `
+    <tr>
+      <td>${escapeHtml(row.Date)}</td>
+      <td>${renderActorLink(row["Réalisé par"])}</td>
+      <td>${renderActorLink(row["Vers"])}</td>
+      <td class="num">${euro(row["Montant"])}</td>
+    </tr>
+  `).join("");
+
+  const pagination = totalRows ? `
+    <div class="detail-pagination">
+      <div class="detail-pagination-meta">
+        Transactions ${startDisplay}–${endDisplay} sur ${totalRows}
+      </div>
+
+      ${totalPages > 1 ? `
+        <div class="detail-pagination-controls">
+          <button
+            class="secondary-btn"
+            type="button"
+            onclick="changeDetailTransactionPage(-1)"
+            ${currentPage <= 1 ? "disabled" : ""}
+          >
+            ← Précédent
+          </button>
+
+          <span class="detail-pagination-page">Page ${currentPage} / ${totalPages}</span>
+
+          <button
+            class="secondary-btn"
+            type="button"
+            onclick="changeDetailTransactionPage(1)"
+            ${currentPage >= totalPages ? "disabled" : ""}
+          >
+            Suivant →
+          </button>
+        </div>
+      ` : ""}
+    </div>
+  ` : "";
+
+  return `
+    <table>
+      <thead>
+        <tr>
+          <th>${detailSortableHeader("Date", "Date")}</th>
+          <th>${detailSortableHeader("Réalisé par", "Réalisé par")}</th>
+          <th>${detailSortableHeader("Vers", "Vers")}</th>
+          <th class="num">${detailSortableHeader("Montant", "Montant")}</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${body || `<tr><td colspan="4">Aucune ligne</td></tr>`}
+      </tbody>
+    </table>
+    ${pagination}
   `;
 }
 
@@ -1382,8 +1541,8 @@ function aggregateTable(rows, keyField, label) {
       <thead>
         <tr>
           <th>${detailSortableHeader(label, "Libelle")}</th>
-          <th>${detailSortableHeader("Nb opérations", "Count")}</th>
-          <th>${detailSortableHeader("Montant total", "Total")}</th>
+          <th class="num">${detailSortableHeader("Nb opérations", "Count")}</th>
+          <th class="num">${detailSortableHeader("Montant total", "Total")}</th>
         </tr>
       </thead>
       <tbody>
@@ -1405,7 +1564,7 @@ function buildDetailSection(numProf, allTx, mode) {
       !isConversion(row["Réalisé par"])
     );
     title = `Transactions reçues (${rows.length})`;
-    html = transactionTable(rows);
+    html = paginatedTransactionTable(rows);
   }
 
   if (mode === "somme_recue") {
@@ -1455,13 +1614,25 @@ function buildDetailSection(numProf, allTx, mode) {
     html = aggregateTable(rows, "Vers", "Particulier");
   }
 
+  if (mode === "emis_total") {
+    const rows = filteredTx.filter(row =>
+      String(row["Réalisé par"] || "").includes(numProf) &&
+      (
+        isPro(row["Vers"]) ||
+        isUser(row["Vers"])
+      )
+    );
+    title = "Destinataires des émissions hors reconversion";
+    html = aggregateTable(rows, "Vers", "Destinataire");
+  }
+
   if (mode === "reconverti") {
     const rows = filteredTx.filter(row =>
       String(row["Réalisé par"] || "").includes(numProf) &&
       isConversion(row["Vers"])
     );
     title = "Opérations de reconversion";
-    html = transactionTable(rows);
+    html = paginatedTransactionTable(rows);
   }
 
   if (mode === "converti") {
@@ -1470,72 +1641,321 @@ function buildDetailSection(numProf, allTx, mode) {
       isConversion(row["Réalisé par"])
     );
     title = "Opérations de conversion reçues";
-    html = transactionTable(rows);
+    html = paginatedTransactionTable(rows);
   }
 
   if (mode === "all") {
     title = `Toutes les transactions (${filteredTx.length})`;
-    html = transactionTable(filteredTx);
+    html = paginatedTransactionTable(filteredTx);
   }
 
   return `
     <div class="card">
-      <div class="topbar">
-        <h3 style="margin:0;">${title}</h3>
-        <button class="secondary-btn" onclick="renderProDetail('${escapeHtml(numProf)}', 'all')">Tout voir</button>
+      <div class="detail-section-header">
+        <h3 class="detail-section-title">${title}</h3>
+
+        <div class="detail-section-actions">
+          <div class="detail-filter-badge">
+            <span class="detail-filter-label">Filtre actif</span>
+            <span class="detail-filter-value">${escapeHtml(getDetailModeLabel(mode))}</span>
+          </div>
+
+          <button class="secondary-btn detail-show-all-btn" onclick="renderProDetail('${escapeHtml(numProf)}', 'all')">Tout voir</button>
+        </div>
       </div>
+
       ${html}
     </div>
   `;
 }
   
-function getYearQueryParam() {
-  if (!appState.selectedYear) return "";
-  return `?year=${encodeURIComponent(appState.selectedYear)}`;
-}
+function getPeriodQueryParam() {
+  const params = new URLSearchParams();
 
-async function initYearFilter() {
-  const select = document.getElementById("yearFilterSelect");
-  if (!select) return;
-
-  try {
-    const years = await apiGet("/api/years");
-    appState.availableYears = Array.isArray(years) ? years : [];
-
-    select.innerHTML = appState.availableYears.map(year => `
-      <option value="${year}">${year}</option>
-    `).join("");
-
-    if (!appState.selectedYear && appState.availableYears.length > 0) {
-      appState.selectedYear = appState.availableYears[appState.availableYears.length - 1];
-    }
-
-    select.value = appState.selectedYear;
-
-  } catch (err) {
-    console.error("Impossible de charger les années :", err);
+  if (appState.analysisPeriod.start) {
+    params.set("start", appState.analysisPeriod.start);
   }
 
-  if (select.dataset.bound === "true") return;
+  if (appState.analysisPeriod.end) {
+    params.set("end", appState.analysisPeriod.end);
+  }
 
-  select.addEventListener("change", async (e) => {
-    appState.selectedYear = e.target.value;
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}
 
-    appState.statsCache = {};
-    appState.prosData = [];
-    appState.detailData = null;
-    appState.currentPro = null;
+function getPeriodCacheKey() {
+  const { preset, start, end } = appState.analysisPeriod;
+  return `${preset || "custom"}|${start || "none"}|${end || "none"}`;
+}
 
-    if (appState.currentView === "stats") {
-      await renderStatsView(true);
-    } else if (appState.currentView === "pros") {
-      await renderProsView(true);
-    } else if (appState.currentView === "network") {
-      await renderNetworkView();
-    }
+function shiftIsoDate(dateString, days) {
+  if (!dateString) return null;
+
+  const date = new Date(`${dateString}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return null;
+
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function clampDateToBounds(dateString) {
+  if (!dateString) return dateString;
+
+  const { min, max } = appState.periodBounds;
+
+  if (min && dateString < min) return min;
+  if (max && dateString > max) return max;
+
+  return dateString;
+}
+
+function formatIsoDateForSidebar(dateString) {
+  if (!dateString) return "-";
+
+  const [year, month, day] = String(dateString).split("-");
+  if (!year || !month || !day) return dateString;
+
+  return `${day}/${month}/${year}`;
+}
+
+function toggleCustomPeriodFields(preset) {
+  const customFields = document.getElementById("customPeriodFields");
+  const activeSummary = document.getElementById("periodActiveSummary");
+  const isCustom = preset === "custom";
+
+  if (customFields) {
+    customFields.classList.toggle("hidden", !isCustom);
+  }
+
+  if (activeSummary) {
+    activeSummary.setAttribute("aria-expanded", isCustom ? "true" : "false");
+  }
+}
+
+function getPresetPeriod(preset) {
+  const { min, max } = appState.periodBounds;
+
+  if (!min || !max) {
+    return { start: null, end: null };
+  }
+
+  if (preset === "last30") {
+    return {
+      start: clampDateToBounds(shiftIsoDate(max, -29)),
+      end: max
+    };
+  }
+
+  if (preset === "last90") {
+    return {
+      start: clampDateToBounds(shiftIsoDate(max, -89)),
+      end: max
+    };
+  }
+
+  if (preset === "currentYear") {
+    const yearStart = `${max.slice(0, 4)}-01-01`;
+    return {
+      start: clampDateToBounds(yearStart),
+      end: max
+    };
+  }
+
+  return {
+    start: min,
+    end: max
+  };
+}
+
+function updatePeriodHint(text = null) {
+  const hint = document.getElementById("periodFilterHint");
+  if (!hint) return;
+
+  if (text) {
+    hint.textContent = text;
+    return;
+  }
+
+  const { start, end } = appState.analysisPeriod;
+
+  if (start && end) {
+    hint.textContent = `${formatIsoDateForSidebar(start)} → ${formatIsoDateForSidebar(end)}`;
+  } else {
+    hint.textContent = "Aucune période disponible.";
+  }
+}
+
+function syncPeriodInputsFromValues(preset, start, end) {
+  const presetEl = document.getElementById("periodPreset");
+  const startEl = document.getElementById("periodStart");
+  const endEl = document.getElementById("periodEnd");
+
+  if (!presetEl || !startEl || !endEl) return;
+
+  presetEl.value = preset || "custom";
+  startEl.value = start || "";
+  endEl.value = end || "";
+
+  if (appState.periodBounds.min) {
+    startEl.min = appState.periodBounds.min;
+    endEl.min = appState.periodBounds.min;
+  }
+
+  if (appState.periodBounds.max) {
+    startEl.max = appState.periodBounds.max;
+    endEl.max = appState.periodBounds.max;
+  }
+
+  toggleCustomPeriodFields(preset || "custom");
+}
+
+function updatePeriodDraftFromPreset(preset) {
+  if (preset === "custom") {
+    toggleCustomPeriodFields("custom");
+    return;
+  }
+
+  const { start, end } = getPresetPeriod(preset);
+  syncPeriodInputsFromValues(preset, start, end);
+}
+
+function markPeriodAsCustom() {
+  const presetEl = document.getElementById("periodPreset");
+  if (presetEl) {
+    presetEl.value = "custom";
+  }
+
+  toggleCustomPeriodFields("custom");
+}
+
+async function reloadCurrentViewForPeriod() {
+  appState.statsCache = {};
+  appState.prosData = [];
+  appState.detailData = null;
+
+  if (appState.currentView === "pro-detail" && appState.currentPro) {
+    await renderProDetail(appState.currentPro, appState.detailMode);
+    return;
+  }
+
+  appState.currentPro = null;
+
+  if (appState.currentView === "stats") {
+    await renderStatsView(true);
+  } else if (appState.currentView === "pros") {
+    await renderProsView(true);
+  } else if (appState.currentView === "network") {
+    await renderNetworkView();
+  } else {
+    await renderStatsView(true);
+  }
+}
+
+async function applyAnalysisPeriod() {
+  const presetEl = document.getElementById("periodPreset");
+  const startEl = document.getElementById("periodStart");
+  const endEl = document.getElementById("periodEnd");
+
+  if (!presetEl || !startEl || !endEl) return;
+
+  const start = startEl.value || appState.periodBounds.min;
+  const end = endEl.value || appState.periodBounds.max;
+
+  if (!start || !end) {
+    alert("Aucune période exploitable n’est disponible.");
+    return;
+  }
+
+  if (start > end) {
+    alert("La date de début doit être antérieure ou égale à la date de fin.");
+    return;
+  }
+
+  appState.analysisPeriod = {
+    preset: presetEl.value || "custom",
+    start,
+    end
+  };
+
+  syncPeriodInputsFromValues(appState.analysisPeriod.preset, start, end);
+  updatePeriodHint();
+
+  await reloadCurrentViewForPeriod();
+}
+
+async function resetAnalysisPeriod() {
+  const { start, end } = getPresetPeriod("all");
+
+  appState.analysisPeriod = {
+    preset: "all",
+    start,
+    end
+  };
+
+  syncPeriodInputsFromValues("all", start, end);
+  updatePeriodHint();
+
+  await reloadCurrentViewForPeriod();
+}
+
+async function initPeriodFilter() {
+  const presetEl = document.getElementById("periodPreset");
+  const startEl = document.getElementById("periodStart");
+  const endEl = document.getElementById("periodEnd");
+  const applyBtn = document.getElementById("applyPeriodButton");
+  const resetBtn = document.getElementById("resetPeriodButton");
+  const activeSummary = document.getElementById("periodActiveSummary");
+
+  if (!presetEl || !startEl || !endEl || !applyBtn || !resetBtn || !activeSummary) return;
+
+  try {
+    const bounds = await apiGet("/api/period-bounds");
+
+    appState.periodBounds = {
+      min: bounds?.min_date || null,
+      max: bounds?.max_date || null
+    };
+
+    const { start, end } = getPresetPeriod("all");
+
+    appState.analysisPeriod = {
+      preset: "all",
+      start,
+      end
+    };
+
+    syncPeriodInputsFromValues("all", start, end);
+    updatePeriodHint();
+  } catch (err) {
+    console.error("Impossible de charger les bornes temporelles :", err);
+    updatePeriodHint("Impossible de charger la période disponible.");
+  }
+
+  if (presetEl.dataset.bound === "true") return;
+
+  presetEl.addEventListener("change", (e) => {
+    updatePeriodDraftFromPreset(e.target.value);
   });
 
-  select.dataset.bound = "true";
+  activeSummary.addEventListener("click", () => {
+    presetEl.value = "custom";
+    toggleCustomPeriodFields("custom");
+    startEl.focus();
+  });
+
+  startEl.addEventListener("change", markPeriodAsCustom);
+  endEl.addEventListener("change", markPeriodAsCustom);
+
+  applyBtn.addEventListener("click", async () => {
+    await applyAnalysisPeriod();
+  });
+
+  resetBtn.addEventListener("click", async () => {
+    await resetAnalysisPeriod();
+  });
+
+  presetEl.dataset.bound = "true";
 }
 
 async function renderStatsView(forceReload = false) {
@@ -1543,7 +1963,7 @@ async function renderStatsView(forceReload = false) {
   syncSidebarView("stats");
   setTitle("Statistiques globales");
 
-  const cacheKey = String(appState.selectedYear || "default");
+  const cacheKey = getPeriodCacheKey();
 
   if (!forceReload && appState.statsCache[cacheKey]) {
     const cached = appState.statsCache[cacheKey];
@@ -1554,8 +1974,8 @@ async function renderStatsView(forceReload = false) {
   content.innerHTML = `<div class="card">Chargement...</div>`;
 
   const [stats, charts] = await Promise.all([
-    apiGet(`/api/stats${getYearQueryParam()}`),
-    apiGet(`/api/stats_charts${getYearQueryParam()}`)
+    apiGet(`/api/stats${getPeriodQueryParam()}`),
+    apiGet(`/api/stats_charts${getPeriodQueryParam()}`)
   ]);
 
   appState.statsCache[cacheKey] = { stats, charts };
@@ -1565,10 +1985,6 @@ async function renderStatsView(forceReload = false) {
 function renderStatsCardsAndCharts(stats, charts) {
   content.innerHTML = `
     <div class="grid">
-      <div class="card">
-        <div class="stat-label">Période</div>
-        <div class="stat-value" style="font-size:18px;">${stats.periode || "-"}</div>
-      </div>
       <div class="card">
         <div class="stat-label">Utilisateurs</div>
         <div class="stat-value">${stats.nb_utilisateurs ?? 0}</div>
@@ -1600,7 +2016,7 @@ async function renderProsView(forceReload = false) {
 
   if (forceReload || appState.prosData.length === 0) {
     content.innerHTML = `<div class="card">Chargement...</div>`;
-    appState.prosData = await apiGet(`/api/pros${getYearQueryParam()}`);
+    appState.prosData = await apiGet(`/api/pros${getPeriodQueryParam()}`);
   }
 
   drawProsTable();
@@ -1829,11 +2245,42 @@ function toggleProsSort(column) {
   drawProsTable();
 }
 
-function clickableStatCard(label, value, action, isActive = false) {
+function statLabelWithHelp(label, helpText = null) {
+  if (!helpText) {
+    return `<div class="stat-label">${escapeHtml(label)}</div>`;
+  }
+
+  return `
+    <div class="stat-label stat-label-with-help">
+      <span>${escapeHtml(label)}</span>
+      <span class="stat-help-badge" title="${escapeHtml(helpText)}">?</span>
+    </div>
+  `;
+}
+
+function clickableStatCard(label, value, action, isActive = false, helpText = null) {
   return `
     <button class="card stat-card-btn ${isActive ? "stat-card-btn-active" : ""}" onclick="${action}">
-      <div class="stat-label">${label}</div>
+      ${statLabelWithHelp(label, helpText)}
       <div class="stat-value">${value}</div>
+    </button>
+  `;
+}
+
+function staticStatCard(label, value, isActive = false, helpText = null) {
+  return `
+    <div class="card stat-card-static ${isActive ? "stat-card-btn-active" : ""}">
+      ${statLabelWithHelp(label, helpText)}
+      <div class="stat-value">${value}</div>
+    </div>
+  `;
+}
+
+function clickableMiniStatCard(label, value, action, isActive = false) {
+  return `
+    <button class="card mini-stat-card mini-stat-card-btn ${isActive ? "mini-stat-card-active" : ""}" onclick="${action}">
+      <div class="stat-label">${label}</div>
+      <div class="mini-stat-value">${value}</div>
     </button>
   `;
 }
@@ -1856,6 +2303,7 @@ function getDetailModeLabel(mode) {
     payeurs_professionnels: "Professionnels payeurs",
     emis_pro: "Vendeurs professionnels",
     emis_particuliers: "Destinataires particuliers",
+    emis_total: "Destinataires des émissions hors reconversion",
     reconverti: "Opérations de reconversion",
     converti: "Opérations de conversion reçues"
   };
@@ -1863,77 +2311,7 @@ function getDetailModeLabel(mode) {
   return labels[mode] || mode;
 }
 
-function togglePeriodPanel() {
-  appState.periodPanelOpen = !appState.periodPanelOpen;
 
-  const panel = document.getElementById("periodPanel");
-  if (!panel) return;
-
-  panel.classList.toggle("hidden", !appState.periodPanelOpen);
-
-  if (appState.periodPanelOpen) {
-    updatePeriodPanelOnly();
-  }
-}
-
-function resetPeriodFilter() {
-  if (!appState.detailData?.transactions?.length) return;
-  const dates = uniqueSortedDates(appState.detailData.transactions);
-  appState.periodMinIndex = 0;
-  appState.periodMaxIndex = Math.max(0, dates.length - 1);
-  appState.periodFilterEnabled = false;
-  drawProSummarySection();
-  updatePeriodPanelOnly();
-  drawDetailSection();
-  if (appState.proTab === "graphs") renderProCharts();
-}
-
-function updatePeriodMin(value) {
-  const v = Number(value);
-  appState.periodMinIndex = Math.min(v, appState.periodMaxIndex);
-  appState.periodFilterEnabled = true;
-  drawProSummarySection();
-  drawDetailSection();
-  if (appState.proTab === "graphs") renderProCharts();
-}
-
-function updatePeriodMax(value) {
-  const v = Number(value);
-  appState.periodMaxIndex = Math.max(v, appState.periodMinIndex);
-  appState.periodFilterEnabled = true;
-  drawProSummarySection();
-  drawDetailSection();
-  if (appState.proTab === "graphs") renderProCharts();
-}
-
-function updatePeriodPanelOnly() {
-  const el = document.getElementById("periodPanel");
-  if (!el || !appState.detailData?.transactions?.length) return;
-
-  const dates = uniqueSortedDates(appState.detailData.transactions);
-  const minDate = dates[appState.periodMinIndex] || dates[0];
-  const maxDate = dates[appState.periodMaxIndex] || dates[dates.length - 1];
-
-  el.innerHTML = `
-    <div class="period-panel-inner">
-      <div class="period-labels">
-        <span><strong>Début :</strong> ${minDate}</span>
-        <span><strong>Fin :</strong> ${maxDate}</span>
-      </div>
-
-      <div class="range-wrap">
-        <input type="range" min="0" max="${dates.length - 1}" value="${appState.periodMinIndex}"
-          oninput="updatePeriodMin(this.value)">
-        <input type="range" min="0" max="${dates.length - 1}" value="${appState.periodMaxIndex}"
-          oninput="updatePeriodMax(this.value)">
-      </div>
-
-      <div class="period-actions">
-        <button class="secondary-btn" onclick="resetPeriodFilter()">Réinitialiser</button>
-      </div>
-    </div>
-  `;
-}
 
 function drawProSummarySection() {
   const summaryContainer = document.getElementById("proSummarySection");
@@ -1947,84 +2325,123 @@ function drawProSummarySection() {
   
 
   summaryContainer.innerHTML = `
-    <div class="grid">
-      ${clickableStatCard(
-        "Transactions reçues",
-        filteredStats.nb_transactions_recues ?? 0,
-        `renderProDetail('${escapeHtml(numProf)}', 'recues')`,
-        detailMode === "recues"
-      )}
+    <section class="pro-summary-group">
+      <div class="pro-summary-heading">
+        <h3>Ce que le professionnel reçoit</h3>
+      </div>
 
-      ${clickableStatCard(
-        "Somme reçue",
-        euro(filteredStats.somme_transactions_recues),
-        `renderProDetail('${escapeHtml(numProf)}', 'somme_recue')`,
-        detailMode === "somme_recue"
-      )}
+      <div class="grid pro-summary-main-grid">
+        ${clickableStatCard(
+          "C2B reçu",
+          euro(filteredStats.montant_recu_particuliers),
+          `renderProDetail('${escapeHtml(numProf)}', 'payeurs_particuliers')`,
+          detailMode === "payeurs_particuliers",
+          "Montant reçu depuis les comptes particuliers."
+        )}
 
-      ${clickableStatCard(
-        "Émis vers pro",
-        euro(filteredStats.montant_emis_vers_pro),
-        `renderProDetail('${escapeHtml(numProf)}', 'emis_pro')`,
-        detailMode === "emis_pro"
-      )}
+        ${clickableStatCard(
+          "B2B reçu",
+          euro(filteredStats.montant_recu_professionnels),
+          `renderProDetail('${escapeHtml(numProf)}', 'payeurs_professionnels')`,
+          detailMode === "payeurs_professionnels",
+          "Montant reçu depuis les autres professionnels du réseau."
+        )}
 
-      ${clickableStatCard(
-        "Émis vers particuliers",
-        euro(filteredStats.montant_emis_vers_particuliers),
-        `renderProDetail('${escapeHtml(numProf)}', 'emis_particuliers')`,
-        detailMode === "emis_particuliers"
-      )}
+        ${clickableStatCard(
+          "Total reçu",
+          euro(filteredStats.montant_total_recu),
+          `renderProDetail('${escapeHtml(numProf)}', 'somme_recue')`,
+          detailMode === "somme_recue",
+          "Total reçu depuis les particuliers et les professionnels, hors conversions reçues."
+        )}
+      </div>
 
-      ${clickableStatCard(
-        "Reconverti",
-        euro(filteredStats.montant_reconverti),
-        `renderProDetail('${escapeHtml(numProf)}', 'reconverti')`,
-        detailMode === "reconverti"
-      )}
+      <div class="grid pro-summary-mini-grid">
+        ${clickableMiniStatCard(
+          "Particuliers payeurs",
+          filteredStats.nb_particuliers ?? 0,
+          `renderProDetail('${escapeHtml(numProf)}', 'payeurs_particuliers')`,
+          detailMode === "payeurs_particuliers"
+        )}
 
-      ${clickableStatCard(
-        "Converti",
-        euro(filteredStats.montant_converti),
-        `renderProDetail('${escapeHtml(numProf)}', 'converti')`,
-        detailMode === "converti"
-      )}
-    </div>
+        ${clickableMiniStatCard(
+          "Professionnels payeurs",
+          filteredStats.nb_professionnels ?? 0,
+          `renderProDetail('${escapeHtml(numProf)}', 'payeurs_professionnels')`,
+          detailMode === "payeurs_professionnels"
+        )}
 
-    <div class="grid">
-      ${clickableStatCard(
-        "Particuliers payeurs",
-        filteredStats.nb_particuliers ?? 0,
-        `renderProDetail('${escapeHtml(numProf)}', 'payeurs_particuliers')`,
-        detailMode === "payeurs_particuliers"
-      )}
+        ${clickableMiniStatCard(
+          "Transactions reçues",
+          filteredStats.nb_transactions_recues ?? 0,
+          `renderProDetail('${escapeHtml(numProf)}', 'recues')`,
+          detailMode === "recues"
+        )}
+      </div>
+    </section>
 
-      ${clickableStatCard(
-        "Professionnels payeurs",
-        filteredStats.nb_professionnels ?? 0,
-        `renderProDetail('${escapeHtml(numProf)}', 'payeurs_professionnels')`,
-        detailMode === "payeurs_professionnels"
-      )}
+    <section class="pro-summary-group">
+      <div class="pro-summary-heading">
+        <h3>Ce qu’il remet en circulation</h3>
+      </div>
 
-      ${infoTagCard(
-        "Total émis hors reconversion",
-        euro(filteredStats.total_montant_emis_sans_reconversion),
-        detailMode === "emis_pro" || detailMode === "emis_particuliers"
-      )}
+      <div class="grid pro-summary-main-grid">
+        ${clickableStatCard(
+          "Émis vers pro",
+          euro(filteredStats.montant_emis_vers_pro),
+          `renderProDetail('${escapeHtml(numProf)}', 'emis_pro')`,
+          detailMode === "emis_pro",
+          "Achats ou paiements réalisés auprès d’autres professionnels du réseau."
+        )}
 
-      <button class="card stat-card-btn ${appState.periodPanelOpen ? "stat-card-btn-active" : ""}" onclick="togglePeriodPanel()">
-        <div class="stat-label">Période</div>
-        <div class="mini-stat-value">
-          ${escapeHtml(filteredStats.periode_debut)} → ${escapeHtml(filteredStats.periode_fin)}
-        </div>
-      </button>
+        ${clickableStatCard(
+          "Émis vers particuliers",
+          euro(filteredStats.montant_emis_vers_particuliers),
+          `renderProDetail('${escapeHtml(numProf)}', 'emis_particuliers')`,
+          detailMode === "emis_particuliers",
+          "Rémunérations, défraiements ou autres versements vers des comptes particuliers."
+        )}
 
-      ${infoTagCard(
-        "Filtre actif",
-        escapeHtml(getDetailModeLabel(detailMode)),
-        true
-      )}
-    </div>
+        ${clickableStatCard(
+          "Total émis hors reconversion",
+          euro(filteredStats.total_montant_emis_sans_reconversion),
+          `renderProDetail('${escapeHtml(numProf)}', 'emis_total')`,
+          detailMode === "emis_total",
+          "Somme des montants émis vers les professionnels et les particuliers, hors reconversion."
+        )}
+      </div>
+    </section>
+
+    <section class="pro-summary-group">
+      <div class="pro-summary-heading">
+        <h3>Conversion et réutilisation</h3>
+      </div>
+
+      <div class="grid pro-summary-main-grid">
+        ${clickableStatCard(
+          "Converti",
+          euro(filteredStats.montant_converti),
+          `renderProDetail('${escapeHtml(numProf)}', 'converti')`,
+          detailMode === "converti",
+          "Montant crédité par conversion en gonettes numériques."
+        )}
+
+        ${clickableStatCard(
+          "Reconverti",
+          euro(filteredStats.montant_reconverti),
+          `renderProDetail('${escapeHtml(numProf)}', 'reconverti')`,
+          detailMode === "reconverti",
+          "Montant sorti du circuit via une reconversion."
+        )}
+
+        ${staticStatCard(
+          "Taux de réutilisation",
+          percent(filteredStats.taux_reutilisation),
+          false,
+          "Total émis hors reconversion / (total reçu + total converti)."
+        )}
+      </div>
+    </section>
   `;
 }
 
@@ -2666,6 +3083,7 @@ function updateProTabButtons() {
 async function renderProDetail(numProf, detailMode = "all") {
   const isSameProfessional = appState.currentPro === numProf;
   const needReload = !isSameProfessional || !appState.detailData;
+  const isDetailModeChanged = appState.detailMode !== detailMode;
 
   appState.currentView = "pro-detail";
   syncSidebarView("pro-detail");
@@ -2674,24 +3092,22 @@ async function renderProDetail(numProf, detailMode = "all") {
 
   // pour revenir automatiquement sur Données à chaque nouveau pro
   // appState.proTab = "data";
+  if (needReload || isDetailModeChanged) {
+    appState.detailPage = 1;
+  }
   appState.detailMode = detailMode;
-
-  setTitle(`Fiche professionnel : ${numProf}`);
 
   if (needReload) {
     content.innerHTML = `<div class="card">Chargement...</div>`;
-    const data = await apiGet(`/api/pro/${encodeURIComponent(numProf)}${getYearQueryParam()}`);
+    const data = await apiGet(`/api/pro/${encodeURIComponent(numProf)}${getPeriodQueryParam()}`);
     appState.detailData = data;
 
-    const dates = uniqueSortedDates(data.transactions || []);
-    appState.periodMinIndex = 0;
-    appState.periodMaxIndex = Math.max(0, dates.length - 1);
-    appState.periodFilterEnabled = false;
-    appState.periodPanelOpen = false;
   }
 
   const data = appState.detailData;
   const tx = data.transactions || [];
+
+  setTitle(formatProfessionalPageTitle(numProf, data.fullname));
 
   if (detailMode === "all" || detailMode === "recues" || detailMode === "reconverti" || detailMode === "converti") {
     if (!["Date", "Réalisé par", "Vers", "Montant"].includes(appState.detailSortBy)) {
@@ -2710,11 +3126,6 @@ async function renderProDetail(numProf, detailMode = "all") {
       <button class="secondary-btn" onclick="renderProsView()">← Retour au classement</button>
     </div>
 
-    <div class="card">
-      <h2>${escapeHtml(data.fullname || numProf)}</h2>
-      <p><strong>Professionnel :</strong> ${escapeHtml(numProf)}</p>
-    </div>
-
     <div class="pro-tabs">
       <button id="proTabData" class="tab-btn" onclick="setProTab('data')">Données</button>
       <button id="proTabGraphs" class="tab-btn" onclick="setProTab('graphs')">Graphes</button>
@@ -2722,14 +3133,12 @@ async function renderProDetail(numProf, detailMode = "all") {
 
     <div id="proDataSection">
       <div id="proSummarySection"></div>
-      <div id="periodPanel" class="${appState.periodPanelOpen ? "" : "hidden"}"></div>
       <div id="detailSection"></div>
     </div>
 
     <div id="proChartsSection" class="hidden"></div>
   `;
   drawProSummarySection();
-  updatePeriodPanelOnly();
   drawDetailSection();
   drawProTabContent();
 }
@@ -2776,29 +3185,31 @@ function initThemeToggle() {
   btn.dataset.bound = "true";
 }
 
-reloadButton.addEventListener("click", async () => {
-  try {
-    reloadButton.disabled = true;
-    reloadButton.textContent = "Rechargement...";
-    const result = await apiPost("/api/reload");
-    alert(result.message || "Données rechargées");
+if (reloadButton) {
+  reloadButton.addEventListener("click", async () => {
+    try {
+      reloadButton.disabled = true;
+      reloadButton.textContent = "Synchronisation...";
+      const result = await apiPost("/api/reload");
+      alert(result.message || "Synchronisation terminée");
 
-    appState.prosData = [];
-    appState.detailData = null;
-    appState.currentPro = null;
+      appState.prosData = [];
+      appState.detailData = null;
+      appState.currentPro = null;
 
-    if (appState.currentView === "pros") {
-      await renderProsView(true);
-    } else {
-      await renderStatsView();
+      if (appState.currentView === "pros") {
+        await renderProsView(true);
+      } else {
+        await renderStatsView();
+      }
+    } catch (err) {
+      alert(`Erreur : ${err.message}`);
+    } finally {
+      reloadButton.disabled = false;
+      reloadButton.textContent = "Synchroniser les dernières transactions";
     }
-  } catch (err) {
-    alert(`Erreur : ${err.message}`);
-  } finally {
-    reloadButton.disabled = false;
-    reloadButton.textContent = "Recharger les données";
-  }
-});
+  });
+}
 
 document.querySelectorAll('input[name="dataView"]').forEach(input => {
   input.addEventListener("change", (e) => {
@@ -2816,18 +3227,15 @@ document.querySelectorAll('input[name="dataView"]').forEach(input => {
 
 bindNetworkSearchOutsideClick();
 initThemeToggle();
-initYearFilter().then(() => {
+initPeriodFilter().then(() => {
   renderStatsView();
 });
 
 window.renderProDetail = renderProDetail;
 window.renderProsView = renderProsView;
 window.toggleProsSort = toggleProsSort;
+window.changeDetailTransactionPage = changeDetailTransactionPage;
 
-window.togglePeriodPanel = togglePeriodPanel;
-window.updatePeriodMin = updatePeriodMin;
-window.updatePeriodMax = updatePeriodMax;
-window.resetPeriodFilter = resetPeriodFilter;
 window.renderUserDetail = renderUserDetail;
 window.setProTab = setProTab;
 window.selectNetworkSearchResult = selectNetworkSearchResult;
