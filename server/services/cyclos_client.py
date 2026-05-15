@@ -1,8 +1,12 @@
 import base64
 from datetime import datetime, timedelta, UTC
+from zoneinfo import ZoneInfo
 
 import requests
 from flask import current_app
+
+
+LOCAL_CALENDAR_TIMEZONE = ZoneInfo("Europe/Paris")
 
 
 def build_basic_auth(username, password):
@@ -37,6 +41,21 @@ def create_session_token():
     return f"{session_token_json}{session_token_cookie}"
 
 
+def _is_date_only(value):
+    """
+    Retourne True pour une date calendaire simple YYYY-MM-DD.
+    """
+    if not isinstance(value, str):
+        return False
+
+    value = value.strip()
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+        return len(value) == 10
+    except ValueError:
+        return False
+
+
 def _parse_date(value):
     if not value:
         return None
@@ -44,9 +63,15 @@ def _parse_date(value):
     value = value.strip()
 
     # accepte YYYY-MM-DD
+    #
+    # Une date simple désigne un jour civil français côté usage :
+    # 2024-08-09 signifie donc 2024-08-09 00:00 Europe/Paris,
+    # pas 2024-08-09 00:00 UTC.
+    #
+    # On convertit ensuite en UTC pour l'appel API Cyclos.
     try:
         dt = datetime.strptime(value, "%Y-%m-%d")
-        return dt.replace(tzinfo=UTC)
+        return dt.replace(tzinfo=LOCAL_CALENDAR_TIMEZONE).astimezone(UTC)
     except ValueError:
         pass
 
@@ -104,6 +129,24 @@ def get_transactions(days=None, date_from=None, date_to=None):
         start_date = now - timedelta(hours=48)
 
     end_date = _parse_date(date_to) if date_to else None
+
+    # Pour l'interface / CLI, une date de fin calendaire
+    # date_to=YYYY-MM-DD signifie "inclure toute cette journée".
+    #
+    # Cyclos reçoit une borne datePeriod de fin exclusive :
+    # on envoie donc le lendemain à 00:00 Europe/Paris,
+    # puis on convertit en UTC.
+    #
+    # On ne fait pas simplement end_date + timedelta(days=1) en UTC :
+    # aux changements d'heure, une journée locale peut durer 23 ou 25 heures.
+    #
+    # Les dates ISO complètes conservent leur sémantique exacte.
+    if date_to and _is_date_only(date_to):
+        next_local_day = (
+            datetime.strptime(date_to.strip(), "%Y-%m-%d")
+            + timedelta(days=1)
+        ).strftime("%Y-%m-%d")
+        end_date = _parse_date(next_local_day)
 
     if end_date and end_date < start_date:
         raise ValueError("date_to doit être postérieure ou égale à date_from")

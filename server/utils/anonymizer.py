@@ -134,21 +134,83 @@ def is_conversion_label(display):
 
 
 def is_private_label(display):
-    return display.startswith("U")
+    """
+    Reconnaît les comptes particuliers Cyclos.
+
+    Les historiques audit és contiennent les deux graphies :
+    - U5384 - ...
+    - u8247 - ...
+
+    L'ancien test strict startswith("U") envoyait les comptes `u...`
+    vers "Acteur masqué", ce qui déformait notamment les flux d'émission.
+    """
+    display = normalize_spaces(display)
+    return display[:1].upper() == "U"
+
+
+def _extract_professional_code(display):
+    """
+    Extrait un code professionnel de type P0008 depuis un libellé Cyclos.
+
+    Deux formes ont été vérifiées dans les historiques :
+    - P0008 - Monde Ethique
+    - Monde Ethique - P0008 - Nom du titulaire
+
+    Le code Pxxxx est la clé stable dont MLCFlux a besoin pour :
+    - catégoriser correctement les flux professionnels ;
+    - consolider les analyses P/U ;
+    - joindre les enrichissements Odoo.
+    """
+    match = re.search(r"\b(P\d{4,})\b", normalize_spaces(display), flags=re.IGNORECASE)
+    if not match:
+        return ""
+    return match.group(1).upper()
 
 
 def is_professional_label(display):
-    return display.startswith("P")
+    return bool(_extract_professional_code(display))
 
 
 def clean_professional_label(display):
+    """
+    Normalise un professionnel au format canonique :
+
+        P0008 - Monde Ethique
+
+    que le libellé Cyclos arrive sous forme :
+    - P0008 - Monde Ethique
+    - Monde Ethique - P0008 - Nom du titulaire
+    """
     display = normalize_spaces(display)
+    code = _extract_professional_code(display)
+
+    if not code:
+        return display
 
     parts = [part.strip() for part in display.split(" - ") if part.strip()]
-    if len(parts) >= 2:
-        return f"{parts[0]} - {parts[1]}"
 
-    return display
+    code_index = None
+    for index, part in enumerate(parts):
+        if re.search(rf"\b{re.escape(code)}\b", part, flags=re.IGNORECASE):
+            code_index = index
+            break
+
+    professional_name = ""
+
+    if code_index is not None:
+        if code_index == 0 and len(parts) >= 2:
+            # Forme déjà canonique ou proche :
+            # P0008 - Monde Ethique - ...
+            professional_name = parts[1]
+        elif code_index > 0:
+            # Forme Cyclos auditée :
+            # Monde Ethique - P0008 - Nom du titulaire
+            professional_name = parts[code_index - 1]
+
+    if professional_name:
+        return f"{code} - {professional_name}"
+
+    return code
 
 
 def anonymize_actor_label(actor):
@@ -161,13 +223,16 @@ def anonymize_actor_label(actor):
     if is_conversion_label(display):
         return "Conversion"
 
+    # Les professionnels sont testés avant les particuliers :
+    # certains libellés pros ne commencent pas par P mais contiennent
+    # un code Pxxxx plus loin dans la chaîne.
+    if is_professional_label(display):
+        return clean_professional_label(display)
+
     if is_private_label(display):
         if not private_actor_key:
             return "U_inconnu"
         return get_or_create_private_pseudo(private_actor_key)
-
-    if is_professional_label(display):
-        return clean_professional_label(display)
 
     return "Acteur masqué"
 
