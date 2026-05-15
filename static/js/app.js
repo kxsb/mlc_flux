@@ -66,6 +66,10 @@ const appState = {
 
   territories: {
     data: null
+  },
+
+  sectors: {
+    data: null
   }
 };
 
@@ -481,6 +485,230 @@ function buildTerritoriesTableHtml(territories) {
     </div>
   `;
 }
+
+
+function formatSectorPercent(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return "—";
+  }
+
+  return percent(Number(value) * 100);
+}
+
+function buildSectorRankingHtml(sectors) {
+  const topSectors = sectors.slice(0, 12);
+  const maxReceivedVolume = Math.max(
+    ...topSectors.map(sector => Number(sector.received_volume || 0)),
+    0
+  );
+
+  if (!topSectors.length || maxReceivedVolume <= 0) {
+    return `<div class="sector-empty-state">Aucune activité sectorielle sur la période.</div>`;
+  }
+
+  return `
+    <div class="sector-ranking-list">
+      ${topSectors.map(sector => {
+        const width = maxReceivedVolume > 0
+          ? (Number(sector.received_volume || 0) / maxReceivedVolume) * 100
+          : 0;
+
+        return `
+          <div class="sector-ranking-row">
+            <div class="sector-ranking-label">
+              ${escapeHtml(sector.sector_name || "Secteur non renseigné")}
+            </div>
+            <div class="sector-ranking-bar-track">
+              <div class="sector-ranking-bar" style="width: ${width.toFixed(1)}%;"></div>
+            </div>
+            <div class="sector-ranking-value">
+              ${euro(sector.received_volume || 0)}
+            </div>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function buildSectorReceiptsMixHtml(sectors) {
+  const topSectors = sectors
+    .filter(sector => Number(sector.received_volume || 0) > 0)
+    .slice(0, 12);
+
+  if (!topSectors.length) {
+    return `<div class="sector-empty-state">Aucune ventilation des recettes sur la période.</div>`;
+  }
+
+  return `
+    <div class="sector-mix-list">
+      ${topSectors.map(sector => {
+        const c2b = Number(sector.c2b_received_share || 0) * 100;
+        const b2b = Number(sector.b2b_received_share || 0) * 100;
+        const other = Number(sector.other_received_share || 0) * 100;
+
+        return `
+          <div class="sector-mix-row">
+            <div class="sector-mix-label">
+              ${escapeHtml(sector.sector_name || "Secteur non renseigné")}
+            </div>
+
+            <div class="sector-mix-bar" title="C2B ${c2b.toFixed(1)} % · B2B ${b2b.toFixed(1)} % · autres ${other.toFixed(1)} %">
+              <span class="sector-mix-c2b" style="width: ${c2b.toFixed(2)}%;"></span>
+              <span class="sector-mix-b2b" style="width: ${b2b.toFixed(2)}%;"></span>
+              <span class="sector-mix-other" style="width: ${other.toFixed(2)}%;"></span>
+            </div>
+
+            <div class="sector-mix-meta">
+              C2B ${c2b.toFixed(0)} %
+              · B2B ${b2b.toFixed(0)} %
+            </div>
+          </div>
+        `;
+      }).join("")}
+    </div>
+
+    <div class="sector-mix-legend">
+      <span><i class="sector-legend-c2b"></i> Particuliers → pros</span>
+      <span><i class="sector-legend-b2b"></i> Pros → pros</span>
+      <span><i class="sector-legend-other"></i> Autres flux</span>
+    </div>
+  `;
+}
+
+function buildSectorsTableHtml(sectors) {
+  if (!sectors.length) {
+    return `<div class="sector-empty-state">Aucun secteur exploitable sur la période.</div>`;
+  }
+
+  return `
+    <div class="sector-table-wrap">
+      <table class="sector-table">
+        <thead>
+          <tr>
+            <th>Secteur</th>
+            <th>Pros</th>
+            <th>Pros actifs</th>
+            <th>Gonettes reçues</th>
+            <th>Gonettes émises</th>
+            <th>Réutilisation</th>
+            <th>Part du reçu</th>
+            <th>C2B reçu</th>
+            <th>B2B reçu</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${sectors.map(sector => `
+            <tr>
+              <td><strong>${escapeHtml(sector.sector_name || "Secteur non renseigné")}</strong></td>
+              <td>${Number(sector.professional_count || 0).toLocaleString("fr-FR")}</td>
+              <td>${Number(sector.active_professional_count || 0).toLocaleString("fr-FR")}</td>
+              <td>${euro(sector.received_volume || 0)}</td>
+              <td>${euro(sector.emitted_volume || 0)}</td>
+              <td>${formatSectorPercent(sector.reuse_rate)}</td>
+              <td>${formatSectorPercent(sector.received_volume_share)}</td>
+              <td>${formatSectorPercent(sector.c2b_received_share)}</td>
+              <td>${formatSectorPercent(sector.b2b_received_share)}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function renderSectorsView(forceReload = false) {
+  destroyCartographyMap();
+
+  appState.currentView = "sectors";
+  syncSidebarView("sectors");
+  setTitle("Analyse sectorielle");
+
+  content.innerHTML = `<div class="card">Chargement de l’analyse sectorielle...</div>`;
+
+  if (!appState.sectors.data || forceReload) {
+    appState.sectors.data = await apiGet(`/api/sectors/activity${getPeriodQueryParam()}`);
+  }
+
+  const data = appState.sectors.data || {};
+  const summary = data.summary || {};
+  const sectors = Array.isArray(data.sectors) ? data.sectors : [];
+
+  content.innerHTML = `
+    <section class="card sector-overview-card">
+      <div class="sector-overview-header">
+        <div>
+          <div class="stat-label">Activité monétaire par secteur principal</div>
+          <h2>${Number(summary.sector_count || 0).toLocaleString("fr-FR")} secteurs analysés</h2>
+          <p>
+            Cette vue répartit l’activité numérique des professionnels par secteur principal :
+            volume reçu, volume réémis, réutilisation et origine des recettes.
+          </p>
+        </div>
+
+        <div class="sector-kpis">
+          <div class="sector-kpi">
+            <strong>${Number(summary.professionals_with_sector || 0).toLocaleString("fr-FR")}</strong>
+            <span>pros sectorisés</span>
+          </div>
+          <div class="sector-kpi">
+            <strong>${Number(summary.active_professionals_with_sector || 0).toLocaleString("fr-FR")}</strong>
+            <span>pros actifs sectorisés</span>
+          </div>
+          <div class="sector-kpi">
+            <strong>${formatSectorPercent(summary.overall_reuse_rate)}</strong>
+            <span>réutilisation globale</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="sector-flow-grid">
+        <div class="sector-flow-card">
+          <span>Gonettes reçues</span>
+          <strong>${euro(summary.total_received_volume || 0)}</strong>
+        </div>
+        <div class="sector-flow-card">
+          <span>Gonettes émises</span>
+          <strong>${euro(summary.total_emitted_volume || 0)}</strong>
+        </div>
+        <div class="sector-flow-card">
+          <span>Volume total brassé</span>
+          <strong>${euro(summary.total_flow_volume || 0)}</strong>
+        </div>
+      </div>
+
+      <div class="sector-quality-note">
+        ${Number(summary.professionals_without_sector || 0).toLocaleString("fr-FR")} professionnel(s)
+        restent sans secteur principal renseigné.
+        Sur les recettes sectorialisées :
+        ${euro(summary.total_c2b_received_volume || 0)} proviennent des particuliers,
+        ${euro(summary.total_b2b_received_volume || 0)} des autres professionnels.
+      </div>
+    </section>
+
+    <section class="card sector-ranking-card">
+      <div class="sector-section-heading">
+        <h3>Principaux secteurs par gonettes reçues</h3>
+      </div>
+      ${buildSectorRankingHtml(sectors)}
+    </section>
+
+    <section class="card sector-mix-card">
+      <div class="sector-section-heading">
+        <h3>Origine des recettes : C2B / B2B</h3>
+      </div>
+      ${buildSectorReceiptsMixHtml(sectors)}
+    </section>
+
+    <section class="card sector-table-card">
+      <div class="sector-section-heading">
+        <h3>Détail par secteur</h3>
+      </div>
+      ${buildSectorsTableHtml(sectors)}
+    </section>
+  `;
+}
+
 
 async function renderTerritoriesView(forceReload = false) {
   destroyCartographyMap();
@@ -2453,6 +2681,8 @@ async function reloadCurrentViewForPeriod() {
     await renderCartographyView(true);
   } else if (appState.currentView === "territories") {
     await renderTerritoriesView(true);
+  } else if (appState.currentView === "sectors") {
+    await renderSectorsView(true);
   } else {
     await renderStatsView(true);
   }
@@ -3851,6 +4081,7 @@ function syncSidebarView(view) {
     pros: "pros",
     cartography: "cartography",
     territories: "territories",
+    sectors: "sectors",
     network: "network",
     "pro-detail": "pros"
   };
@@ -3927,6 +4158,8 @@ document.querySelectorAll('input[name="dataView"]').forEach(input => {
       renderCartographyView();
     } else if (view === "territories") {
       renderTerritoriesView();
+    } else if (view === "sectors") {
+      renderSectorsView();
     } else if (view === "network") {
       renderNetworkView();
     }
@@ -3943,6 +4176,7 @@ window.renderProDetail = renderProDetail;
 window.renderProsView = renderProsView;
 window.renderCartographyView = renderCartographyView;
 window.renderTerritoriesView = renderTerritoriesView;
+window.renderSectorsView = renderSectorsView;
 window.toggleProsSort = toggleProsSort;
 window.changeDetailTransactionPage = changeDetailTransactionPage;
 
