@@ -1,0 +1,45 @@
+# Secrets / configuration locale
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# Environnements virtuels
+venv/
+.venv/
+
+# SQLite / données locales
+server/data/*.db
+server/data/*.sqlite
+server/data/*.sqlite3
+
+# Logs
+*.log
+logs/
+server/logs/
+
+# Exports / artefacts temporaires
+_export_code/
+exports/
+tmp/
+*.tmp
+
+# Backups techniques créés pendant le développement
+*.bak_*
+*.before
+*.after
+backup/
+backups/
+
+# OS / éditeurs
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
