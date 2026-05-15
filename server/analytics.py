@@ -901,6 +901,235 @@ def compute_zip_territorial_activity(start=None, end=None, year=None):
 
 
 
+
+def compute_sector_activity(start=None, end=None, year=None):
+    """
+    Agrège l'activité monétaire numérique par secteur principal.
+
+    Périmètre :
+    - professionnels MLCFlux enrichis depuis Odoo ;
+    - secteur principal uniquement ;
+    - activité calculée sur la période demandée.
+
+    Mesures :
+    - gonettes reçues ;
+    - gonettes émises hors reconversion ;
+    - pros actifs ;
+    - taux de réutilisation ;
+    - ventilation des recettes entre C2B, B2B et autres flux.
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+
+    professional_rows = cur.execute("""
+        SELECT
+            professional_ref,
+            odoo_partner_id,
+            odoo_name,
+            industry_id,
+            industry_name
+        FROM odoo_professional_enrichment
+        ORDER BY professional_ref ASC
+    """).fetchall()
+
+    conn.close()
+
+    professionals = [dict(row) for row in professional_rows]
+    transaction_rows = fetch_transactions(start=start, end=end, year=year)
+    professionals = _compute_map_activity_scores(professionals, transaction_rows)
+
+    sectors = {}
+    ref_to_sector_label = {}
+
+    professional_count = len(professionals)
+    professionals_with_sector = 0
+    professionals_without_sector = 0
+
+    active_professional_count = 0
+    active_professionals_with_sector = 0
+    active_professionals_without_sector = 0
+
+    total_received_volume = 0.0
+    total_emitted_volume = 0.0
+    total_received_count = 0
+    total_emitted_count = 0
+
+    for professional in professionals:
+        industry_name = str(professional.get("industry_name") or "").strip()
+        sector_label = industry_name or "Secteur non renseigné"
+
+        if industry_name:
+            professionals_with_sector += 1
+        else:
+            professionals_without_sector += 1
+
+        ref_to_sector_label[professional["professional_ref"]] = sector_label
+
+        received_volume = float(professional.get("received_volume") or 0.0)
+        emitted_volume = float(professional.get("emitted_volume") or 0.0)
+        received_count = int(professional.get("received_count") or 0)
+        emitted_count = int(professional.get("emitted_count") or 0)
+
+        is_active = received_count > 0 or emitted_count > 0
+
+        if is_active:
+            active_professional_count += 1
+            if industry_name:
+                active_professionals_with_sector += 1
+            else:
+                active_professionals_without_sector += 1
+
+        total_received_volume += received_volume
+        total_emitted_volume += emitted_volume
+        total_received_count += received_count
+        total_emitted_count += emitted_count
+
+        sector = sectors.setdefault(sector_label, {
+            "sector_name": sector_label,
+            "industry_id": professional.get("industry_id"),
+            "professional_count": 0,
+            "active_professional_count": 0,
+            "received_volume": 0.0,
+            "emitted_volume": 0.0,
+            "total_flow_volume": 0.0,
+            "received_count": 0,
+            "emitted_count": 0,
+            "reuse_rate": None,
+            "received_volume_share": 0.0,
+            "c2b_received_volume": 0.0,
+            "b2b_received_volume": 0.0,
+            "other_received_volume": 0.0,
+            "c2b_received_count": 0,
+            "b2b_received_count": 0,
+            "other_received_count": 0,
+            "c2b_received_share": 0.0,
+            "b2b_received_share": 0.0,
+            "other_received_share": 0.0,
+        })
+
+        sector["professional_count"] += 1
+
+        if is_active:
+            sector["active_professional_count"] += 1
+
+        sector["received_volume"] += received_volume
+        sector["emitted_volume"] += emitted_volume
+        sector["total_flow_volume"] += received_volume + emitted_volume
+        sector["received_count"] += received_count
+        sector["emitted_count"] += emitted_count
+
+    # Ventilation des recettes par origine : C2B / B2B / autres.
+    for row in transaction_rows:
+        from_label = str(row.get("from_label", "")).strip()
+        to_label = str(row.get("to_label", "")).strip()
+        amount = float(row.get("amount", 0) or 0)
+
+        to_ref = _extract_professional_ref(to_label)
+
+        if not to_ref:
+            continue
+
+        if to_ref not in ref_to_sector_label:
+            continue
+
+        if "conversion" in from_label.lower():
+            continue
+
+        sector_label = ref_to_sector_label[to_ref]
+        sector = sectors[sector_label]
+
+        if from_label.startswith("U"):
+            sector["c2b_received_volume"] += amount
+            sector["c2b_received_count"] += 1
+        elif from_label.startswith("P"):
+            sector["b2b_received_volume"] += amount
+            sector["b2b_received_count"] += 1
+        else:
+            sector["other_received_volume"] += amount
+            sector["other_received_count"] += 1
+
+    sector_rows = []
+
+    for sector in sectors.values():
+        received_volume = sector["received_volume"]
+        emitted_volume = sector["emitted_volume"]
+
+        sector["reuse_rate"] = (
+            emitted_volume / received_volume
+            if received_volume > 0
+            else None
+        )
+
+        sector["received_volume_share"] = (
+            received_volume / total_received_volume
+            if total_received_volume > 0
+            else 0.0
+        )
+
+        if received_volume > 0:
+            sector["c2b_received_share"] = sector["c2b_received_volume"] / received_volume
+            sector["b2b_received_share"] = sector["b2b_received_volume"] / received_volume
+            sector["other_received_share"] = sector["other_received_volume"] / received_volume
+
+        sector_rows.append(sector)
+
+    sector_rows.sort(
+        key=lambda sector: (
+            -sector["received_volume"],
+            sector["sector_name"].lower(),
+        )
+    )
+
+    total_flow_volume = total_received_volume + total_emitted_volume
+
+    total_c2b_received_volume = sum(
+        sector["c2b_received_volume"]
+        for sector in sector_rows
+    )
+    total_b2b_received_volume = sum(
+        sector["b2b_received_volume"]
+        for sector in sector_rows
+    )
+    total_other_received_volume = sum(
+        sector["other_received_volume"]
+        for sector in sector_rows
+    )
+
+    summary = {
+        "sector_count": len(sector_rows),
+        "professional_count": professional_count,
+        "professionals_with_sector": professionals_with_sector,
+        "professionals_without_sector": professionals_without_sector,
+        "active_professional_count": active_professional_count,
+        "active_professionals_with_sector": active_professionals_with_sector,
+        "active_professionals_without_sector": active_professionals_without_sector,
+        "total_received_volume": float(total_received_volume),
+        "total_emitted_volume": float(total_emitted_volume),
+        "total_flow_volume": float(total_flow_volume),
+        "total_received_count": int(total_received_count),
+        "total_emitted_count": int(total_emitted_count),
+        "overall_reuse_rate": (
+            total_emitted_volume / total_received_volume
+            if total_received_volume > 0
+            else None
+        ),
+        "total_c2b_received_volume": float(total_c2b_received_volume),
+        "total_b2b_received_volume": float(total_b2b_received_volume),
+        "total_other_received_volume": float(total_other_received_volume),
+        "period": {
+            "start": start,
+            "end": end,
+            "year": year,
+        },
+    }
+
+    return {
+        "summary": summary,
+        "sectors": sector_rows,
+    }
+
+
+
 def compute_stats_charts(start=None, end=None, year=None):
     rows = fetch_transactions(start=start, end=end, year=year)
 

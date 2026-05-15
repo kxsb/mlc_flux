@@ -1491,3 +1491,270 @@ body.dark-mode .network-sidepanel-card {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Analyse sectorielle */
+.sector-overview-card {
+  margin-bottom: 20px;
+}
+
+.sector-overview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+}
+
+.sector-overview-header h2 {
+  margin: 0 0 8px;
+  font-size: 26px;
+  line-height: 1.2;
+  color: var(--text-strong);
+}
+
+.sector-overview-header p {
+  max-width: 78ch;
+  margin: 0;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.sector-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(130px, 1fr));
+  gap: 12px;
+  flex: 0 0 auto;
+}
+
+.sector-kpi {
+  min-width: 130px;
+  padding: 12px 14px;
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  background: var(--table-head-bg);
+  text-align: center;
+}
+
+.sector-kpi strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 24px;
+  line-height: 1.15;
+  color: var(--text-strong);
+}
+
+.sector-kpi span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.sector-flow-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.sector-flow-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  background: var(--table-head-bg);
+}
+
+.sector-flow-card span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.sector-flow-card strong {
+  color: var(--text-strong);
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.sector-quality-note {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--card-border);
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.sector-section-heading h3 {
+  margin: 0 0 16px;
+  font-size: 19px;
+  color: var(--text-strong);
+}
+
+.sector-ranking-list,
+.sector-mix-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sector-ranking-row {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.25fr) minmax(220px, 2fr) minmax(120px, auto);
+  align-items: center;
+  gap: 14px;
+}
+
+.sector-ranking-label,
+.sector-mix-label {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.sector-ranking-bar-track {
+  height: 14px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--table-head-bg);
+  border: 1px solid var(--card-border);
+}
+
+.sector-ranking-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(14, 165, 233, 0.72), rgba(99, 102, 241, 0.92));
+}
+
+.sector-ranking-value {
+  text-align: right;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.sector-mix-row {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.25fr) minmax(240px, 2fr) minmax(150px, auto);
+  align-items: center;
+  gap: 14px;
+}
+
+.sector-mix-bar {
+  display: flex;
+  height: 16px;
+  overflow: hidden;
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  background: var(--table-head-bg);
+}
+
+.sector-mix-bar span {
+  display: block;
+  height: 100%;
+}
+
+.sector-mix-c2b {
+  background: rgba(37, 99, 235, 0.88);
+}
+
+.sector-mix-b2b {
+  background: rgba(168, 85, 247, 0.84);
+}
+
+.sector-mix-other {
+  background: rgba(148, 163, 184, 0.82);
+}
+
+.sector-mix-meta {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.sector-mix-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 16px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.sector-mix-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sector-mix-legend i {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+}
+
+.sector-legend-c2b {
+  background: rgba(37, 99, 235, 0.88);
+}
+
+.sector-legend-b2b {
+  background: rgba(168, 85, 247, 0.84);
+}
+
+.sector-legend-other {
+  background: rgba(148, 163, 184, 0.82);
+}
+
+.sector-table-wrap {
+  overflow-x: auto;
+}
+
+.sector-table {
+  min-width: 1240px;
+}
+
+.sector-table td,
+.sector-table th {
+  white-space: nowrap;
+}
+
+.sector-empty-state {
+  padding: 18px;
+  border: 1px dashed var(--card-border);
+  border-radius: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+@media (max-width: 1100px) {
+  .sector-overview-header {
+    flex-direction: column;
+  }
+
+  .sector-kpis {
+    width: 100%;
+  }
+
+  .sector-flow-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sector-ranking-row,
+  .sector-mix-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .sector-ranking-value {
+    text-align: left;
+  }
+}
+
+@media (max-width: 760px) {
+  .sector-kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .sector-mix-legend {
+    flex-direction: column;
+    gap: 10px;
+  }
+}

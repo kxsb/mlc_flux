@@ -8,6 +8,7 @@ from server.analytics import (
     get_professional_detail,
     get_professionals_map_data,
     compute_zip_territorial_activity,
+    compute_sector_activity,
     compute_stats_charts,
 )
 from server.utils.sync_auth import require_sync_token
@@ -77,6 +78,21 @@ def territories_zip():
 
     return jsonify(
         compute_zip_territorial_activity(
+            start=start,
+            end=end,
+            year=year,
+        )
+    )
+
+
+@legacy_api_bp.route("/api/sectors/activity", methods=["GET"])
+def sectors_activity():
+    year = request.args.get("year", default=None, type=int)
+    start = request.args.get("start")
+    end = request.args.get("end")
+
+    return jsonify(
+        compute_sector_activity(
             start=start,
             end=end,
             year=year,
