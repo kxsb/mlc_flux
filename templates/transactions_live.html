@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MLCFlux — Explorateur de transactions</title>
+  <link rel="stylesheet" href="/static/css/transactions_live.css" />
+</head>
+<body>
+  <aside id="sidebar" class="sidebar">
+    <h1>MLC Flux</h1>
+    <p class="sidebar-subtitle">Explorateur de transactions anonymisées</p>
+
+    <button id="reloadButton" class="primary-btn" type="button">
+      Recharger les données
+    </button>
+
+    <button id="themeToggleBtn" class="secondary-btn theme-toggle-btn" type="button">
+      🌙 Mode sombre
+    </button>
+
+    <section class="filters">
+      <h3>Période chargée</h3>
+
+      <label for="rangePreset">Période rapide</label>
+      <select id="rangePreset" class="sidebar-select">
+        <option value="2">Dernières 48h</option>
+        <option value="7">7 jours</option>
+        <option value="30" selected>30 jours</option>
+        <option value="90">90 jours</option>
+        <option value="365">1 an</option>
+        <option value="custom">Personnalisée</option>
+      </select>
+
+      <label for="dateFrom">Date début</label>
+      <input id="dateFrom" class="sidebar-input" type="date" />
+
+      <label for="dateTo">Date fin</label>
+      <input id="dateTo" class="sidebar-input" type="date" />
+    </section>
+
+    <section class="filters">
+      <h3>Filtres d’affichage</h3>
+
+      <label for="searchInput">Recherche</label>
+      <input
+        id="searchInput"
+        class="sidebar-input"
+        type="text"
+        placeholder="from, to, description..."
+      />
+
+      <label for="fromFilter">Émetteur</label>
+      <select id="fromFilter" class="sidebar-select">
+        <option value="">Tous</option>
+      </select>
+
+      <label for="toFilter">Destinataire</label>
+      <select id="toFilter" class="sidebar-select">
+        <option value="">Tous</option>
+      </select>
+
+      <button id="resetFiltersButton" class="secondary-btn" type="button">
+        Réinitialiser les filtres
+      </button>
+    </section>
+  </aside>
+
+  <main id="mainContent" class="main-content">
+    <header class="page-header">
+      <h2 id="pageTitle">Transactions</h2>
+      <p id="pageSubtitle">Chargement des données...</p>
+    </header>
+
+    <section id="summary" class="summary"></section>
+    <section id="content" class="content"></section>
+  </main>
+
+  <script type="module" src="/static/js/transactions_live_app.js"></script>
+</body>
+</html>
