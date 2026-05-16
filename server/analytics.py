@@ -124,52 +124,295 @@ def compute_global_stats(start=None, end=None, year=None):
     if not rows:
         return {
             "periode": "-",
+
+            # Compatibilité historique
             "nb_utilisateurs": 0,
+
+            # Activité économique
+            "nb_acteurs_activite": 0,
+            "nb_acteurs_particuliers": 0,
+            "nb_acteurs_professionnels": 0,
+            "nb_jours_periode_activite": 0,
             "moyenne_transactions_PP": 0.0,
             "moyenne_paiement_UP": 0.0,
             "moyenne_transactions_UU": 0.0,
+            "nb_transactions_activite_economique": 0,
+            "volume_activite_economique": 0.0,
+            "montant_moyen_activite": 0.0,
+            "moyenne_transactions_par_jour": 0.0,
+            "volume_moyen_par_jour": 0.0,
+            "flux_activite": {},
+
+            # Alimentation / sorties du circuit
+            "nb_alimentations_circuit": 0,
+            "volume_alimente_circuit": 0.0,
+            "montant_moyen_alimentation": 0.0,
+            "nb_sorties_circuit": 0,
+            "volume_sorti_circuit": 0.0,
+            "montant_moyen_sortie": 0.0,
+            "ecart_net_circuit": 0.0,
+            "circuit_inflow_destinations": {},
+
+            # Opérations associatives / techniques
+            "nb_operations_assoc_tech": 0,
+            "volume_operations_assoc_tech": 0.0,
+            "montant_moyen_operations_assoc_tech": 0.0,
+            "nb_operations_operator_accounts": 0,
+            "volume_operations_operator_accounts": 0.0,
+            "nb_operations_user_to_masked_actor": 0,
+            "volume_operations_user_to_masked_actor": 0.0,
+            "montant_moyen_user_to_masked_actor": 0.0,
+            "operations_operator_profiles": {},
+
             "transactions": []
         }
 
-    dates = [row["date"] for row in rows if row.get("date")]
-    if dates:
-        start_date = datetime.fromisoformat(min(dates).replace("Z", "+00:00")).strftime("%d/%m/%Y")
-        end_date = datetime.fromisoformat(max(dates).replace("Z", "+00:00")).strftime("%d/%m/%Y")
-        periode = f"{start_date} - {end_date}"
-    else:
-        periode = "-"
-
-    acteurs = set()
-    for row in rows:
-        from_label = str(row.get("from_label", "")).strip()
-        to_label = str(row.get("to_label", "")).strip()
-        if from_label:
-            acteurs.add(from_label)
-        if to_label:
-            acteurs.add(to_label)
-
-    pp = [
-        row for row in rows
-        if str(row.get("from_label", "")).startswith("P")
-        and str(row.get("to_label", "")).startswith("P")
-    ]
-
-    up = [
-        row for row in rows
-        if str(row.get("from_label", "")).startswith("U")
-        and str(row.get("to_label", "")).startswith("P")
-    ]
-
-    uu = [
-        row for row in rows
-        if str(row.get("from_label", "")).startswith("U")
-        and str(row.get("to_label", "")).startswith("U")
-    ]
+    def parse_day(value):
+        raw = str(value or "").strip()
+        if not raw:
+            return None
+        try:
+            return datetime.fromisoformat(raw.replace("Z", "+00:00")).date()
+        except Exception:
+            try:
+                return datetime.fromisoformat(raw[:10]).date()
+            except Exception:
+                return None
 
     def avg_amount(items):
         if not items:
             return 0.0
-        return float(sum(float(row.get("amount", 0) or 0) for row in items) / len(items))
+        return float(
+            sum(float(row.get("amount", 0) or 0) for row in items) / len(items)
+        )
+
+    def amount_sum(items):
+        return float(sum(float(row.get("amount", 0) or 0) for row in items))
+
+    dates = [row["date"] for row in rows if row.get("date")]
+    parsed_row_days = [parse_day(value) for value in dates]
+    parsed_row_days = [day for day in parsed_row_days if day is not None]
+
+    explicit_start_day = parse_day(start)
+    explicit_end_day = parse_day(end)
+
+    if explicit_start_day and explicit_end_day:
+        period_start_day = min(explicit_start_day, explicit_end_day)
+        period_end_day = max(explicit_start_day, explicit_end_day)
+    elif parsed_row_days:
+        period_start_day = min(parsed_row_days)
+        period_end_day = max(parsed_row_days)
+    else:
+        period_start_day = None
+        period_end_day = None
+
+    if period_start_day and period_end_day:
+        periode = (
+            f"{period_start_day.strftime('%d/%m/%Y')} - "
+            f"{period_end_day.strftime('%d/%m/%Y')}"
+        )
+        nb_jours_periode_activite = max(
+            (period_end_day - period_start_day).days + 1,
+            1,
+        )
+    else:
+        periode = "-"
+        nb_jours_periode_activite = 0
+
+    classified_rows = [
+        (row, _classify_analytical_transaction(row))
+        for row in rows
+    ]
+
+    # ---------------------------------------------------------------------
+    # 1. Activité économique
+    # ---------------------------------------------------------------------
+
+    activity_rows = [
+        row for row, classification in classified_rows
+        if classification["is_activity"]
+    ]
+
+    particuliers = set()
+    professionnels = set()
+    acteurs_legacy = set()
+
+    for row in activity_rows:
+        from_label = str(row.get("from_label", "")).strip()
+        to_label = str(row.get("to_label", "")).strip()
+
+        for label in (from_label, to_label):
+            if not label:
+                continue
+
+            acteurs_legacy.add(label)
+
+            family = _actor_flow_family(label)
+            if family == "U":
+                particuliers.add(label)
+            elif family == "P":
+                professionnels.add(label)
+
+    flux_buckets = {}
+
+    for row in activity_rows:
+        flux = _structural_flow_key(row)
+        amount = float(row.get("amount", 0) or 0)
+
+        bucket = flux_buckets.setdefault(flux, {
+            "nb_transactions": 0,
+            "volume_total": 0.0,
+        })
+        bucket["nb_transactions"] += 1
+        bucket["volume_total"] += amount
+
+    flux_activite = {}
+    for flux, bucket in flux_buckets.items():
+        nb_transactions = bucket["nb_transactions"]
+        volume_total = bucket["volume_total"]
+        flux_activite[flux] = {
+            "nb_transactions": nb_transactions,
+            "volume_total": float(volume_total),
+            "montant_moyen": (
+                float(volume_total / nb_transactions)
+                if nb_transactions else 0.0
+            ),
+        }
+
+    pp = [
+        row for row in activity_rows
+        if _actor_flow_family(row.get("from_label")) == "P"
+        and _actor_flow_family(row.get("to_label")) == "P"
+    ]
+
+    up = [
+        row for row in activity_rows
+        if _actor_flow_family(row.get("from_label")) == "U"
+        and _actor_flow_family(row.get("to_label")) == "P"
+    ]
+
+    uu = [
+        row for row in activity_rows
+        if _actor_flow_family(row.get("from_label")) == "U"
+        and _actor_flow_family(row.get("to_label")) == "U"
+    ]
+
+    volume_activite_economique = amount_sum(activity_rows)
+    nb_transactions_activite_economique = len(activity_rows)
+
+    montant_moyen_activite = (
+        volume_activite_economique / nb_transactions_activite_economique
+        if nb_transactions_activite_economique else 0.0
+    )
+
+    moyenne_transactions_par_jour = (
+        nb_transactions_activite_economique / nb_jours_periode_activite
+        if nb_jours_periode_activite else 0.0
+    )
+
+    volume_moyen_par_jour = (
+        volume_activite_economique / nb_jours_periode_activite
+        if nb_jours_periode_activite else 0.0
+    )
+
+    # ---------------------------------------------------------------------
+    # 2. Alimentation / sorties du circuit
+    # ---------------------------------------------------------------------
+
+    circuit_inflow_rows = [
+        row for row, classification in classified_rows
+        if classification["bucket"] == "inflows"
+    ]
+
+    circuit_outflow_rows = [
+        row for row, classification in classified_rows
+        if classification["bucket"] == "outflows"
+    ]
+
+    volume_alimente_circuit = amount_sum(circuit_inflow_rows)
+    volume_sorti_circuit = amount_sum(circuit_outflow_rows)
+
+    circuit_inflow_destination_buckets = {}
+
+    for row in circuit_inflow_rows:
+        flux = _structural_flow_key(row)
+        amount = float(row.get("amount", 0) or 0)
+
+        bucket = circuit_inflow_destination_buckets.setdefault(flux, {
+            "nb_transactions": 0,
+            "volume_total": 0.0,
+        })
+        bucket["nb_transactions"] += 1
+        bucket["volume_total"] += amount
+
+    circuit_inflow_destinations = {}
+
+    for flux, bucket in circuit_inflow_destination_buckets.items():
+        nb_transactions = bucket["nb_transactions"]
+        volume_total = bucket["volume_total"]
+
+        circuit_inflow_destinations[flux] = {
+            "nb_transactions": nb_transactions,
+            "volume_total": float(volume_total),
+            "montant_moyen": (
+                float(volume_total / nb_transactions)
+                if nb_transactions else 0.0
+            ),
+        }
+
+    # ---------------------------------------------------------------------
+    # 3. Opérations associatives / techniques
+    # ---------------------------------------------------------------------
+
+    operations_pairs = [
+        (row, classification)
+        for row, classification in classified_rows
+        if classification["bucket"] == "operations"
+    ]
+
+    operations_rows = [row for row, _ in operations_pairs]
+
+    operator_rows = [
+        row for row, classification in operations_pairs
+        if _operations_family_key(classification) == "operator_accounts"
+    ]
+
+    user_to_masked_rows = [
+        row for row, classification in operations_pairs
+        if _operations_family_key(classification) == "user_to_masked_actor"
+    ]
+
+    operator_profile_buckets = {}
+
+    for row in operator_rows:
+        profile = _operator_operation_profile(row)
+        amount = float(row.get("amount", 0) or 0)
+
+        bucket = operator_profile_buckets.setdefault(profile, {
+            "nb_transactions": 0,
+            "volume_total": 0.0,
+        })
+        bucket["nb_transactions"] += 1
+        bucket["volume_total"] += amount
+
+    operations_operator_profiles = {}
+
+    for profile, bucket in operator_profile_buckets.items():
+        nb_transactions = bucket["nb_transactions"]
+        volume_total = bucket["volume_total"]
+
+        operations_operator_profiles[profile] = {
+            "nb_transactions": nb_transactions,
+            "volume_total": float(volume_total),
+            "montant_moyen": (
+                float(volume_total / nb_transactions)
+                if nb_transactions else 0.0
+            ),
+        }
+
+    # ---------------------------------------------------------------------
+    # 4. Transactions détaillées historiques
+    # ---------------------------------------------------------------------
 
     transactions = [
         {
@@ -183,13 +426,55 @@ def compute_global_stats(start=None, end=None, year=None):
 
     return {
         "periode": periode,
-        "nb_utilisateurs": len(acteurs),
+
+        # Compatibilité historique
+        "nb_utilisateurs": len(acteurs_legacy),
+
+        # Activité économique
+        "nb_acteurs_activite": len(particuliers) + len(professionnels),
+        "nb_acteurs_particuliers": len(particuliers),
+        "nb_acteurs_professionnels": len(professionnels),
+        "nb_jours_periode_activite": nb_jours_periode_activite,
+
         "moyenne_transactions_PP": avg_amount(pp),
         "moyenne_paiement_UP": avg_amount(up),
         "moyenne_transactions_UU": avg_amount(uu),
+
+        "nb_transactions_activite_economique": nb_transactions_activite_economique,
+        "volume_activite_economique": volume_activite_economique,
+        "montant_moyen_activite": float(montant_moyen_activite),
+        "moyenne_transactions_par_jour": float(moyenne_transactions_par_jour),
+        "volume_moyen_par_jour": float(volume_moyen_par_jour),
+        "flux_activite": flux_activite,
+
+        # Alimentation / sorties du circuit
+        "nb_alimentations_circuit": len(circuit_inflow_rows),
+        "volume_alimente_circuit": volume_alimente_circuit,
+        "montant_moyen_alimentation": avg_amount(circuit_inflow_rows),
+
+        "nb_sorties_circuit": len(circuit_outflow_rows),
+        "volume_sorti_circuit": volume_sorti_circuit,
+        "montant_moyen_sortie": avg_amount(circuit_outflow_rows),
+
+        "ecart_net_circuit": float(volume_alimente_circuit - volume_sorti_circuit),
+        "circuit_inflow_destinations": circuit_inflow_destinations,
+
+        # Opérations associatives / techniques
+        "nb_operations_assoc_tech": len(operations_rows),
+        "volume_operations_assoc_tech": amount_sum(operations_rows),
+        "montant_moyen_operations_assoc_tech": avg_amount(operations_rows),
+
+        "nb_operations_operator_accounts": len(operator_rows),
+        "volume_operations_operator_accounts": amount_sum(operator_rows),
+
+        "nb_operations_user_to_masked_actor": len(user_to_masked_rows),
+        "volume_operations_user_to_masked_actor": amount_sum(user_to_masked_rows),
+        "montant_moyen_user_to_masked_actor": avg_amount(user_to_masked_rows),
+
+        "operations_operator_profiles": operations_operator_profiles,
+
         "transactions": transactions,
     }
-
 def compute_network_data(start=None, end=None, year=None):
     rows = fetch_transactions(start=start, end=end, year=year)
 
@@ -1130,19 +1415,581 @@ def compute_sector_activity(start=None, end=None, year=None):
 
 
 
+def _actor_flow_family(label):
+    """
+    Retourne la grande famille d'un acteur anonymisé.
+
+    P : professionnel
+    U : particulier pseudonymisé
+    A : acteur masqué / compte technique ou non catégorisé
+    C : conversion explicitement isolée, si elle réapparaît dans les données
+    ? : cas résiduel inconnu
+    """
+    label = str(label or "").strip()
+
+    if label.startswith("P"):
+        return "P"
+
+    if label.startswith("U_"):
+        return "U"
+
+    if label == "Acteur masqué":
+        return "A"
+
+    if label == "Conversion":
+        return "C"
+
+    return "?"
+
+
+def _classify_macro_flow(from_label, to_label):
+    """
+    Classe les transactions en quatre familles lisibles avec le vocabulaire
+    métier de la monnaie locale.
+
+    - payments :
+        paiements et circulation économique entre acteurs P/U
+    - conversions :
+        entrées de Gonettes numériques vers les comptes du réseau
+    - reconversions :
+        sorties du circuit, principalement les flux professionnels vers
+        l'acteur technique / masqué
+    - regularizations :
+        annulations, avoirs, clôtures, corrections ou cas techniques résiduels
+
+    Cette typologie reste macroscopique. Elle sert à distinguer clairement
+    l'activité économique courante des opérations de gestion monétaire.
+    """
+    source = _actor_flow_family(from_label)
+    target = _actor_flow_family(to_label)
+
+    if source in {"P", "U"} and target in {"P", "U"}:
+        return "payments"
+
+    if source in {"A", "C"} and target in {"P", "U"}:
+        return "conversions"
+
+    if source == "P" and target in {"A", "C"}:
+        return "reconversions"
+
+    # Les flux U→A, A→A et les cas résiduels sont rangés ici.
+    # L'audit post-rebuild montre qu'ils correspondent très majoritairement
+    # à des annulations, avoirs, clôtures ou corrections techniques.
+    return "regularizations"
+
+
+def _is_operator_account_label(label):
+    """
+    Identifie les comptes opérateurs exclus de l'activité économique centrale.
+
+    - P0000 : compte historique / opérateur de l'association Gonette ;
+    - P9999 : compte de collecte des cotisations mensualisées.
+
+    On utilise le préfixe technique du compte, plus stable que son libellé complet.
+    """
+    label = str(label or "").strip()
+    return label.startswith("P0000") or label.startswith("P9999")
+
+
+def _classify_analytical_transaction(row):
+    """
+    Classification analytique structurelle des transactions.
+
+    Cette classification ne s'appuie pas sur les libellés libres des transactions,
+    mais uniquement sur :
+    - group_label ;
+    - la famille structurelle des acteurs source / destination ;
+    - l'identification des comptes opérateurs P0000 et P9999.
+
+    Buckets renvoyés :
+    - activity :
+        circulation économique du réseau hors comptes opérateurs ;
+    - inflows :
+        alimentations du circuit numérique ;
+    - outflows :
+        reconversions / sorties professionnelles ;
+    - operations :
+        opérations associatives, techniques ou hors périmètre économique central.
+    """
+    group_label = str(row.get("group_label") or "").strip()
+
+    from_label = str(row.get("from_label") or "").strip()
+    to_label = str(row.get("to_label") or "").strip()
+
+    source = _actor_flow_family(from_label)
+    target = _actor_flow_family(to_label)
+
+    source_is_operator = _is_operator_account_label(from_label)
+    target_is_operator = _is_operator_account_label(to_label)
+
+    def result(bucket, family, is_activity=False):
+        return {
+            "bucket": bucket,
+            "family": family,
+            "is_activity": is_activity,
+        }
+
+    # ---------------------------------------------------------------------
+    # 1. Alimentation du circuit numérique
+    # ---------------------------------------------------------------------
+    # L'audit de group_label montre que "Émission" isole structurellement
+    # les entrées de monnaie numérique.
+    if group_label == "Émission":
+        return result(
+            "inflows",
+            "Alimentations du circuit numérique",
+            is_activity=False,
+        )
+
+    # ---------------------------------------------------------------------
+    # 2. Sorties / reconversions professionnelles
+    # ---------------------------------------------------------------------
+    # L'audit montre que Compte Pro + P→Acteur masqué correspond au bloc
+    # des reconversions et sorties professionnelles.
+    if group_label == "Compte Pro" and source == "P" and target in {"A", "C"}:
+        return result(
+            "outflows",
+            "Reconversions / sorties professionnelles",
+            is_activity=False,
+        )
+
+    # ---------------------------------------------------------------------
+    # 3. Activité économique centrale
+    # ---------------------------------------------------------------------
+    # Formule retenue :
+    # - transactions des groupes Compte ou Compte Pro ;
+    # - hors flux vers Acteur masqué / Conversion ;
+    # - hors transactions impliquant P0000 ou P9999.
+    if (
+        group_label in {"Compte", "Compte Pro"}
+        and target not in {"A", "C"}
+        and not source_is_operator
+        and not target_is_operator
+    ):
+        return result(
+            "activity",
+            "Activité économique hors comptes opérateurs",
+            is_activity=True,
+        )
+
+    # ---------------------------------------------------------------------
+    # 4. Opérations associatives, techniques ou hors activité centrale
+    # ---------------------------------------------------------------------
+
+    if source_is_operator or target_is_operator:
+        return result(
+            "operations",
+            "Flux impliquant les comptes opérateurs P0000 / P9999",
+            is_activity=False,
+        )
+
+    if group_label == "Compte" and target in {"A", "C"}:
+        return result(
+            "operations",
+            "Flux particuliers vers acteur masqué / conversion",
+            is_activity=False,
+        )
+
+    return result(
+        "operations",
+        "Autres opérations techniques ou résiduelles",
+        is_activity=False,
+    )
+
+
+def _operator_account_code(label):
+    """
+    Retourne le code du compte opérateur explicitement reconnu,
+    ou None si le libellé ne correspond pas à P0000 / P9999.
+    """
+    label = str(label or "").strip()
+
+    if label.startswith("P0000"):
+        return "P0000"
+
+    if label.startswith("P9999"):
+        return "P9999"
+
+    return None
+
+
+def _operator_operation_profile(row):
+    """
+    Profil structurel des opérations impliquant les comptes opérateurs.
+    """
+    source_code = _operator_account_code(row.get("from_label"))
+    target_code = _operator_account_code(row.get("to_label"))
+
+    if source_code and target_code:
+        if source_code == target_code:
+            return f"{source_code}_involved"
+        return "P0000_P9999_bridge"
+
+    if source_code:
+        return f"{source_code}_involved"
+
+    if target_code:
+        return f"{target_code}_involved"
+
+    return "no_operator_account"
+
+
+def _operations_family_key(classification):
+    """
+    Clé courte utilisée dans les indicateurs et graphes de l'onglet 3.
+    """
+    family = classification.get("family")
+
+    if family == "Flux impliquant les comptes opérateurs P0000 / P9999":
+        return "operator_accounts"
+
+    if family == "Flux particuliers vers acteur masqué / conversion":
+        return "user_to_masked_actor"
+
+    return "other_operations"
+
+
+def _structural_flow_key(row):
+    """
+    Flux structurel lisible de type P→P, U→A, etc.
+    """
+    source = _actor_flow_family(row.get("from_label"))
+    target = _actor_flow_family(row.get("to_label"))
+    return f"{source}→{target}"
+
+
+def _operations_functional_flow_key(row):
+    """
+    Catégorise les opérations hors activité économique selon le rôle réel
+    des comptes impliqués.
+
+    Cette lecture évite d'afficher des catégories brutes P→P / U→P / P→U,
+    trop ambiguës dans l'onglet 3 dès que P0000 ou P9999 sont impliqués.
+    """
+    source = _actor_flow_family(row.get("from_label"))
+    target = _actor_flow_family(row.get("to_label"))
+
+    source_operator = _operator_account_code(row.get("from_label"))
+    target_operator = _operator_account_code(row.get("to_label"))
+
+    if source == "P" and target == "P":
+        if source_operator and target_operator:
+            return "operator_to_operator"
+        if target_operator:
+            return "professional_to_operator"
+        if source_operator:
+            return "operator_to_professional"
+
+    if source == "U" and target in {"A", "C"}:
+        return "user_to_masked_actor"
+
+    if source == "U" and target == "P" and target_operator:
+        return "user_to_operator"
+
+    if source == "P" and source_operator and target == "U":
+        return "operator_to_user"
+
+    if source in {"A", "C"} and target == "P" and target_operator:
+        return "masked_actor_to_operator"
+
+    return "other_operations"
+
+
 def compute_stats_charts(start=None, end=None, year=None):
     rows = fetch_transactions(start=start, end=end, year=year)
 
-    if not rows:
+    weekly_activity_flow_definitions = [
+        {
+            "key": "U→P",
+            "short_label": "U→P",
+            "label": "Particuliers → professionnels",
+        },
+        {
+            "key": "P→P",
+            "short_label": "P→P",
+            "label": "Professionnels → professionnels",
+        },
+        {
+            "key": "P→U",
+            "short_label": "P→U",
+            "label": "Professionnels → particuliers",
+        },
+        {
+            "key": "U→U",
+            "short_label": "U→U",
+            "label": "Particuliers → particuliers",
+        },
+        {
+            "key": "atypical",
+            "short_label": "Atypiques",
+            "label": "Flux atypiques inclus dans l’activité",
+        },
+    ]
+
+    monthly_circuit_flow_definitions = [
+        {
+            "key": "inflows",
+            "short_label": "Alimentations",
+            "label": "Alimentations du circuit",
+        },
+        {
+            "key": "outflows",
+            "short_label": "Sorties",
+            "label": "Sorties / reconversions professionnelles",
+        },
+    ]
+
+    monthly_inflow_destination_definitions = [
+        {
+            "key": "A→U",
+            "short_label": "A→U",
+            "label": "Alimentations vers particuliers",
+        },
+        {
+            "key": "A→P",
+            "short_label": "A→P",
+            "label": "Alimentations vers professionnels",
+        },
+        {
+            "key": "A→A",
+            "short_label": "A→A",
+            "label": "Résiduel technique",
+        },
+        {
+            "key": "atypical",
+            "short_label": "Autres",
+            "label": "Autres flux d’alimentation",
+        },
+    ]
+
+
+    monthly_operations_family_definitions = [
+        {
+            "key": "operator_accounts",
+            "short_label": "Comptes opérateurs",
+            "label": "Flux impliquant P0000 / P9999",
+        },
+        {
+            "key": "user_to_masked_actor",
+            "short_label": "Particuliers → acteur masqué",
+            "label": "Flux particuliers vers acteur masqué / conversion",
+        },
+    ]
+
+    monthly_operator_profile_definitions = [
+        {
+            "key": "P0000_involved",
+            "short_label": "P0000 impliqué",
+            "label": "Opérations impliquant P0000",
+        },
+        {
+            "key": "P9999_involved",
+            "short_label": "P9999 impliqué",
+            "label": "Opérations impliquant P9999",
+        },
+        {
+            "key": "P0000_P9999_bridge",
+            "short_label": "P0000 ↔ P9999",
+            "label": "Opérations entre P0000 et P9999",
+        },
+    ]
+
+    structural_operations_flow_definitions = [
+        {
+            "key": "professional_to_operator",
+            "label": "Professionnel → compte opérateur",
+        },
+        {
+            "key": "operator_to_professional",
+            "label": "Compte opérateur → professionnel",
+        },
+        {
+            "key": "operator_to_operator",
+            "label": "Entre comptes opérateurs",
+        },
+        {
+            "key": "user_to_masked_actor",
+            "label": "Particulier → acteur masqué",
+        },
+        {
+            "key": "user_to_operator",
+            "label": "Particulier → compte opérateur",
+        },
+        {
+            "key": "operator_to_user",
+            "label": "Compte opérateur → particulier",
+        },
+        {
+            "key": "masked_actor_to_operator",
+            "label": "Acteur masqué → compte opérateur",
+        },
+    ]
+
+    main_activity_flow_keys = {
+        "U→P",
+        "P→P",
+        "P→U",
+        "U→U",
+    }
+
+    main_inflow_destination_keys = {
+        "A→U",
+        "A→P",
+        "A→A",
+    }
+
+    def empty_response():
         return {
-            "daily": {"labels": [], "values": []},
+            "daily": {
+                "labels": [],
+                "values": [],
+                "activity_values": [],
+                "inflow_values": [],
+                "outflow_values": [],
+                "non_economic_values": [],
+                "amount_values": [],
+                "activity_amount_values": [],
+                "inflow_amount_values": [],
+                "outflow_amount_values": [],
+                "non_economic_amount_values": [],
+                "payment_values": [],
+                "conversion_values": [],
+                "reconversion_values": [],
+                "regularization_values": [],
+                "payment_amount_values": [],
+                "conversion_amount_values": [],
+                "reconversion_amount_values": [],
+                "regularization_amount_values": [],
+            },
+
+            # Contrats historiques conservés
             "weekly": {"labels": [], "values": []},
             "hourly": {"labels": [], "values": []},
             "weekday": {"labels": [], "values": []},
             "cumulative": {"labels": [], "values": []},
+
+            # Activité économique — contrats consolidés
+            "weekly_activity_flows": {
+                "labels": [],
+                "series": [
+                    {
+                        "key": definition["key"],
+                        "short_label": definition["short_label"],
+                        "label": definition["label"],
+                        "count_values": [],
+                        "amount_values": [],
+                    }
+                    for definition in weekly_activity_flow_definitions
+                ],
+            },
+            "cumulative_activity": {
+                "labels": [],
+                "count_values": [],
+                "amount_values": [],
+            },
+            "hourly_activity": {
+                "labels": [f"{hour:02d}h" for hour in range(24)],
+                "count_values": [0 for _ in range(24)],
+                "amount_values": [0.0 for _ in range(24)],
+            },
+            "weekday_activity": {
+                "labels": [
+                    "Lundi", "Mardi", "Mercredi",
+                    "Jeudi", "Vendredi", "Samedi", "Dimanche"
+                ],
+                "count_values": [0 for _ in range(7)],
+                "amount_values": [0.0 for _ in range(7)],
+            },
+
+            # Alimentation / sorties — nouveaux contrats
+            "circuit_monthly_flows": {
+                "labels": [],
+                "series": [
+                    {
+                        "key": definition["key"],
+                        "short_label": definition["short_label"],
+                        "label": definition["label"],
+                        "count_values": [],
+                        "amount_values": [],
+                    }
+                    for definition in monthly_circuit_flow_definitions
+                ],
+            },
+            "circuit_monthly_inflow_destinations": {
+                "labels": [],
+                "series": [
+                    {
+                        "key": definition["key"],
+                        "short_label": definition["short_label"],
+                        "label": definition["label"],
+                        "count_values": [],
+                        "amount_values": [],
+                    }
+                    for definition in monthly_inflow_destination_definitions
+                ],
+            },
+            "circuit_cumulative_flows": {
+                "labels": [],
+                "series": [
+                    {
+                        "key": definition["key"],
+                        "short_label": definition["short_label"],
+                        "label": definition["label"],
+                        "count_values": [],
+                        "amount_values": [],
+                    }
+                    for definition in monthly_circuit_flow_definitions
+                ],
+            },
+            "circuit_cumulative_net_gap": {
+                "labels": [],
+                "amount_values": [],
+            },
+            "operations_monthly_families": {
+                "labels": [],
+                "series": [
+                    {
+                        "key": definition["key"],
+                        "short_label": definition["short_label"],
+                        "label": definition["label"],
+                        "count_values": [],
+                        "amount_values": [],
+                    }
+                    for definition in monthly_operations_family_definitions
+                ],
+            },
+            "operations_monthly_operator_profiles": {
+                "labels": [],
+                "series": [
+                    {
+                        "key": definition["key"],
+                        "short_label": definition["short_label"],
+                        "label": definition["label"],
+                        "count_values": [],
+                        "amount_values": [],
+                    }
+                    for definition in monthly_operator_profile_definitions
+                ],
+            },
+            "operations_structural_flow_distribution": {
+                "labels": [
+                    definition["label"]
+                    for definition in structural_operations_flow_definitions
+                ],
+                "count_values": [
+                    0 for _ in structural_operations_flow_definitions
+                ],
+                "amount_values": [
+                    0.0 for _ in structural_operations_flow_definitions
+                ],
+            },
         }
 
+    if not rows:
+        return empty_response()
+
     parsed = []
+
     for row in rows:
         raw_date = str(row.get("date", "")).strip()
         amount = float(row.get("amount", 0) or 0)
@@ -1152,34 +1999,99 @@ def compute_stats_charts(start=None, end=None, year=None):
         except Exception:
             continue
 
+        classification = _classify_analytical_transaction(row)
+
+        source = _actor_flow_family(row.get("from_label"))
+        target = _actor_flow_family(row.get("to_label"))
+        raw_flow = f"{source}→{target}"
+
+        activity_flow_key = (
+            raw_flow
+            if raw_flow in main_activity_flow_keys
+            else "atypical"
+        )
+
+        inflow_destination_key = (
+            raw_flow
+            if raw_flow in main_inflow_destination_keys
+            else "atypical"
+        )
+
         parsed.append({
             "dt": dt,
-            "amount": amount
+            "amount": amount,
+            "classification": classification,
+            "activity_flow_key": activity_flow_key,
+            "inflow_destination_key": inflow_destination_key,
+
+            # Conservés pour les analyses structurelles plus fines
+            # des onglets Opérations associatives / techniques.
+            "from_label": row.get("from_label"),
+            "to_label": row.get("to_label"),
         })
 
     if not parsed:
-        return {
-            "daily": {"labels": [], "values": []},
-            "weekly": {"labels": [], "values": []},
-            "hourly": {"labels": [], "values": []},
-            "weekday": {"labels": [], "values": []},
-            "cumulative": {"labels": [], "values": []},
-        }
+        return empty_response()
 
-    # 1) daily count
-    daily_counts = {}
+    # ---------------------------------------------------------------------
+    # 1. Graphe transversal quotidien
+    # ---------------------------------------------------------------------
+
+    daily_buckets = {}
+
     for row in parsed:
         day = row["dt"].date().isoformat()
-        daily_counts[day] = daily_counts.get(day, 0) + 1
 
-    daily_labels = sorted(daily_counts.keys())
-    daily_values = [daily_counts[day] for day in daily_labels]
+        bucket = daily_buckets.setdefault(day, {
+            "total": 0,
+            "activity": 0,
+            "inflows": 0,
+            "outflows": 0,
+            "operations": 0,
+            "total_amount": 0.0,
+            "activity_amount": 0.0,
+            "inflows_amount": 0.0,
+            "outflows_amount": 0.0,
+            "operations_amount": 0.0,
+        })
 
-    # 2) weekly average amount
+        bucket["total"] += 1
+        bucket["total_amount"] += row["amount"]
+
+        classification_bucket = row["classification"]["bucket"]
+        if classification_bucket in {"activity", "inflows", "outflows", "operations"}:
+            bucket[classification_bucket] += 1
+            bucket[f"{classification_bucket}_amount"] += row["amount"]
+
+    daily_labels = sorted(daily_buckets.keys())
+    daily_values = [daily_buckets[day]["total"] for day in daily_labels]
+
+    daily_activity_values = [daily_buckets[day]["activity"] for day in daily_labels]
+    daily_inflow_values = [daily_buckets[day]["inflows"] for day in daily_labels]
+    daily_outflow_values = [daily_buckets[day]["outflows"] for day in daily_labels]
+    daily_non_economic_values = [daily_buckets[day]["operations"] for day in daily_labels]
+
+    daily_amount_values = [daily_buckets[day]["total_amount"] for day in daily_labels]
+    daily_activity_amount_values = [daily_buckets[day]["activity_amount"] for day in daily_labels]
+    daily_inflow_amount_values = [daily_buckets[day]["inflows_amount"] for day in daily_labels]
+    daily_outflow_amount_values = [daily_buckets[day]["outflows_amount"] for day in daily_labels]
+    daily_non_economic_amount_values = [daily_buckets[day]["operations_amount"] for day in daily_labels]
+
+    # ---------------------------------------------------------------------
+    # 2. Activité économique
+    # ---------------------------------------------------------------------
+
+    activity_rows = [
+        row for row in parsed
+        if row["classification"]["is_activity"]
+    ]
+
     weekly_buckets = {}
-    for row in parsed:
+
+    for row in activity_rows:
         iso_year, iso_week, _ = row["dt"].isocalendar()
         key = f"{iso_year}-W{iso_week:02d}"
+
         weekly_buckets.setdefault(key, {"sum": 0.0, "count": 0})
         weekly_buckets[key]["sum"] += row["amount"]
         weekly_buckets[key]["count"] += 1
@@ -1191,44 +2103,416 @@ def compute_stats_charts(start=None, end=None, year=None):
         for key in weekly_labels
     ]
 
-    # 3) hourly count
-    hourly_counts = {hour: 0 for hour in range(24)}
-    for row in parsed:
-        hourly_counts[row["dt"].hour] += 1
+    weekly_flow_buckets = {}
+
+    def empty_activity_flow_bucket():
+        return {
+            definition["key"]: {
+                "count": 0,
+                "amount": 0.0,
+            }
+            for definition in weekly_activity_flow_definitions
+        }
+
+    for row in activity_rows:
+        iso_year, iso_week, _ = row["dt"].isocalendar()
+        week_key = f"{iso_year}-W{iso_week:02d}"
+
+        bucket = weekly_flow_buckets.setdefault(
+            week_key,
+            empty_activity_flow_bucket(),
+        )
+
+        flow_key = row["activity_flow_key"]
+        bucket[flow_key]["count"] += 1
+        bucket[flow_key]["amount"] += row["amount"]
+
+    weekly_activity_flow_labels = sorted(weekly_flow_buckets.keys())
+    weekly_activity_flow_series = []
+
+    for definition in weekly_activity_flow_definitions:
+        flow_key = definition["key"]
+        weekly_activity_flow_series.append({
+            "key": flow_key,
+            "short_label": definition["short_label"],
+            "label": definition["label"],
+            "count_values": [
+                weekly_flow_buckets[week][flow_key]["count"]
+                for week in weekly_activity_flow_labels
+            ],
+            "amount_values": [
+                weekly_flow_buckets[week][flow_key]["amount"]
+                for week in weekly_activity_flow_labels
+            ],
+        })
 
     hourly_labels = [f"{hour:02d}h" for hour in range(24)]
-    hourly_values = [hourly_counts[hour] for hour in range(24)]
+    hourly_counts = {hour: 0 for hour in range(24)}
+    hourly_amounts = {hour: 0.0 for hour in range(24)}
 
-    # 4) weekday count
+    for row in activity_rows:
+        hour = row["dt"].hour
+        hourly_counts[hour] += 1
+        hourly_amounts[hour] += row["amount"]
+
+    hourly_values = [hourly_counts[hour] for hour in range(24)]
+    hourly_amount_values = [hourly_amounts[hour] for hour in range(24)]
+
     weekday_labels = [
         "Lundi", "Mardi", "Mercredi",
         "Jeudi", "Vendredi", "Samedi", "Dimanche"
     ]
     weekday_counts = {i: 0 for i in range(7)}
-    for row in parsed:
-        weekday_counts[row["dt"].weekday()] += 1
+    weekday_amounts = {i: 0.0 for i in range(7)}
+
+    for row in activity_rows:
+        weekday = row["dt"].weekday()
+        weekday_counts[weekday] += 1
+        weekday_amounts[weekday] += row["amount"]
 
     weekday_values = [weekday_counts[i] for i in range(7)]
+    weekday_amount_values = [weekday_amounts[i] for i in range(7)]
 
-    # 5) cumulative volume par jour
-    daily_amounts = {}
-    for row in parsed:
+    daily_activity_cumulative_buckets = {}
+
+    for row in activity_rows:
         day = row["dt"].date().isoformat()
-        daily_amounts[day] = daily_amounts.get(day, 0.0) + row["amount"]
 
-    cumulative_labels = sorted(daily_amounts.keys())
+        bucket = daily_activity_cumulative_buckets.setdefault(day, {
+            "count": 0,
+            "amount": 0.0,
+        })
+
+        bucket["count"] += 1
+        bucket["amount"] += row["amount"]
+
+    cumulative_labels = sorted(daily_activity_cumulative_buckets.keys())
     cumulative_values = []
-    running = 0.0
+    cumulative_count_values = []
+    cumulative_amount_values = []
+
+    running_count = 0
+    running_amount = 0.0
 
     for day in cumulative_labels:
-        running += daily_amounts[day]
-        cumulative_values.append(running)
+        running_count += daily_activity_cumulative_buckets[day]["count"]
+        running_amount += daily_activity_cumulative_buckets[day]["amount"]
 
+        cumulative_count_values.append(running_count)
+        cumulative_amount_values.append(running_amount)
+        cumulative_values.append(running_amount)
+
+    # ---------------------------------------------------------------------
+    # 3. Alimentation / sorties du circuit
+    # ---------------------------------------------------------------------
+
+    circuit_inflow_rows = [
+        row for row in parsed
+        if row["classification"]["bucket"] == "inflows"
+    ]
+
+    circuit_outflow_rows = [
+        row for row in parsed
+        if row["classification"]["bucket"] == "outflows"
+    ]
+
+    circuit_monthly_buckets = {}
+
+    def empty_circuit_flow_bucket():
+        return {
+            definition["key"]: {
+                "count": 0,
+                "amount": 0.0,
+            }
+            for definition in monthly_circuit_flow_definitions
+        }
+
+    for row in circuit_inflow_rows:
+        month = row["dt"].strftime("%Y-%m")
+        bucket = circuit_monthly_buckets.setdefault(
+            month,
+            empty_circuit_flow_bucket(),
+        )
+        bucket["inflows"]["count"] += 1
+        bucket["inflows"]["amount"] += row["amount"]
+
+    for row in circuit_outflow_rows:
+        month = row["dt"].strftime("%Y-%m")
+        bucket = circuit_monthly_buckets.setdefault(
+            month,
+            empty_circuit_flow_bucket(),
+        )
+        bucket["outflows"]["count"] += 1
+        bucket["outflows"]["amount"] += row["amount"]
+
+    circuit_month_labels = sorted(circuit_monthly_buckets.keys())
+    circuit_monthly_flow_series = []
+
+    for definition in monthly_circuit_flow_definitions:
+        key = definition["key"]
+        circuit_monthly_flow_series.append({
+            "key": key,
+            "short_label": definition["short_label"],
+            "label": definition["label"],
+            "count_values": [
+                circuit_monthly_buckets[month][key]["count"]
+                for month in circuit_month_labels
+            ],
+            "amount_values": [
+                circuit_monthly_buckets[month][key]["amount"]
+                for month in circuit_month_labels
+            ],
+        })
+
+    monthly_inflow_destination_buckets = {}
+
+    def empty_inflow_destination_bucket():
+        return {
+            definition["key"]: {
+                "count": 0,
+                "amount": 0.0,
+            }
+            for definition in monthly_inflow_destination_definitions
+        }
+
+    for row in circuit_inflow_rows:
+        month = row["dt"].strftime("%Y-%m")
+        bucket = monthly_inflow_destination_buckets.setdefault(
+            month,
+            empty_inflow_destination_bucket(),
+        )
+
+        destination_key = row["inflow_destination_key"]
+        bucket[destination_key]["count"] += 1
+        bucket[destination_key]["amount"] += row["amount"]
+
+    circuit_inflow_destination_month_labels = sorted(
+        monthly_inflow_destination_buckets.keys()
+    )
+
+    circuit_monthly_inflow_destination_series = []
+
+    for definition in monthly_inflow_destination_definitions:
+        key = definition["key"]
+        circuit_monthly_inflow_destination_series.append({
+            "key": key,
+            "short_label": definition["short_label"],
+            "label": definition["label"],
+            "count_values": [
+                monthly_inflow_destination_buckets[month][key]["count"]
+                for month in circuit_inflow_destination_month_labels
+            ],
+            "amount_values": [
+                monthly_inflow_destination_buckets[month][key]["amount"]
+                for month in circuit_inflow_destination_month_labels
+            ],
+        })
+
+    circuit_cumulative_flow_series = [
+        {
+            "key": definition["key"],
+            "short_label": definition["short_label"],
+            "label": definition["label"],
+            "count_values": [],
+            "amount_values": [],
+        }
+        for definition in monthly_circuit_flow_definitions
+    ]
+
+    cumulative_series_by_key = {
+        series["key"]: series
+        for series in circuit_cumulative_flow_series
+    }
+
+    running_circuit_counts = {"inflows": 0, "outflows": 0}
+    running_circuit_amounts = {"inflows": 0.0, "outflows": 0.0}
+    circuit_net_gap_amount_values = []
+
+    for month in circuit_month_labels:
+        for key in ("inflows", "outflows"):
+            running_circuit_counts[key] += circuit_monthly_buckets[month][key]["count"]
+            running_circuit_amounts[key] += circuit_monthly_buckets[month][key]["amount"]
+
+            cumulative_series_by_key[key]["count_values"].append(
+                running_circuit_counts[key]
+            )
+            cumulative_series_by_key[key]["amount_values"].append(
+                running_circuit_amounts[key]
+            )
+
+        circuit_net_gap_amount_values.append(
+            running_circuit_amounts["inflows"] - running_circuit_amounts["outflows"]
+        )
+
+
+    # ---------------------------------------------------------------------
+    # 4. Opérations associatives / techniques
+    # ---------------------------------------------------------------------
+
+    operations_rows = [
+        row for row in parsed
+        if row["classification"]["bucket"] == "operations"
+    ]
+
+    monthly_operations_family_buckets = {}
+
+    def empty_operations_family_bucket():
+        return {
+            definition["key"]: {
+                "count": 0,
+                "amount": 0.0,
+            }
+            for definition in monthly_operations_family_definitions
+        }
+
+    for row in operations_rows:
+        month = row["dt"].strftime("%Y-%m")
+        family_key = _operations_family_key(row["classification"])
+
+        if family_key not in {"operator_accounts", "user_to_masked_actor"}:
+            continue
+
+        bucket = monthly_operations_family_buckets.setdefault(
+            month,
+            empty_operations_family_bucket(),
+        )
+        bucket[family_key]["count"] += 1
+        bucket[family_key]["amount"] += row["amount"]
+
+    operations_month_labels = sorted(monthly_operations_family_buckets.keys())
+    operations_monthly_family_series = []
+
+    for definition in monthly_operations_family_definitions:
+        key = definition["key"]
+        operations_monthly_family_series.append({
+            "key": key,
+            "short_label": definition["short_label"],
+            "label": definition["label"],
+            "count_values": [
+                monthly_operations_family_buckets[month][key]["count"]
+                for month in operations_month_labels
+            ],
+            "amount_values": [
+                monthly_operations_family_buckets[month][key]["amount"]
+                for month in operations_month_labels
+            ],
+        })
+
+    monthly_operator_profile_buckets = {}
+
+    def empty_operator_profile_bucket():
+        return {
+            definition["key"]: {
+                "count": 0,
+                "amount": 0.0,
+            }
+            for definition in monthly_operator_profile_definitions
+        }
+
+    for row in operations_rows:
+        if _operations_family_key(row["classification"]) != "operator_accounts":
+            continue
+
+        month = row["dt"].strftime("%Y-%m")
+        profile_key = _operator_operation_profile({
+            "from_label": row.get("from_label"),
+            "to_label": row.get("to_label"),
+        })
+
+        if profile_key not in {
+            "P0000_involved",
+            "P9999_involved",
+            "P0000_P9999_bridge",
+        }:
+            continue
+
+        bucket = monthly_operator_profile_buckets.setdefault(
+            month,
+            empty_operator_profile_bucket(),
+        )
+        bucket[profile_key]["count"] += 1
+        bucket[profile_key]["amount"] += row["amount"]
+
+    operator_profile_month_labels = sorted(monthly_operator_profile_buckets.keys())
+    operations_monthly_operator_profile_series = []
+
+    for definition in monthly_operator_profile_definitions:
+        key = definition["key"]
+        operations_monthly_operator_profile_series.append({
+            "key": key,
+            "short_label": definition["short_label"],
+            "label": definition["label"],
+            "count_values": [
+                monthly_operator_profile_buckets[month][key]["count"]
+                for month in operator_profile_month_labels
+            ],
+            "amount_values": [
+                monthly_operator_profile_buckets[month][key]["amount"]
+                for month in operator_profile_month_labels
+            ],
+        })
+
+    structural_flow_totals = {
+        definition["key"]: {
+            "count": 0,
+            "amount": 0.0,
+        }
+        for definition in structural_operations_flow_definitions
+    }
+
+    for row in operations_rows:
+        flow_key = _operations_functional_flow_key({
+            "from_label": row.get("from_label"),
+            "to_label": row.get("to_label"),
+        })
+
+        if flow_key not in structural_flow_totals:
+            continue
+
+        structural_flow_totals[flow_key]["count"] += 1
+        structural_flow_totals[flow_key]["amount"] += row["amount"]
+
+    operations_structural_flow_labels = [
+        definition["label"]
+        for definition in structural_operations_flow_definitions
+    ]
+    operations_structural_flow_count_values = [
+        structural_flow_totals[definition["key"]]["count"]
+        for definition in structural_operations_flow_definitions
+    ]
+    operations_structural_flow_amount_values = [
+        structural_flow_totals[definition["key"]]["amount"]
+        for definition in structural_operations_flow_definitions
+    ]
     return {
         "daily": {
             "labels": daily_labels,
             "values": daily_values,
+
+            "activity_values": daily_activity_values,
+            "inflow_values": daily_inflow_values,
+            "outflow_values": daily_outflow_values,
+            "non_economic_values": daily_non_economic_values,
+
+            "amount_values": daily_amount_values,
+
+            "activity_amount_values": daily_activity_amount_values,
+            "inflow_amount_values": daily_inflow_amount_values,
+            "outflow_amount_values": daily_outflow_amount_values,
+            "non_economic_amount_values": daily_non_economic_amount_values,
+
+            "payment_values": daily_activity_values,
+            "conversion_values": daily_inflow_values,
+            "reconversion_values": daily_outflow_values,
+            "regularization_values": daily_non_economic_values,
+
+            "payment_amount_values": daily_activity_amount_values,
+            "conversion_amount_values": daily_inflow_amount_values,
+            "reconversion_amount_values": daily_outflow_amount_values,
+            "regularization_amount_values": daily_non_economic_amount_values,
         },
+
+        # Contrats historiques conservés
         "weekly": {
             "labels": weekly_labels,
             "values": weekly_values,
@@ -1244,5 +2528,57 @@ def compute_stats_charts(start=None, end=None, year=None):
         "cumulative": {
             "labels": cumulative_labels,
             "values": cumulative_values,
+        },
+
+        # Activité économique
+        "weekly_activity_flows": {
+            "labels": weekly_activity_flow_labels,
+            "series": weekly_activity_flow_series,
+        },
+        "hourly_activity": {
+            "labels": hourly_labels,
+            "count_values": hourly_values,
+            "amount_values": hourly_amount_values,
+        },
+        "weekday_activity": {
+            "labels": weekday_labels,
+            "count_values": weekday_values,
+            "amount_values": weekday_amount_values,
+        },
+        "cumulative_activity": {
+            "labels": cumulative_labels,
+            "count_values": cumulative_count_values,
+            "amount_values": cumulative_amount_values,
+        },
+
+        # Alimentation / sorties
+        "circuit_monthly_flows": {
+            "labels": circuit_month_labels,
+            "series": circuit_monthly_flow_series,
+        },
+        "circuit_monthly_inflow_destinations": {
+            "labels": circuit_inflow_destination_month_labels,
+            "series": circuit_monthly_inflow_destination_series,
+        },
+        "circuit_cumulative_flows": {
+            "labels": circuit_month_labels,
+            "series": circuit_cumulative_flow_series,
+        },
+        "circuit_cumulative_net_gap": {
+            "labels": circuit_month_labels,
+            "amount_values": circuit_net_gap_amount_values,
+        },
+        "operations_monthly_families": {
+            "labels": operations_month_labels,
+            "series": operations_monthly_family_series,
+        },
+        "operations_monthly_operator_profiles": {
+            "labels": operator_profile_month_labels,
+            "series": operations_monthly_operator_profile_series,
+        },
+        "operations_structural_flow_distribution": {
+            "labels": operations_structural_flow_labels,
+            "count_values": operations_structural_flow_count_values,
+            "amount_values": operations_structural_flow_amount_values,
         },
     }

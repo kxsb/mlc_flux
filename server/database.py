@@ -92,6 +92,197 @@ def init_db():
         )
     """)
 
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS odoo_individual_enrichment (
+            pseudonym TEXT PRIMARY KEY,
+            odoo_match_status TEXT NOT NULL,
+            zip TEXT,
+            city TEXT,
+            latitude REAL,
+            longitude REAL,
+            membership_state TEXT,
+            is_former_member INTEGER,
+            has_zip INTEGER NOT NULL DEFAULT 0,
+            has_city INTEGER NOT NULL DEFAULT 0,
+            has_coordinates INTEGER NOT NULL DEFAULT 0,
+            fetched_at TEXT NOT NULL,
+            source TEXT NOT NULL DEFAULT 'odoo_jsonrpc_via_cyclos_numadherent'
+        )
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_odoo_individual_enrichment_match_status
+        ON odoo_individual_enrichment (odoo_match_status)
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_odoo_individual_enrichment_zip
+        ON odoo_individual_enrichment (zip)
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_odoo_individual_enrichment_city
+        ON odoo_individual_enrichment (city)
+    """)
+
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS cyclos_individual_daily_balances (
+            pseudonym TEXT NOT NULL,
+            balance_date TEXT NOT NULL,
+            balance REAL NOT NULL,
+            fetched_at TEXT NOT NULL,
+            source TEXT NOT NULL DEFAULT 'cyclos_balances_history_daily',
+            PRIMARY KEY (pseudonym, balance_date)
+        )
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_cyclos_individual_daily_balances_date
+        ON cyclos_individual_daily_balances (balance_date)
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_cyclos_individual_daily_balances_pseudonym
+        ON cyclos_individual_daily_balances (pseudonym)
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS cyclos_individual_daily_balance_windows (
+            pseudonym TEXT NOT NULL,
+            window_date_from TEXT NOT NULL,
+            window_date_to TEXT NOT NULL,
+            status TEXT NOT NULL,
+            points_received INTEGER NOT NULL DEFAULT 0,
+            points_stored INTEGER NOT NULL DEFAULT 0,
+            attempts INTEGER NOT NULL DEFAULT 0,
+            last_error TEXT,
+            last_run_at TEXT,
+            fetched_at TEXT,
+            PRIMARY KEY (pseudonym, window_date_from, window_date_to)
+        )
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_cyclos_individual_daily_balance_windows_status
+        ON cyclos_individual_daily_balance_windows (status)
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_cyclos_individual_daily_balance_windows_pseudonym
+        ON cyclos_individual_daily_balance_windows (pseudonym)
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS odoo_monetary_indicators_yearly (
+            year INTEGER PRIMARY KEY,
+            gonettes_num_circulation REAL NOT NULL,
+            gonettes_paper_circulation REAL NOT NULL,
+            gonettes_total_circulation REAL NOT NULL,
+            fonds_garantie_num REAL NOT NULL,
+            fonds_garantie_paper REAL NOT NULL,
+            ecart_num REAL NOT NULL,
+            ecart_paper REAL NOT NULL,
+            fetched_at TEXT NOT NULL,
+            source TEXT NOT NULL DEFAULT 'odoo_jsonrpc'
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS odoo_monetary_indicators_daily (
+            snapshot_date TEXT PRIMARY KEY,
+            year INTEGER NOT NULL,
+            month INTEGER NOT NULL,
+            day INTEGER NOT NULL,
+            gonettes_num_circulation REAL NOT NULL,
+            gonettes_paper_circulation REAL NOT NULL,
+            gonettes_total_circulation REAL NOT NULL,
+            fonds_garantie_num REAL NOT NULL,
+            fonds_garantie_paper REAL NOT NULL,
+            ecart_num REAL NOT NULL,
+            ecart_paper REAL NOT NULL,
+            fetched_at TEXT NOT NULL,
+            source TEXT NOT NULL DEFAULT 'odoo_jsonrpc'
+        )
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_odoo_monetary_indicators_daily_year_month
+        ON odoo_monetary_indicators_daily (year, month, day)
+    """)
+
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS tickets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            public_ref TEXT UNIQUE,
+            slug TEXT UNIQUE,
+            title TEXT NOT NULL,
+            category TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'new',
+            visibility TEXT NOT NULL DEFAULT 'public',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            last_activity_at TEXT NOT NULL,
+            resolved_at TEXT,
+            closed_at TEXT,
+            author_name TEXT NOT NULL,
+            author_email TEXT NOT NULL,
+            source_page TEXT,
+            context_json TEXT,
+            official_message_id INTEGER
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS ticket_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticket_id INTEGER NOT NULL,
+            author_name TEXT NOT NULL,
+            author_email TEXT NOT NULL,
+            author_role TEXT NOT NULL DEFAULT 'public',
+            body_markdown TEXT NOT NULL,
+            visibility TEXT NOT NULL DEFAULT 'public',
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS ticket_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticket_id INTEGER NOT NULL,
+            event_type TEXT NOT NULL,
+            actor_role TEXT NOT NULL,
+            old_value TEXT,
+            new_value TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
+        )
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_tickets_visibility_status_activity
+        ON tickets (visibility, status, last_activity_at DESC)
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_tickets_category
+        ON tickets (category)
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_ticket_messages_ticket_visibility_created
+        ON ticket_messages (ticket_id, visibility, created_at)
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_ticket_events_ticket_created
+        ON ticket_events (ticket_id, created_at)
+    """)
+
     _ensure_column(cur, "odoo_professional_enrichment", "cyclos_address_id", "TEXT")
     _ensure_column(cur, "odoo_professional_enrichment", "cyclos_address_line1", "TEXT")
     _ensure_column(cur, "odoo_professional_enrichment", "cyclos_zip", "TEXT")

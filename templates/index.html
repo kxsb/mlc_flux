@@ -9,75 +9,90 @@
 </head>
 <body>
   <div id="sidebar" class="sidebar">
-    <h2>MLC Flux</h2>
-
-    <button id="themeToggleBtn" class="secondary-btn theme-toggle-btn" type="button">
-      🌙 Mode sombre
-    </button>
-
-    <div class="filters">
-      <h3>Vues</h3>
-      <label><input type="radio" name="dataView" value="stats" checked> Statistiques globales</label>
-      <label><input type="radio" name="dataView" value="pros"> Activité des professionnels</label>
-      <label><input type="radio" name="dataView" value="cartography"> Cartographie</label>
-      <label><input type="radio" name="dataView" value="territories"> Territoires</label>
-      <label><input type="radio" name="dataView" value="sectors"> Secteurs</label>
-      <label><input type="radio" name="dataView" value="network"> Network global</label>
-    </div>
-
-    <div class="filters period-filter-block">
-      <h3>Période d’analyse</h3>
+    <div class="sidebar-header">
+      <h2>MLC Flux</h2>
 
       <button
-        id="periodActiveSummary"
-        class="period-active-summary"
+        id="sidebarCollapseBtn"
+        class="sidebar-collapse-btn"
         type="button"
-        aria-controls="customPeriodFields"
-        aria-expanded="false"
-        title="Définir une période personnalisée"
+        aria-controls="sidebarContent"
+        aria-expanded="true"
+        title="Replier le volet latéral"
       >
-        <span class="period-active-label">Période active</span>
-        <span id="periodFilterHint" class="period-active-value">Chargement…</span>
+        ‹
+      </button>
+    </div>
+
+    <div id="sidebarContent" class="sidebar-content">
+      <button id="themeToggleBtn" class="secondary-btn theme-toggle-btn" type="button">
+        🌙 Mode sombre
       </button>
 
-      <div class="sidebar-field-label">Période rapide</div>
-      <select id="periodPreset" class="sidebar-select">
-        <option value="all">Toute la période disponible</option>
-        <option value="last30">30 derniers jours</option>
-        <option value="last90">90 derniers jours</option>
-        <option value="currentYear">Année en cours</option>
-        <option value="custom">Personnalisée</option>
-      </select>
+      <div class="filters period-filter-block">
+        <h3>Période d’analyse</h3>
 
-      <div id="customPeriodFields" class="period-date-grid hidden">
-        <div>
-          <input
-            id="periodStart"
-            class="sidebar-date-input"
-            type="date"
-            aria-label="Date de début"
-          />
+        <button
+          id="periodActiveSummary"
+          class="period-active-summary"
+          type="button"
+          aria-controls="customPeriodFields"
+          aria-expanded="false"
+          title="Définir une période personnalisée"
+        >
+          <span class="period-active-label">Période active</span>
+          <span id="periodFilterHint" class="period-active-value">Chargement…</span>
+        </button>
+
+        <div class="sidebar-field-label">Période rapide</div>
+        <select id="periodPreset" class="sidebar-select">
+          <option value="all">Toute la période disponible</option>
+          <option value="last30">30 derniers jours</option>
+          <option value="last90">90 derniers jours</option>
+          <option value="currentYear">Année en cours</option>
+          <option value="year2025">2025</option>
+          <option value="year2024">2024</option>
+          <option value="year2023">2023</option>
+          <option value="custom">Personnalisée</option>
+        </select>
+
+        <div id="customPeriodFields" class="period-date-grid hidden">
+          <div>
+            <input
+              id="periodStart"
+              class="sidebar-date-input"
+              type="date"
+              aria-label="Date de début"
+            />
+          </div>
+
+          <div>
+            <input
+              id="periodEnd"
+              class="sidebar-date-input"
+              type="date"
+              aria-label="Date de fin"
+            />
+          </div>
         </div>
 
-        <div>
-          <input
-            id="periodEnd"
-            class="sidebar-date-input"
-            type="date"
-            aria-label="Date de fin"
-          />
-        </div>
+        <p class="period-autorefresh-note">
+          Les données se mettent à jour automatiquement après chaque changement.
+        </p>
       </div>
 
-      <div class="period-filter-actions">
-        <button id="applyPeriodButton" class="primary-btn" type="button">
-          Appliquer
-        </button>
-        <button id="resetPeriodButton" class="secondary-btn" type="button">
-          Réinitialiser
-        </button>
+      <div class="filters sidebar-views-block">
+        <h3>Vues</h3>
+        <label><input type="radio" name="dataView" value="stats" checked> Statistiques globales</label>
+        <label><input type="radio" name="dataView" value="monetary-pilotage"> Pilotage monétaire</label>
+        <label><input type="radio" name="dataView" value="pros"> Activité des professionnels</label>
+        <label><input type="radio" name="dataView" value="cartography"> Cartographie</label>
+        <label><input type="radio" name="dataView" value="territories"> Territoires</label>
+        <label><input type="radio" name="dataView" value="sectors"> Secteurs</label>
+        <label><input type="radio" name="dataView" value="network"> Network global</label>
+        <label><input type="radio" name="dataView" value="tickets"> Tickets & retours</label>
+        <label><input type="radio" name="dataView" value="info"> Info & méthodologie</label>
       </div>
-
     </div>
   </div>
 
@@ -89,6 +104,8 @@
   <script src="https://unpkg.com/cytoscape@3.27.0/dist/cytoscape.min.js"></script>
   <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
   <script src="https://unpkg.com/deck.gl@9.3.0/dist.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@18.0.3/lib/marked.umd.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.4.3/dist/purify.min.js"></script>
   <script src="/static/js/chart.js"></script>
   <script src="/static/js/app.js"></script>
 </body>
