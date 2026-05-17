@@ -7291,25 +7291,9 @@ body.dark-mode .professional-clusters-secondary-intro-card {
     grid-row: 2;
   }
 
-  .professional-clusters-panel > .user-postal-clusters-overview-card {
-    grid-column: 1;
-    grid-row: 3;
-  }
-
-  .professional-clusters-panel > .cartography-overview-card {
-    grid-column: 2;
-    grid-row: 3;
-  }
-
-  .professional-clusters-panel > .user-postal-clusters-map-card {
-    grid-column: 1;
-    grid-row: 4;
-  }
-
-  .professional-clusters-panel > .cartography-map-card {
-    grid-column: 2;
-    grid-row: 4;
-  }
+  /* PROCLUSTERS002 :
+     les blocs d’introduction et les cartes sont désormais enveloppés
+     dans .professional-clusters-map-pair-users / -pros. */
 
   .professional-clusters-panel > .user-postal-clusters-overview-card .user-postal-clusters-overview-header,
   .professional-clusters-panel > .cartography-overview-card .cartography-overview-header {
@@ -10127,6 +10111,79 @@ body.dark-mode .pro-detail-payment-basin-postal-chip {
 @media (max-width: 860px) {
   .info-card-metadata-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* ==========================================================================
+   PROCLUSTERS002 — rattachement visuel des synthèses à leur carte
+   ========================================================================== */
+
+.professional-clusters-map-pair {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 0;
+}
+
+.professional-clusters-map-pair > .card {
+  margin: 0;
+}
+
+.professional-clusters-map-pair > .user-postal-clusters-overview-card,
+.professional-clusters-map-pair > .cartography-overview-card {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  border-bottom-width: 0;
+}
+
+.professional-clusters-map-pair > .user-postal-clusters-map-card,
+.professional-clusters-map-pair > .cartography-map-card {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+@media (min-width: 1080px) {
+  .professional-clusters-panel > .professional-clusters-map-pair-users {
+    grid-column: 1;
+    grid-row: 3;
+    min-width: 0;
+  }
+
+  .professional-clusters-panel > .professional-clusters-map-pair-pros {
+    grid-column: 2;
+    grid-row: 3;
+    min-width: 0;
+  }
+
+  .professional-clusters-panel > .user-postal-clusters-table-card {
+    grid-column: 1 / -1;
+    grid-row: 4;
+  }
+
+  .professional-clusters-panel > .professional-clusters-map-pair-users .user-postal-clusters-map,
+  .professional-clusters-panel > .professional-clusters-map-pair-pros .cartography-map {
+    min-height: 380px;
+    height: min(48vh, 520px);
+  }
+
+  .professional-clusters-panel > .professional-clusters-map-pair-users .user-postal-clusters-map-empty,
+  .professional-clusters-panel > .professional-clusters-map-pair-pros .cartography-map-empty {
+    min-height: 380px;
+  }
+
+  .professional-clusters-panel > .professional-clusters-map-pair-users .user-postal-clusters-overview-header,
+  .professional-clusters-panel > .professional-clusters-map-pair-pros .cartography-overview-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+  }
+
+  .professional-clusters-panel > .professional-clusters-map-pair-users .user-postal-clusters-kpis,
+  .professional-clusters-panel > .professional-clusters-map-pair-pros .cartography-kpis {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
   }
 }
 

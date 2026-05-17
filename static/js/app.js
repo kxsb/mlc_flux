@@ -12750,73 +12750,81 @@ function buildUserPostalClustersTableHtml(postalCodes = []) {
   `;
 }
 
-function buildUserPostalClustersSectionHtml(userPostalClustersData = null) {
+function buildUserPostalClustersMapPairHtml(userPostalClustersData = null) {
   const payload = userPostalClustersData || {};
   const summary = payload.summary || {};
   const effectivePeriod = payload.effective_period || {};
   const points = Array.isArray(payload.heatmap_points)
     ? payload.heatmap_points
     : [];
+
+  return `
+    <div class="professional-clusters-map-pair professional-clusters-map-pair-users">
+      <section class="card user-postal-clusters-overview-card">
+        <div class="user-postal-clusters-overview-header">
+          <div>
+            <div class="stat-label">2 · Foyers d’usage des particuliers</div>
+            <h2>${formatUserPostalClusterInteger(summary.individual_count_included || 0)} particuliers répartis sur ${formatUserPostalClusterInteger(summary.postal_code_count || 0)} codes postaux</h2>
+            <p>
+              Cette carte met en évidence les foyers territoriaux d’usage. Les points sont agrégés
+              par code postal et n’exposent jamais de localisation individuelle.
+            </p>
+            <p class="user-postal-clusters-period-note">
+              Période analytique :
+              <strong>${effectivePeriod.start || "—"}</strong>
+              →
+              <strong>${effectivePeriod.end || "—"}</strong>.
+            </p>
+          </div>
+
+          <div class="user-postal-clusters-kpis">
+            <div class="user-postal-clusters-kpi">
+              <strong>${formatUserPostalClusterInteger(summary.postal_code_count || 0)}</strong>
+              <span>codes postaux</span>
+            </div>
+            <div class="user-postal-clusters-kpi">
+              <strong>${formatUserPostalClusterInteger(summary.heatmap_point_count || 0)}</strong>
+              <span>points heatmap</span>
+            </div>
+            <div class="user-postal-clusters-kpi">
+              <strong>${formatUserPostalClusterInteger(summary.professional_count_included || 0)}</strong>
+              <span>professionnels associés</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card user-postal-clusters-map-card">
+        <div class="cartography-map-toolbar">
+          <div>
+            <strong>${formatUserPostalClusterInteger(points.length)}</strong> foyer(s) territoriaux ·
+            intensité pondérée par le nombre de particuliers.
+          </div>
+          <button id="userPostalClustersFitBtn" class="secondary-btn" type="button">
+            Recentrer
+          </button>
+        </div>
+
+        <div id="userPostalClustersMap" class="user-postal-clusters-map"></div>
+
+        <div class="user-postal-clusters-map-note">
+          <strong>Lecture.</strong>
+          La chaleur représente une concentration agrégée de particuliers par code postal,
+          pas une localisation individuelle. Les points sont placés au niveau du centroïde
+          géographique du code postal.
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function buildUserPostalClustersTableSectionHtml(userPostalClustersData = null) {
+  const payload = userPostalClustersData || {};
   const postalCodes = Array.isArray(payload.postal_codes)
     ? payload.postal_codes
     : [];
 
   return `
-    <section class="card user-postal-clusters-overview-card">
-      <div class="user-postal-clusters-overview-header">
-        <div>
-          <div class="stat-label">2 · Foyers d’usage des particuliers</div>
-          <h2>${formatUserPostalClusterInteger(summary.individual_count_included || 0)} particuliers répartis sur ${formatUserPostalClusterInteger(summary.postal_code_count || 0)} codes postaux</h2>
-          <p>
-            Cette carte met en évidence les foyers territoriaux d’usage. Les points sont agrégés
-            par code postal et n’exposent jamais de localisation individuelle.
-          </p>
-          <p class="user-postal-clusters-period-note">
-            Période analytique :
-            <strong>${effectivePeriod.start || "—"}</strong>
-            →
-            <strong>${effectivePeriod.end || "—"}</strong>.
-          </p>
-        </div>
-
-        <div class="user-postal-clusters-kpis">
-          <div class="user-postal-clusters-kpi">
-            <strong>${formatUserPostalClusterInteger(summary.postal_code_count || 0)}</strong>
-            <span>codes postaux</span>
-          </div>
-          <div class="user-postal-clusters-kpi">
-            <strong>${formatUserPostalClusterInteger(summary.heatmap_point_count || 0)}</strong>
-            <span>points heatmap</span>
-          </div>
-          <div class="user-postal-clusters-kpi">
-            <strong>${formatUserPostalClusterInteger(summary.professional_count_included || 0)}</strong>
-            <span>professionnels associés</span>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="card user-postal-clusters-map-card">
-      <div class="cartography-map-toolbar">
-        <div>
-          <strong>${formatUserPostalClusterInteger(points.length)}</strong> foyer(s) territoriaux ·
-          intensité pondérée par le nombre de particuliers.
-        </div>
-        <button id="userPostalClustersFitBtn" class="secondary-btn" type="button">
-          Recentrer
-        </button>
-      </div>
-
-      <div id="userPostalClustersMap" class="user-postal-clusters-map"></div>
-
-      <div class="user-postal-clusters-map-note">
-        <strong>Lecture.</strong>
-        La chaleur représente une concentration agrégée de particuliers par code postal,
-        pas une localisation individuelle. Les points sont placés au niveau du centroïde
-        géographique du code postal.
-      </div>
-    </section>
-
     <section class="card user-postal-clusters-table-card">
       <div class="territory-section-heading">
         <h3>Tableau territorial U / P</h3>
@@ -12866,62 +12874,66 @@ function buildProfessionalClustersPanelHtml(cartographyData = null, territoriesD
       </div>
     </section>
 
-    ${buildUserPostalClustersSectionHtml(userPostalClustersData)}
+    ${buildUserPostalClustersMapPairHtml(userPostalClustersData)}
 
-    <section class="card cartography-overview-card">
-      <div class="cartography-overview-header">
-        <div>
-          <div class="stat-label">3 · Implantation des professionnels</div>
-          <h2>${cartographySummary.cartographiable_count ?? professionals.length} professionnels affichés</h2>
-          <p>
-            Cette carte montre les professionnels géolocalisés et confirmés. Le relief 3D aide à
-            repérer les pôles de réception monétaire et les concentrations d’activité de la période.
-          </p>
+    <div class="professional-clusters-map-pair professional-clusters-map-pair-pros">
+      <section class="card cartography-overview-card">
+        <div class="cartography-overview-header">
+          <div>
+            <div class="stat-label">3 · Implantation des professionnels</div>
+            <h2>${cartographySummary.cartographiable_count ?? professionals.length} professionnels affichés</h2>
+            <p>
+              Cette carte montre les professionnels géolocalisés et confirmés. Le relief 3D aide à
+              repérer les pôles de réception monétaire et les concentrations d’activité de la période.
+            </p>
+          </div>
+
+          <div class="cartography-kpis">
+            <div class="cartography-kpi">
+              <strong>${cartographySummary.total_enriched ?? 0}</strong>
+              <span>pros enrichis</span>
+            </div>
+            <div class="cartography-kpi">
+              <strong>${cartographySummary.confirmed ?? 0}</strong>
+              <span>confirmés</span>
+            </div>
+            <div class="cartography-kpi">
+              <strong>${cartographySummary.mismatch ?? 0}</strong>
+              <span>divergences</span>
+            </div>
+          </div>
         </div>
 
-        <div class="cartography-kpis">
-          <div class="cartography-kpi">
-            <strong>${cartographySummary.total_enriched ?? 0}</strong>
-            <span>pros enrichis</span>
-          </div>
-          <div class="cartography-kpi">
-            <strong>${cartographySummary.confirmed ?? 0}</strong>
-            <span>confirmés</span>
-          </div>
-          <div class="cartography-kpi">
-            <strong>${cartographySummary.mismatch ?? 0}</strong>
-            <span>divergences</span>
-          </div>
+        <div class="cartography-quality-note">
+          Non affichés :
+          ${cartographySummary.no_odoo_coordinates ?? 0} sans coordonnées Odoo,
+          ${cartographySummary.no_cyclos_coordinates ?? 0} sans coordonnées Cyclos,
+          ${cartographySummary.no_cyclos_address ?? 0} sans adresse Cyclos.
         </div>
-      </div>
+      </section>
 
-      <div class="cartography-quality-note">
-        Non affichés :
-        ${cartographySummary.no_odoo_coordinates ?? 0} sans coordonnées Odoo,
-        ${cartographySummary.no_cyclos_coordinates ?? 0} sans coordonnées Cyclos,
-        ${cartographySummary.no_cyclos_address ?? 0} sans adresse Cyclos.
-      </div>
-    </section>
-
-    <section class="card cartography-map-card">
-      <div class="cartography-map-toolbar">
-        <div>
-          <strong>${professionals.length}</strong> points confirmés · relief d’activité monétaire.
+      <section class="card cartography-map-card">
+        <div class="cartography-map-toolbar">
+          <div>
+            <strong>${professionals.length}</strong> points confirmés · relief d’activité monétaire.
+          </div>
+          <button id="cartographyFitBtn" class="secondary-btn" type="button">
+            Recentrer
+          </button>
         </div>
-        <button id="cartographyFitBtn" class="secondary-btn" type="button">
-          Recentrer
-        </button>
-      </div>
 
-      <div id="professionalsMap" class="cartography-map"></div>
+        <div id="professionalsMap" class="cartography-map"></div>
 
-      <div class="cartography-map-note">
-        <strong>Lecture.</strong>
-        La hauteur des colonnes représente une concentration d’activité monétaire sur la période.
-        Elle signale des pôles de réception plus intenses, sans résumer à elle seule toute la
-        diversité des usages locaux.
-      </div>
-    </section>
+        <div class="cartography-map-note">
+          <strong>Lecture.</strong>
+          La hauteur des colonnes représente une concentration d’activité monétaire sur la période.
+          Elle signale des pôles de réception plus intenses, sans résumer à elle seule toute la
+          diversité des usages locaux.
+        </div>
+      </section>
+    </div>
+
+    ${buildUserPostalClustersTableSectionHtml(userPostalClustersData)}
 
     <section class="card territory-overview-card">
       <div class="territory-overview-header">
