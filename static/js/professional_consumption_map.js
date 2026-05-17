@@ -1086,7 +1086,7 @@ function restoreProfessionalConsumptionMapDynamicTheme() {
 function buildProfessionalConsumptionMapHelpHtml() {
   return buildAnalyticHelpHtml(PROFESSIONAL_CONSUMPTION_MAP_HELP, {
     kicker: "Aide à la lecture",
-    fallbackTitle: "Bassins de consommation Gonette",
+    fallbackTitle: "Répartition territoriale des flux U→P",
     fallbackText: "Aucune aide détaillée n’est encore définie pour cette carte."
   });
 }
@@ -1300,7 +1300,7 @@ function openProfessionalConsumptionMapZoom() {
 
       <div class="stats-chart-zoom-header">
         <div class="stats-chart-zoom-title-group">
-          <h2>Bassins de consommation Gonette</h2>
+          <h2>Répartition territoriale des flux U→P</h2>
           <p class="stats-chart-help-summary">
             Vue agrandie de la carte U→P. Elle reprend l’état actuellement affiché :
             carte statique complète ou séquence dynamique en cours.

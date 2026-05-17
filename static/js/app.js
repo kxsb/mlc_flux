@@ -11710,8 +11710,8 @@ function renderProfessionalConsumptionMapCard(consumptionMapSummary = null) {
       <section class="card professional-consumption-map-card">
         <div class="professional-analysis-section-heading professional-consumption-map-heading">
           <div class="professional-consumption-map-heading-main">
-            <div class="stat-label">Bassins de consommation Gonette</div>
-            <h3>Des origines postales anonymisées vers les professionnels</h3>
+            <div class="stat-label">Répartition territoriale des flux U→P</div>
+            <h3>Comment les paiements des particuliers se distribuent vers les professionnels</h3>
             <p>
               Cette vue expérimentale représente les paiements <strong>U→P</strong>
               cartographiables, en agrégeant les particuliers par bassin postal.
@@ -13559,7 +13559,7 @@ function getDailyChartDatasets(charts, metric = "count") {
 
 
 const PROFESSIONAL_CONSUMPTION_MAP_HELP = {
-  title: "Bassins de consommation Gonette — trajectoires U→P",
+  title: "Répartition territoriale des flux U→P — trajectoires U→P",
   summary: "Cette carte représente une géographie agrégée des paiements des particuliers vers les professionnels. Elle ne montre jamais les adresses réelles des utilisateurs : les origines sont synthétiques et réparties à l’intérieur de bassins postaux.",
   usefulness: "Elle aide à comprendre d’où convergent les consommations en Gonettes numériques, quels professionnels captent des flux issus de plusieurs bassins d’usage, et comment certains itinéraires de consommation se créent puis se renforcent dans le temps.",
   reading: [
