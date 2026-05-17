@@ -169,6 +169,39 @@ def _fetch_aligned_period_averages(cur, effective_start: str, effective_end: str
             WHERE balance_date BETWEEN ? AND ?
             GROUP BY balance_date
         ),
+        daily_professional_stock AS (
+            SELECT
+                balance_date AS day,
+                COALESCE(
+                    SUM(
+                        CASE
+                            WHEN professional_ref NOT IN ('P0000', 'P9999')
+                             AND balance > 0
+                            THEN balance
+                            ELSE 0.0
+                        END
+                    ),
+                    0.0
+                ) AS positive_professional_network_stock,
+                COALESCE(
+                    SUM(
+                        CASE
+                            WHEN professional_ref IN ('P0000', 'P9999')
+                             AND balance > 0
+                            THEN balance
+                            ELSE 0.0
+                        END
+                    ),
+                    0.0
+                ) AS positive_gonette_business_accounts_stock,
+                COALESCE(
+                    SUM(CASE WHEN balance > 0 THEN balance ELSE 0.0 END),
+                    0.0
+                ) AS positive_professional_total_stock
+            FROM cyclos_professional_daily_balances
+            WHERE balance_date BETWEEN ? AND ?
+            GROUP BY balance_date
+        ),
         daily_numeric_mass AS (
             SELECT
                 snapshot_date AS day,
@@ -179,6 +212,15 @@ def _fetch_aligned_period_averages(cur, effective_start: str, effective_end: str
         SELECT
             COUNT(*) AS aligned_day_count,
             AVG(daily_user_stock.positive_user_stock) AS average_positive_user_stock,
+            AVG(
+                daily_professional_stock.positive_professional_network_stock
+            ) AS average_positive_professional_network_stock,
+            AVG(
+                daily_professional_stock.positive_gonette_business_accounts_stock
+            ) AS average_positive_gonette_business_accounts_stock,
+            AVG(
+                daily_professional_stock.positive_professional_total_stock
+            ) AS average_positive_professional_total_stock,
             AVG(daily_numeric_mass.numeric_mass) AS average_numeric_mass,
             AVG(
                 CASE
@@ -186,11 +228,39 @@ def _fetch_aligned_period_averages(cur, effective_start: str, effective_end: str
                     THEN daily_user_stock.positive_user_stock / daily_numeric_mass.numeric_mass
                     ELSE NULL
                 END
-            ) AS average_daily_user_stock_share_of_numeric_mass
+            ) AS average_daily_user_stock_share_of_numeric_mass,
+            AVG(
+                CASE
+                    WHEN daily_numeric_mass.numeric_mass > 0
+                    THEN daily_professional_stock.positive_professional_network_stock
+                         / daily_numeric_mass.numeric_mass
+                    ELSE NULL
+                END
+            ) AS average_daily_professional_network_stock_share_of_numeric_mass,
+            AVG(
+                CASE
+                    WHEN daily_numeric_mass.numeric_mass > 0
+                    THEN daily_professional_stock.positive_gonette_business_accounts_stock
+                         / daily_numeric_mass.numeric_mass
+                    ELSE NULL
+                END
+            ) AS average_daily_gonette_business_accounts_stock_share_of_numeric_mass,
+            AVG(
+                CASE
+                    WHEN daily_numeric_mass.numeric_mass > 0
+                    THEN daily_professional_stock.positive_professional_total_stock
+                         / daily_numeric_mass.numeric_mass
+                    ELSE NULL
+                END
+            ) AS average_daily_professional_total_stock_share_of_numeric_mass
         FROM daily_user_stock
+        JOIN daily_professional_stock
+          ON daily_professional_stock.day = daily_user_stock.day
         JOIN daily_numeric_mass
           ON daily_numeric_mass.day = daily_user_stock.day
     """, (
+        effective_start,
+        effective_end,
         effective_start,
         effective_end,
         effective_start,
@@ -200,6 +270,15 @@ def _fetch_aligned_period_averages(cur, effective_start: str, effective_end: str
     average_positive_user_stock = _money2(
         row["average_positive_user_stock"]
     )
+    average_positive_professional_network_stock = _money2(
+        row["average_positive_professional_network_stock"]
+    )
+    average_positive_gonette_business_accounts_stock = _money2(
+        row["average_positive_gonette_business_accounts_stock"]
+    )
+    average_positive_professional_total_stock = _money2(
+        row["average_positive_professional_total_stock"]
+    )
     average_numeric_mass = _money2(
         row["average_numeric_mass"]
     )
@@ -207,14 +286,89 @@ def _fetch_aligned_period_averages(cur, effective_start: str, effective_end: str
     return {
         "aligned_day_count": int(row["aligned_day_count"] or 0),
         "average_positive_user_stock": average_positive_user_stock,
+        "average_positive_professional_network_stock": (
+            average_positive_professional_network_stock
+        ),
+        "average_positive_gonette_business_accounts_stock": (
+            average_positive_gonette_business_accounts_stock
+        ),
+        "average_positive_professional_total_stock": (
+            average_positive_professional_total_stock
+        ),
         "average_numeric_mass": average_numeric_mass,
         "average_user_stock_share_of_numeric_mass": _ratio(
-            average_positive_user_stock,
+                average_positive_user_stock,
+                average_numeric_mass,
+            ),
+            "average_professional_network_stock_share_of_numeric_mass": _ratio(
+                average_positive_professional_network_stock,
+                average_numeric_mass,
+            ),
+            "average_gonette_business_accounts_stock_share_of_numeric_mass": _ratio(
+                average_positive_gonette_business_accounts_stock,
+                average_numeric_mass,
+            ),
+            "average_professional_total_stock_share_of_numeric_mass": _ratio(
+                average_positive_professional_total_stock,
+                average_numeric_mass,
+            ),
+        "average_professional_network_stock_share_of_numeric_mass": _ratio(
+            average_positive_professional_network_stock,
+            average_numeric_mass,
+        ),
+        "average_gonette_business_accounts_stock_share_of_numeric_mass": _ratio(
+            average_positive_gonette_business_accounts_stock,
+            average_numeric_mass,
+        ),
+        "average_professional_total_stock_share_of_numeric_mass": _ratio(
+            average_positive_professional_total_stock,
             average_numeric_mass,
         ),
         "average_daily_user_stock_share_of_numeric_mass": (
             round(float(row["average_daily_user_stock_share_of_numeric_mass"] or 0.0), 6)
             if row["average_daily_user_stock_share_of_numeric_mass"] is not None
+            else None
+        ),
+        "average_daily_professional_network_stock_share_of_numeric_mass": (
+            round(
+                float(
+                    row[
+                        "average_daily_professional_network_stock_share_of_numeric_mass"
+                    ] or 0.0
+                ),
+                6,
+            )
+            if row[
+                "average_daily_professional_network_stock_share_of_numeric_mass"
+            ] is not None
+            else None
+        ),
+        "average_daily_gonette_business_accounts_stock_share_of_numeric_mass": (
+            round(
+                float(
+                    row[
+                        "average_daily_gonette_business_accounts_stock_share_of_numeric_mass"
+                    ] or 0.0
+                ),
+                6,
+            )
+            if row[
+                "average_daily_gonette_business_accounts_stock_share_of_numeric_mass"
+            ] is not None
+            else None
+        ),
+        "average_daily_professional_total_stock_share_of_numeric_mass": (
+            round(
+                float(
+                    row[
+                        "average_daily_professional_total_stock_share_of_numeric_mass"
+                    ] or 0.0
+                ),
+                6,
+            )
+            if row[
+                "average_daily_professional_total_stock_share_of_numeric_mass"
+            ] is not None
             else None
         ),
     }
@@ -238,6 +392,100 @@ def _fetch_closing_snapshot(cur, snapshot_day: str) -> dict | None:
         WHERE balance_date = ?
     """, (snapshot_day,)).fetchone()
 
+    professional_row = cur.execute("""
+        SELECT
+            SUM(
+                CASE
+                    WHEN professional_ref NOT IN ('P0000', 'P9999')
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS professional_network_accounts_total,
+            SUM(
+                CASE
+                    WHEN professional_ref NOT IN ('P0000', 'P9999')
+                     AND balance > 0
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS professional_network_accounts_positive,
+            SUM(
+                CASE
+                    WHEN professional_ref NOT IN ('P0000', 'P9999')
+                     AND balance = 0
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS professional_network_accounts_zero,
+            SUM(
+                CASE
+                    WHEN professional_ref NOT IN ('P0000', 'P9999')
+                     AND balance < 0
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS professional_network_accounts_negative,
+            SUM(
+                CASE
+                    WHEN professional_ref IN ('P0000', 'P9999')
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS gonette_business_accounts_total,
+            SUM(
+                CASE
+                    WHEN professional_ref IN ('P0000', 'P9999')
+                     AND balance > 0
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS gonette_business_accounts_positive,
+            SUM(
+                CASE
+                    WHEN professional_ref IN ('P0000', 'P9999')
+                     AND balance = 0
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS gonette_business_accounts_zero,
+            SUM(
+                CASE
+                    WHEN professional_ref IN ('P0000', 'P9999')
+                     AND balance < 0
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS gonette_business_accounts_negative,
+            COALESCE(
+                SUM(
+                    CASE
+                        WHEN professional_ref NOT IN ('P0000', 'P9999')
+                         AND balance > 0
+                        THEN balance
+                        ELSE 0.0
+                    END
+                ),
+                0.0
+            ) AS positive_professional_network_stock,
+            COALESCE(
+                SUM(
+                    CASE
+                        WHEN professional_ref IN ('P0000', 'P9999')
+                         AND balance > 0
+                        THEN balance
+                        ELSE 0.0
+                    END
+                ),
+                0.0
+            ) AS positive_gonette_business_accounts_stock,
+            COALESCE(
+                SUM(CASE WHEN balance > 0 THEN balance ELSE 0.0 END),
+                0.0
+            ) AS positive_professional_total_stock
+        FROM cyclos_professional_daily_balances
+        WHERE balance_date = ?
+    """, (snapshot_day,)).fetchone()
+
     monetary_row = cur.execute("""
         SELECT
             gonettes_num_circulation AS numeric_mass
@@ -249,6 +497,15 @@ def _fetch_closing_snapshot(cur, snapshot_day: str) -> dict | None:
         return None
 
     positive_user_stock = _money2(row["positive_user_stock"])
+    positive_professional_network_stock = _money2(
+        professional_row["positive_professional_network_stock"]
+    )
+    positive_gonette_business_accounts_stock = _money2(
+        professional_row["positive_gonette_business_accounts_stock"]
+    )
+    positive_professional_total_stock = _money2(
+        professional_row["positive_professional_total_stock"]
+    )
     numeric_mass = (
         _money2(monetary_row["numeric_mass"])
         if monetary_row is not None
@@ -269,9 +526,50 @@ def _fetch_closing_snapshot(cur, snapshot_day: str) -> dict | None:
             else None
         ),
         "max_balance": _money2(row["max_balance"]),
+        "professional_network_accounts_total": int(
+            professional_row["professional_network_accounts_total"] or 0
+        ),
+        "professional_network_accounts_positive": int(
+            professional_row["professional_network_accounts_positive"] or 0
+        ),
+        "professional_network_accounts_zero": int(
+            professional_row["professional_network_accounts_zero"] or 0
+        ),
+        "professional_network_accounts_negative": int(
+            professional_row["professional_network_accounts_negative"] or 0
+        ),
+        "gonette_business_accounts_total": int(
+            professional_row["gonette_business_accounts_total"] or 0
+        ),
+        "gonette_business_accounts_positive": int(
+            professional_row["gonette_business_accounts_positive"] or 0
+        ),
+        "gonette_business_accounts_zero": int(
+            professional_row["gonette_business_accounts_zero"] or 0
+        ),
+        "gonette_business_accounts_negative": int(
+            professional_row["gonette_business_accounts_negative"] or 0
+        ),
+        "positive_professional_network_stock": positive_professional_network_stock,
+        "positive_gonette_business_accounts_stock": (
+            positive_gonette_business_accounts_stock
+        ),
+        "positive_professional_total_stock": positive_professional_total_stock,
         "numeric_mass": numeric_mass,
         "user_stock_share_of_numeric_mass": _ratio(
             positive_user_stock,
+            numeric_mass,
+        ),
+        "professional_network_stock_share_of_numeric_mass": _ratio(
+            positive_professional_network_stock,
+            numeric_mass,
+        ),
+        "gonette_business_accounts_stock_share_of_numeric_mass": _ratio(
+            positive_gonette_business_accounts_stock,
+            numeric_mass,
+        ),
+        "professional_total_stock_share_of_numeric_mass": _ratio(
+            positive_professional_total_stock,
             numeric_mass,
         ),
     }
@@ -724,6 +1022,19 @@ def get_pilotage_holdings_summary(requested_start, requested_end) -> dict:
                 "Moyenne quotidienne du stock positif détenu par les particuliers "
                 "sur les jours communs U × Odoo."
             ),
+            "average_positive_professional_network_stock": (
+                "Moyenne quotidienne du stock positif détenu par les professionnels "
+                "du réseau, hors comptes entreprise Gonette P0000 et P9999, sur "
+                "les jours communs U × P × Odoo."
+            ),
+            "average_positive_gonette_business_accounts_stock": (
+                "Moyenne quotidienne du stock positif porté par les comptes entreprise "
+                "de la Gonette P0000 et P9999, isolés du reste des professionnels."
+            ),
+            "professional_network_stock_share_of_numeric_mass": (
+                "Rapport entre le stock positif moyen des professionnels du réseau "
+                "et la masse numérique Odoo moyenne de la période."
+            ),
             "user_stock_share_of_numeric_mass": (
                 "Rapport entre le stock positif moyen des particuliers et la "
                 "masse numérique Odoo moyenne de la période."
@@ -779,6 +1090,39 @@ def _fetch_monthly_aligned_rows(cur, effective_start: str, effective_end: str):
             WHERE balance_date BETWEEN ? AND ?
             GROUP BY balance_date
         ),
+        daily_professional_stock AS (
+            SELECT
+                balance_date AS day,
+                COALESCE(
+                    SUM(
+                        CASE
+                            WHEN professional_ref NOT IN ('P0000', 'P9999')
+                             AND balance > 0
+                            THEN balance
+                            ELSE 0.0
+                        END
+                    ),
+                    0.0
+                ) AS positive_professional_network_stock,
+                COALESCE(
+                    SUM(
+                        CASE
+                            WHEN professional_ref IN ('P0000', 'P9999')
+                             AND balance > 0
+                            THEN balance
+                            ELSE 0.0
+                        END
+                    ),
+                    0.0
+                ) AS positive_gonette_business_accounts_stock,
+                COALESCE(
+                    SUM(CASE WHEN balance > 0 THEN balance ELSE 0.0 END),
+                    0.0
+                ) AS positive_professional_total_stock
+            FROM cyclos_professional_daily_balances
+            WHERE balance_date BETWEEN ? AND ?
+            GROUP BY balance_date
+        ),
         daily_numeric_mass AS (
             SELECT
                 snapshot_date AS day,
@@ -793,8 +1137,16 @@ def _fetch_monthly_aligned_rows(cur, effective_start: str, effective_end: str):
                 CAST(substr(daily_user_stock.day, 1, 4) AS INTEGER) AS year,
                 CAST(substr(daily_user_stock.day, 6, 2) AS INTEGER) AS month,
                 daily_user_stock.positive_user_stock AS positive_user_stock,
+                daily_professional_stock.positive_professional_network_stock
+                    AS positive_professional_network_stock,
+                daily_professional_stock.positive_gonette_business_accounts_stock
+                    AS positive_gonette_business_accounts_stock,
+                daily_professional_stock.positive_professional_total_stock
+                    AS positive_professional_total_stock,
                 daily_numeric_mass.numeric_mass AS numeric_mass
             FROM daily_user_stock
+            JOIN daily_professional_stock
+              ON daily_professional_stock.day = daily_user_stock.day
             JOIN daily_numeric_mass
               ON daily_numeric_mass.day = daily_user_stock.day
         )
@@ -804,6 +1156,15 @@ def _fetch_monthly_aligned_rows(cur, effective_start: str, effective_end: str):
             month,
             COUNT(*) AS aligned_day_count,
             AVG(positive_user_stock) AS average_positive_user_stock,
+            AVG(
+                positive_professional_network_stock
+            ) AS average_positive_professional_network_stock,
+            AVG(
+                positive_gonette_business_accounts_stock
+            ) AS average_positive_gonette_business_accounts_stock,
+            AVG(
+                positive_professional_total_stock
+            ) AS average_positive_professional_total_stock,
             AVG(numeric_mass) AS average_numeric_mass,
             AVG(
                 CASE
@@ -812,11 +1173,34 @@ def _fetch_monthly_aligned_rows(cur, effective_start: str, effective_end: str):
                     ELSE NULL
                 END
             ) AS average_daily_user_stock_share_of_numeric_mass,
+            AVG(
+                CASE
+                    WHEN numeric_mass > 0
+                    THEN positive_professional_network_stock / numeric_mass
+                    ELSE NULL
+                END
+            ) AS average_daily_professional_network_stock_share_of_numeric_mass,
+            AVG(
+                CASE
+                    WHEN numeric_mass > 0
+                    THEN positive_gonette_business_accounts_stock / numeric_mass
+                    ELSE NULL
+                END
+            ) AS average_daily_gonette_business_accounts_stock_share_of_numeric_mass,
+            AVG(
+                CASE
+                    WHEN numeric_mass > 0
+                    THEN positive_professional_total_stock / numeric_mass
+                    ELSE NULL
+                END
+            ) AS average_daily_professional_total_stock_share_of_numeric_mass,
             MAX(day) AS closing_snapshot_date
         FROM aligned
         GROUP BY month_key, year, month
         ORDER BY month_key ASC
     """, (
+        effective_start,
+        effective_end,
         effective_start,
         effective_end,
         effective_start,
@@ -878,6 +1262,15 @@ def get_pilotage_holdings_timeseries(requested_start, requested_end) -> dict:
         average_positive_user_stock = _money2(
             row["average_positive_user_stock"]
         )
+        average_positive_professional_network_stock = _money2(
+            row["average_positive_professional_network_stock"]
+        )
+        average_positive_gonette_business_accounts_stock = _money2(
+            row["average_positive_gonette_business_accounts_stock"]
+        )
+        average_positive_professional_total_stock = _money2(
+            row["average_positive_professional_total_stock"]
+        )
         average_numeric_mass = _money2(
             row["average_numeric_mass"]
         )
@@ -911,9 +1304,30 @@ def get_pilotage_holdings_timeseries(requested_start, requested_end) -> dict:
             "month": int(row["month"]),
             "aligned_day_count": int(row["aligned_day_count"] or 0),
             "average_positive_user_stock": average_positive_user_stock,
+            "average_positive_professional_network_stock": (
+                average_positive_professional_network_stock
+            ),
+            "average_positive_gonette_business_accounts_stock": (
+                average_positive_gonette_business_accounts_stock
+            ),
+            "average_positive_professional_total_stock": (
+                average_positive_professional_total_stock
+            ),
             "average_numeric_mass": average_numeric_mass,
             "average_user_stock_share_of_numeric_mass": _ratio(
                 average_positive_user_stock,
+                average_numeric_mass,
+            ),
+            "average_professional_network_stock_share_of_numeric_mass": _ratio(
+                average_positive_professional_network_stock,
+                average_numeric_mass,
+            ),
+            "average_gonette_business_accounts_stock_share_of_numeric_mass": _ratio(
+                average_positive_gonette_business_accounts_stock,
+                average_numeric_mass,
+            ),
+            "average_professional_total_stock_share_of_numeric_mass": _ratio(
+                average_positive_professional_total_stock,
                 average_numeric_mass,
             ),
             "average_daily_user_stock_share_of_numeric_mass": (
@@ -922,6 +1336,48 @@ def get_pilotage_holdings_timeseries(requested_start, requested_end) -> dict:
                     6,
                 )
                 if row["average_daily_user_stock_share_of_numeric_mass"] is not None
+                else None
+            ),
+            "average_daily_professional_network_stock_share_of_numeric_mass": (
+                round(
+                    float(
+                        row[
+                            "average_daily_professional_network_stock_share_of_numeric_mass"
+                        ] or 0.0
+                    ),
+                    6,
+                )
+                if row[
+                    "average_daily_professional_network_stock_share_of_numeric_mass"
+                ] is not None
+                else None
+            ),
+            "average_daily_gonette_business_accounts_stock_share_of_numeric_mass": (
+                round(
+                    float(
+                        row[
+                            "average_daily_gonette_business_accounts_stock_share_of_numeric_mass"
+                        ] or 0.0
+                    ),
+                    6,
+                )
+                if row[
+                    "average_daily_gonette_business_accounts_stock_share_of_numeric_mass"
+                ] is not None
+                else None
+            ),
+            "average_daily_professional_total_stock_share_of_numeric_mass": (
+                round(
+                    float(
+                        row[
+                            "average_daily_professional_total_stock_share_of_numeric_mass"
+                        ] or 0.0
+                    ),
+                    6,
+                )
+                if row[
+                    "average_daily_professional_total_stock_share_of_numeric_mass"
+                ] is not None
                 else None
             ),
             "economic_up_transaction_count": int(
@@ -954,7 +1410,8 @@ def get_pilotage_holdings_timeseries(requested_start, requested_end) -> dict:
         },
         "semantics": {
             "monthly_averages": (
-                "Les stocks U et la masse numérique Odoo sont moyennés "
+                "Les stocks U, les stocks P — professionnels du réseau et comptes "
+                "entreprise Gonette — ainsi que la masse numérique Odoo sont moyennés "
                 "sur les jours effectivement communs de chaque mois."
             ),
             "monthly_mobilization": (

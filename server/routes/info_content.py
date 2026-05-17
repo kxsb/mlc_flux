@@ -20,6 +20,7 @@ def get_info_content():
 
 @info_content_bp.route("/api/info-content", methods=["POST"])
 def save_info_content():
+
     payload = request.get_json(silent=True)
 
     if not isinstance(payload, dict):

@@ -43,3 +43,26 @@ backups/
 Thumbs.db
 .vscode/
 .idea/
+
+# Données locales MLCFlux — jamais publier
+server/data/user_mapping.json
+server/data/device_private_actor_registry.json
+server/data/actor_user_links.json
+server/data/professional_actor_user_links.json
+server/data/consumption_postal_areas.json
+server/data/professional_chain_fate_summary.json
+server/data/locks/
+
+# Audits, diffs et sauvegardes de travail
+_audit_*/
+_audits/
+_audit_archive/
+_backups/
+_diffs/
+
+# États de patch et fichiers de travail divers
+*.failed
+*.broken_*
+*.before_*
+*.after_*
+*_pre_patch_hits.txt

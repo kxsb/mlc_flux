@@ -692,13 +692,15 @@ def _lm3_actor_family(label):
 
 def _is_lm3_conversion_row(row):
     """
-    Injection monétaire externe vers la communauté monétaire :
-    A/C -> P/U.
+    Injection monétaire externe vers la communauté monétaire.
+
+    Le LM3 reprend ici la classification analytique centrale de MLCFlux :
+    une injection est une transaction classée dans le bucket ``inflows``.
+
+    Cette logique évite de dupliquer une taxonomie d'acteurs devenue fragile
+    après la refonte des comptes techniques en ``T_*``.
     """
-    return (
-        _lm3_actor_family(str(row.get("from_label") or "")) in {"A", "C"}
-        and _lm3_actor_family(str(row.get("to_label") or "")) in {"P", "U"}
-    )
+    return _classify_analytical_transaction(row).get("bucket") == "inflows"
 
 
 def _compute_lm3_metrics(rows):

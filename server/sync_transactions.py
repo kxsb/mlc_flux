@@ -32,11 +32,11 @@ def insert_transactions(transactions):
     conn = get_connection()
     cur = conn.cursor()
 
-    inserted = 0
+    written = 0
 
     for tx in transactions:
         cur.execute("""
-            INSERT OR IGNORE INTO transactions (
+            INSERT INTO transactions (
                 transaction_number,
                 cyclos_id,
                 date,
@@ -47,6 +47,14 @@ def insert_transactions(transactions):
                 type_label
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT DO UPDATE SET
+                cyclos_id=excluded.cyclos_id,
+                date=excluded.date,
+                group_label=excluded.group_label,
+                from_label=excluded.from_label,
+                to_label=excluded.to_label,
+                amount=excluded.amount,
+                type_label=excluded.type_label
         """, (
             tx.get("transactionNumber"),
             tx.get("id"),
@@ -59,12 +67,12 @@ def insert_transactions(transactions):
         ))
 
         if cur.rowcount > 0:
-            inserted += 1
+            written += 1
 
     conn.commit()
     conn.close()
 
-    return inserted
+    return written
 
 def run_sync(days=None, date_from=None, date_to=None):
     """
@@ -89,14 +97,14 @@ def run_sync(days=None, date_from=None, date_to=None):
             date_to=date_to,
         )
         safe_transactions = anonymize_transactions(raw_transactions)
-        inserted = insert_transactions(safe_transactions)
+        written = insert_transactions(safe_transactions)
 
         fetched = len(raw_transactions)
 
         save_sync_state(
             status="success",
             message=(
-                f"{inserted} nouvelles transactions importées "
+                f"{written} transactions écrites / upsertées "
                 f"sur {fetched} transactions récupérées"
             )
         )
@@ -104,12 +112,12 @@ def run_sync(days=None, date_from=None, date_to=None):
         print(
             "SYNC OK - "
             f"{fetched} transactions récupérées, "
-            f"{inserted} nouvelles transactions importées"
+            f"{written} transactions écrites / upsertées"
         )
 
         return {
             "fetched": fetched,
-            "inserted": inserted,
+            "written": written,
         }
 
 

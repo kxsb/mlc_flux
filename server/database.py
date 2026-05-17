@@ -175,6 +175,53 @@ def init_db():
     """)
 
     cur.execute("""
+        CREATE TABLE IF NOT EXISTS cyclos_professional_daily_balances (
+            professional_ref TEXT NOT NULL,
+            balance_date TEXT NOT NULL,
+            balance REAL NOT NULL,
+            fetched_at TEXT NOT NULL,
+            source TEXT NOT NULL DEFAULT 'cyclos_professional_balances_history_daily',
+            PRIMARY KEY (professional_ref, balance_date)
+        )
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_cyclos_professional_daily_balances_date
+        ON cyclos_professional_daily_balances (balance_date)
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_cyclos_professional_daily_balances_ref
+        ON cyclos_professional_daily_balances (professional_ref)
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS cyclos_professional_daily_balance_windows (
+            professional_ref TEXT NOT NULL,
+            window_date_from TEXT NOT NULL,
+            window_date_to TEXT NOT NULL,
+            status TEXT NOT NULL,
+            points_received INTEGER NOT NULL DEFAULT 0,
+            points_stored INTEGER NOT NULL DEFAULT 0,
+            attempts INTEGER NOT NULL DEFAULT 0,
+            last_error TEXT,
+            last_run_at TEXT,
+            fetched_at TEXT,
+            PRIMARY KEY (professional_ref, window_date_from, window_date_to)
+        )
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_cyclos_professional_daily_balance_windows_status
+        ON cyclos_professional_daily_balance_windows (status)
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_cyclos_professional_daily_balance_windows_ref
+        ON cyclos_professional_daily_balance_windows (professional_ref)
+    """)
+
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS odoo_monetary_indicators_yearly (
             year INTEGER PRIMARY KEY,
             gonettes_num_circulation REAL NOT NULL,
@@ -291,6 +338,28 @@ def init_db():
     _ensure_column(cur, "odoo_professional_enrichment", "cyclos_longitude", "REAL")
     _ensure_column(cur, "odoo_professional_enrichment", "geo_distance_meters", "REAL")
     _ensure_column(cur, "odoo_professional_enrichment", "geo_match_status", "TEXT")
+
+    # -----------------------------------------------------------------
+    # Index temporels sur transactions
+    # -----------------------------------------------------------------
+    #
+    # Les tableaux de bord filtrent très souvent les transactions par
+    # période ou par année. Sans ces index, SQLite scanne toute la table
+    # transactions, y compris pour des périodes courtes.
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_transactions_date
+        ON transactions(date)
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_transactions_day
+        ON transactions(substr(date, 1, 10))
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_transactions_year
+        ON transactions(substr(date, 1, 4))
+    """)
 
     conn.commit()
     conn.close()

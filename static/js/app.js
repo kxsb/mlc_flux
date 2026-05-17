@@ -16,6 +16,8 @@ const appState = {
     end: null
   },
 
+  periodRefreshInProgress: false,
+
   // Préparation de l'analyse comparative : non exploitée pour l'instant,
   // mais l'état est déjà distinct de la période principale.
   comparisonPeriod: null,
@@ -55,12 +57,14 @@ const appState = {
     pilotageInternalReuseHistory: null,
     pilotageLm3History: null,
     pilotageHoldingsStockShare: null,
+    pilotageHoldingsMassComposition: null,
     pilotageHoldingsMobilization: null,
     pilotageHoldingsDormancy: null
   },
 
   network: {
     minEdgeWeight: 500,
+    includeOperators: false,
     searchTerm: "",
     cy: null,
     selectedNodeId: null,
@@ -107,6 +111,20 @@ const appState = {
 };
 
 
+
+function configureGlobalChartPerformanceDefaults() {
+  if (!window.Chart || !window.Chart.defaults) {
+    return;
+  }
+
+  // MLCFlux affiche surtout des tableaux de bord analytiques.
+  // Les animations d'entrée coûtent cher sur les longues séries
+  // et n'apportent pas de valeur fonctionnelle ici.
+  window.Chart.defaults.animation = false;
+  window.Chart.defaults.animations = {};
+}
+
+configureGlobalChartPerformanceDefaults();
 
 function destroyCartographyMap() {
   const cartography = appState.cartography;
@@ -335,6 +353,9 @@ function initializeProfessionalsMap(professionals) {
     pitch: 52,
     bearing: -12
   });
+
+  // Empêche la carte de capturer le scroll de page.
+  map.scrollZoom.disable();
 
   map.addControl(new window.maplibregl.NavigationControl(), "top-right");
 
@@ -651,13 +672,17 @@ function buildSectorsTableHtml(sectors) {
 }
 
 async function renderSectorsView(forceReload = false) {
+  const preserveVisibleView = shouldPreservePeriodRefreshView("sectors", forceReload);
+
   destroyCartographyMap();
 
   appState.currentView = "sectors";
   syncSidebarView("sectors");
   setTitle("Analyse sectorielle");
 
-  content.innerHTML = `<div class="card">Chargement de l’analyse sectorielle...</div>`;
+  if (!preserveVisibleView) {
+    content.innerHTML = `<div class="card">Chargement de l’analyse sectorielle...</div>`;
+  }
 
   if (!appState.sectors.data || forceReload) {
     appState.sectors.data = await apiGet(`/api/sectors/activity${getPeriodQueryParam()}`);
@@ -744,13 +769,17 @@ async function renderSectorsView(forceReload = false) {
 
 
 async function renderTerritoriesView(forceReload = false) {
+  const preserveVisibleView = shouldPreservePeriodRefreshView("territories", forceReload);
+
   destroyCartographyMap();
 
   appState.currentView = "territories";
   syncSidebarView("territories");
   setTitle("Analyse territoriale — codes postaux");
 
-  content.innerHTML = `<div class="card">Chargement de l’analyse territoriale...</div>`;
+  if (!preserveVisibleView) {
+    content.innerHTML = `<div class="card">Chargement de l’analyse territoriale...</div>`;
+  }
 
   if (!appState.territories.data || forceReload) {
     appState.territories.data = await apiGet(`/api/territories/zip${getPeriodQueryParam()}`);
@@ -831,13 +860,19 @@ async function renderTerritoriesView(forceReload = false) {
 
 
 async function renderCartographyView(forceReload = false) {
-  destroyCartographyMap();
+  const preserveVisibleView = shouldPreservePeriodRefreshView("cartography", forceReload);
+
+  if (!preserveVisibleView) {
+    destroyCartographyMap();
+  }
 
   appState.currentView = "cartography";
   syncSidebarView("cartography");
   setTitle("Cartographie des professionnels");
 
-  content.innerHTML = `<div class="card">Chargement de la cartographie...</div>`;
+  if (!preserveVisibleView) {
+    content.innerHTML = `<div class="card">Chargement de la cartographie...</div>`;
+  }
 
   if (!appState.cartography.data || forceReload) {
     appState.cartography.data = await apiGet(`/api/professionals-map${getPeriodQueryParam()}`);
@@ -846,6 +881,10 @@ async function renderCartographyView(forceReload = false) {
   const data = appState.cartography.data || {};
   const summary = data.summary || {};
   const professionals = Array.isArray(data.professionals) ? data.professionals : [];
+
+  if (preserveVisibleView) {
+    destroyCartographyMap();
+  }
 
   content.innerHTML = `
     <section class="card cartography-overview-card">
@@ -903,20 +942,117 @@ async function renderCartographyView(forceReload = false) {
 }
 
 
-async function renderNetworkView() {
-  destroyCartographyMap();
-  appState.currentView = "network";
-  syncSidebarView("network");
-  setTitle("Network économique");
+function buildNetworkApiUrl() {
+  const periodQuery = getPeriodQueryParam();
+  const includeOperators = Boolean(appState.network.includeOperators);
 
-  content.innerHTML = `
-    <div class="card">
-      <div class="network-toolbar">
+  if (!includeOperators) {
+    return `/api/network${periodQuery}`;
+  }
+
+  const connector = periodQuery ? "&" : "?";
+  return `/api/network${periodQuery}${connector}include_operators=1`;
+}
+
+
+function buildProfessionalNetworkPanelLoadingHtml() {
+  return `
+    <section class="card professional-analysis-roadmap-card">
+      <div class="professional-analysis-section-heading">
+        <div class="stat-label">Réseau interprofessionnel</div>
+        <h3>Chargement de l’atlas relationnel…</h3>
+        <p>
+          Les relations P→P sont recalculées pour la période et le périmètre actuellement sélectionnés.
+        </p>
+      </div>
+    </section>
+  `;
+}
+
+function buildProfessionalNetworkPanelErrorHtml() {
+  return `
+    <section class="card professional-analysis-roadmap-card">
+      <div class="professional-analysis-section-heading">
+        <div class="stat-label">Réseau interprofessionnel</div>
+        <h3>Le graphe relationnel n’est pas disponible</h3>
+        <p>
+          Les données réseau n’ont pas pu être chargées pour cette période.
+          Les autres onglets restent utilisables.
+        </p>
+      </div>
+    </section>
+  `;
+}
+
+function buildProfessionalNetworkPanelHtml() {
+  return `
+    <section class="card network-atlas-hero">
+      <div class="network-atlas-hero-main">
+        <div class="stat-label">Réseau interprofessionnel · flux P→P</div>
+        <h2>Atlas relationnel de la circulation entre professionnels</h2>
+        <p>
+          Ce graphe représente les relations monétaires <strong>professionnel → professionnel</strong>
+          observées sur la période sélectionnée. Chaque nœud correspond à un professionnel relié
+          au moins une fois à un autre professionnel ; chaque lien cumule le volume des paiements
+          orientés entre deux acteurs.
+        </p>
+
+        <div class="network-atlas-method-note">
+          <strong>Périmètre actuel.</strong>
+          Cette première lecture porte sur le cœur <strong>P→P</strong> du réseau.
+          Les comptes opérateurs <strong>P0000 / P9999</strong> sont
+          <strong>exclus par défaut</strong> afin de ne pas confondre l’infrastructure associative
+          avec le tissu d’échanges interprofessionnels. Ils peuvent être réintégrés via l’option
+          d’exploration ci-dessous.
+        </div>
+      </div>
+
+      <div class="network-atlas-kpi-grid">
+        <article class="network-atlas-kpi">
+          <span>Acteurs visibles</span>
+          <strong id="networkVisibleNodeCount">—</strong>
+          <small>Professionnels conservés après seuil.</small>
+        </article>
+
+        <article class="network-atlas-kpi">
+          <span>Relations visibles</span>
+          <strong id="networkVisibleEdgeCount">—</strong>
+          <small>Liens P→P au-dessus du seuil.</small>
+        </article>
+
+        <article class="network-atlas-kpi">
+          <span>Volume relationnel visible</span>
+          <strong id="networkVisibleVolume">—</strong>
+          <small>Somme des liens actuellement affichés.</small>
+        </article>
+
+        <article class="network-atlas-kpi">
+          <span>Seuil de relation</span>
+          <strong id="networkVisibleThreshold">—</strong>
+          <small>Filtre appliqué au volume cumulé.</small>
+        </article>
+      </div>
+    </section>
+
+    <section class="card network-atlas-workbench">
+      <div class="network-atlas-workbench-header">
+        <div>
+          <div class="stat-label">Exploration navigable</div>
+          <h3>Filtrer, chercher, isoler un voisinage</h3>
+          <p>
+            Ajuste le seuil pour faire émerger les relations structurantes, recherche un acteur,
+            puis clique sur un nœud pour isoler son voisinage visible et lire ses flux entrants
+            et sortants.
+          </p>
+        </div>
+      </div>
+
+      <div class="network-toolbar network-atlas-toolbar">
         <div class="network-search-box">
           <input
             id="networkSearch"
             type="text"
-            placeholder="Rechercher un acteur (ex: P0512, biocoop, melting...)"
+            placeholder="Rechercher un professionnel : P0512, Biocoop, Melting..."
             value="${escapeHtml(appState.network.searchTerm)}"
           />
           <div id="networkSearchPreview" class="network-search-preview hidden"></div>
@@ -924,7 +1060,8 @@ async function renderNetworkView() {
 
         <div class="network-slider-group">
           <label for="networkThreshold">
-            Seuil relations : <strong id="networkThresholdValue">${appState.network.minEdgeWeight} €</strong>
+            Seuil minimal des relations :
+            <strong id="networkThresholdValue">${appState.network.minEdgeWeight} €</strong>
           </label>
           <input
             id="networkThreshold"
@@ -934,43 +1071,129 @@ async function renderNetworkView() {
             step="100"
             value="${appState.network.minEdgeWeight}"
           />
+          <small>Les liens dont le volume cumulé est inférieur au seuil sont masqués.</small>
         </div>
 
         <div class="network-actions">
-          <button id="networkFitBtn" class="secondary-btn">Recentrer</button>
-          <button id="networkZoomInBtn" class="secondary-btn">Zoom +</button>
-          <button id="networkZoomOutBtn" class="secondary-btn">Zoom -</button>
+          <button id="networkFitBtn" class="secondary-btn" type="button">Recentrer</button>
+          <button id="networkZoomInBtn" class="secondary-btn" type="button">Zoom +</button>
+          <button id="networkZoomOutBtn" class="secondary-btn" type="button">Zoom -</button>
         </div>
       </div>
 
-      <div class="network-layout">
-        <div class="network-main">
-          <div class="network-legend">
-            <span><span class="legend-dot legend-dot-blue"></span> Acteur du réseau</span>
-            <span><span class="legend-dot legend-dot-dark"></span> Acteur sélectionné</span>
-            <span><span class="legend-line legend-line-red"></span> Relations mises en avant</span>
+      <label class="network-operator-toggle" for="networkIncludeOperators">
+        <input
+          id="networkIncludeOperators"
+          type="checkbox"
+          ${appState.network.includeOperators ? "checked" : ""}
+        />
+        <span>
+          <strong>Inclure les comptes opérateurs P0000 / P9999</strong>
+          <small>
+            Désactivé par défaut pour lire le réseau interprofessionnel hors infrastructure Gonette.
+          </small>
+        </span>
+      </label>
+
+      <div class="network-atlas-legend">
+        <span><span class="legend-dot legend-dot-blue"></span> Taille du nœud : volume relationnel cumulé</span>
+        <span><span class="legend-dot legend-dot-dark"></span> Acteur sélectionné</span>
+        <span><span class="legend-line legend-line-red"></span> Relations du voisinage isolé</span>
+      </div>
+
+      <div class="network-layout network-atlas-layout">
+        <div class="network-main network-atlas-main">
+          <div class="network-graph-shell">
+            <div id="networkGraph"></div>
+            <div id="networkFloatingLabel" class="network-floating-label hidden"></div>
           </div>
-            <div class="network-graph-shell">
-              <div id="networkGraph"></div>
-              <div id="networkFloatingLabel" class="network-floating-label hidden"></div>
-            </div>       
-          </div>
+        </div>
 
         <aside id="networkSidePanel" class="network-sidepanel">
           <div class="network-sidepanel-empty">
-            Clique sur un acteur pour voir ses informations.
+            <strong>Sélectionner un professionnel</strong>
+            <span>
+              Clique sur un nœud pour isoler son voisinage visible, lire son volume relationnel
+              et ouvrir sa fiche détaillée.
+            </span>
           </div>
         </aside>
       </div>
-    </div>
+    </section>
   `;
+}
 
-  const data = await apiGet(`/api/network${getPeriodQueryParam()}`);
-  appState.network.rawData = data;
-  appState.network.enrichedData = enrichNetworkData(data);
+async function renderProfessionalNetworkPanel(forceReload = false) {
+  const panel = document.getElementById("professionalNetworkPanel");
+  if (!panel) {
+    return;
+  }
 
-  renderNetworkGraph(data);
-  bindNetworkControls();
+  const periodKey = [
+    getPeriodQueryParam() || "__no_period__",
+    `operators=${appState.network.includeOperators ? "1" : "0"}`
+  ].join("::");
+
+  const alreadyHydrated = (
+    panel.dataset.professionalNetworkHydrated === "true"
+    && panel.dataset.professionalNetworkPeriodKey === periodKey
+  );
+
+  if (alreadyHydrated && !forceReload) {
+    window.requestAnimationFrame(() => {
+      const graphNode = document.getElementById("networkGraph");
+      const cy = appState.network.cy;
+
+      if (!graphNode || !cy) {
+        return;
+      }
+
+      const cyContainer = cy.container();
+      if (!cyContainer || cyContainer !== graphNode) {
+        return;
+      }
+
+      cy.resize();
+
+      if (!appState.network.selectedNodeId) {
+        cy.fit(cy.elements(":visible"), 60);
+      }
+
+      updateNetworkFloatingLabel();
+    });
+
+    return;
+  }
+
+  panel.dataset.professionalNetworkHydrated = "false";
+  panel.dataset.professionalNetworkPeriodKey = periodKey;
+  panel.innerHTML = buildProfessionalNetworkPanelLoadingHtml();
+
+  try {
+    if (appState.network.cy) {
+      appState.network.cy.destroy();
+      appState.network.cy = null;
+    }
+
+    const data = await apiGet(buildNetworkApiUrl());
+    appState.network.rawData = data;
+    appState.network.enrichedData = enrichNetworkData(data);
+
+    panel.innerHTML = buildProfessionalNetworkPanelHtml();
+    panel.dataset.professionalNetworkHydrated = "true";
+
+    renderNetworkGraph(data);
+    bindNetworkControls();
+    updateNetworkOverviewMetrics();
+  } catch (error) {
+    console.warn(
+      "Réseau interprofessionnel indisponible dans la vue Professionnels & particuliers.",
+      error
+    );
+
+    panel.innerHTML = buildProfessionalNetworkPanelErrorHtml();
+    panel.dataset.professionalNetworkHydrated = "false";
+  }
 }
 
 function getNetworkSearchMatches(limit = 8) {
@@ -1079,6 +1302,7 @@ function bindNetworkControls() {
   const zoomInBtn = document.getElementById("networkZoomInBtn");
   const zoomOutBtn = document.getElementById("networkZoomOutBtn");
   const searchPreview = document.getElementById("networkSearchPreview");
+  const includeOperatorsInput = document.getElementById("networkIncludeOperators");
 
   if (searchPreview && !searchPreview.dataset.bound) {
     searchPreview.addEventListener("click", (e) => {
@@ -1114,6 +1338,15 @@ function bindNetworkControls() {
       }
     });
 }
+
+  if (includeOperatorsInput) {
+    includeOperatorsInput.addEventListener("change", (e) => {
+      appState.network.includeOperators = Boolean(e.target.checked);
+      appState.network.selectedNodeId = null;
+      appState.network.hoveredNodeId = null;
+      void renderProfessionalNetworkPanel(true);
+    });
+  }
 
   if (thresholdInput) {
     thresholdInput.addEventListener("input", (e) => {
@@ -1202,6 +1435,60 @@ function getFilteredNetworkElements(data, minWeight) {
   };
 }
 
+function computeNetworkVisibleSummary(
+  data = appState.network.enrichedData,
+  minWeight = appState.network.minEdgeWeight || 0
+) {
+  if (!data) {
+    return {
+      visibleNodeCount: 0,
+      visibleEdgeCount: 0,
+      visibleVolume: 0,
+      minWeight
+    };
+  }
+
+  const { filteredNodes, filteredEdges } = getFilteredNetworkElements(data, minWeight);
+
+  const visibleVolume = filteredEdges.reduce(
+    (sum, edge) => sum + Number(edge?.data?.weight || 0),
+    0
+  );
+
+  return {
+    visibleNodeCount: filteredNodes.length,
+    visibleEdgeCount: filteredEdges.length,
+    visibleVolume,
+    minWeight
+  };
+}
+
+function updateNetworkOverviewMetrics() {
+  const summary = computeNetworkVisibleSummary();
+
+  const nodeCount = document.getElementById("networkVisibleNodeCount");
+  const edgeCount = document.getElementById("networkVisibleEdgeCount");
+  const volume = document.getElementById("networkVisibleVolume");
+  const threshold = document.getElementById("networkVisibleThreshold");
+
+  if (nodeCount) {
+    nodeCount.textContent = Number(summary.visibleNodeCount || 0).toLocaleString("fr-FR");
+  }
+
+  if (edgeCount) {
+    edgeCount.textContent = Number(summary.visibleEdgeCount || 0).toLocaleString("fr-FR");
+  }
+
+  if (volume) {
+    volume.textContent = euro(summary.visibleVolume || 0);
+  }
+
+  if (threshold) {
+    threshold.textContent = euro(summary.minWeight || 0);
+  }
+}
+
+
 function updateNetworkGraphVisibility() {
   const cy = appState.network.cy;
   const data = appState.network.enrichedData;
@@ -1247,6 +1534,7 @@ function updateNetworkGraphVisibility() {
     applyNetworkSearch();
   }
 
+  updateNetworkOverviewMetrics();
   renderNetworkSearchPreview();
 }
 
@@ -1274,6 +1562,128 @@ function applyNetworkSearch() {
   renderNetworkSearchPreview();
 }
 
+
+function getNetworkNodeRoleProfile(node) {
+  const incoming = Number(node?.data("incoming_volume") || 0);
+  const outgoing = Number(node?.data("outgoing_volume") || 0);
+  const total = incoming + outgoing;
+
+  if (total <= 0) {
+    return {
+      key: "neutral",
+      label: "Profil indéterminé",
+      text: "Aucun volume relationnel P→P exploitable n’est disponible pour cet acteur."
+    };
+  }
+
+  const net = incoming - outgoing;
+  const imbalance = Math.abs(net) / total;
+
+  if (net > 0 && imbalance >= 0.20) {
+    return {
+      key: "receiver",
+      label: "Récepteur net",
+      text: "Dans le réseau P→P de la période, cet acteur reçoit nettement plus qu’il ne réémet."
+    };
+  }
+
+  if (net < 0 && imbalance >= 0.20) {
+    return {
+      key: "emitter",
+      label: "Redistributeur net",
+      text: "Dans le réseau P→P de la période, cet acteur réémet nettement plus qu’il ne reçoit."
+    };
+  }
+
+  return {
+    key: "balanced",
+    label: "Pivot relativement équilibré",
+    text: "Les volumes P→P reçus et émis restent relativement proches sur la période."
+  };
+}
+
+function getVisibleNetworkRelations(node) {
+  const incoming = [];
+  const outgoing = [];
+
+  if (!node) {
+    return { incoming, outgoing };
+  }
+
+  node.connectedEdges().forEach(edge => {
+    if (edge.style("display") === "none") {
+      return;
+    }
+
+    const weight = Number(edge.data("weight") || 0);
+    const transactionCount = Number(edge.data("transaction_count") || 0);
+    const averageAmount = Number(edge.data("average_amount") || 0);
+
+    if (edge.target().id() === node.id()) {
+      const sourceNode = edge.source();
+      incoming.push({
+        actorId: sourceNode.id(),
+        actorLabel: sourceNode.data("label") || sourceNode.id(),
+        weight,
+        transactionCount,
+        averageAmount
+      });
+    }
+
+    if (edge.source().id() === node.id()) {
+      const targetNode = edge.target();
+      outgoing.push({
+        actorId: targetNode.id(),
+        actorLabel: targetNode.data("label") || targetNode.id(),
+        weight,
+        transactionCount,
+        averageAmount
+      });
+    }
+  });
+
+  incoming.sort((a, b) => b.weight - a.weight);
+  outgoing.sort((a, b) => b.weight - a.weight);
+
+  return {
+    incoming: incoming.slice(0, 4),
+    outgoing: outgoing.slice(0, 4)
+  };
+}
+
+function renderNetworkRelationGroup(title, items, emptyText) {
+  if (!items.length) {
+    return `
+      <div class="network-relation-group">
+        <h4>${escapeHtml(title)}</h4>
+        <div class="network-relation-empty">${escapeHtml(emptyText)}</div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="network-relation-group">
+      <h4>${escapeHtml(title)}</h4>
+      <div class="network-relation-list">
+        ${items.map(item => `
+          <button
+            type="button"
+            class="network-relation-item"
+            onclick="focusNetworkNode('${escapeHtml(item.actorId)}')"
+          >
+            <span class="network-relation-label">${escapeHtml(item.actorLabel)}</span>
+            <strong>${euro(item.weight || 0)}</strong>
+            <small>
+              ${Number(item.transactionCount || 0).toLocaleString("fr-FR")} tx
+              · moyenne ${euro(item.averageAmount || 0)}
+            </small>
+          </button>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
 function renderNetworkSidePanel(node) {
   const panel = document.getElementById("networkSidePanel");
   if (!panel) return;
@@ -1281,22 +1691,141 @@ function renderNetworkSidePanel(node) {
   if (!node) {
     panel.innerHTML = `
       <div class="network-sidepanel-empty">
-        Clique sur un acteur pour voir ses informations.
+        <strong>Sélectionner un professionnel</strong>
+        <span>
+          Clique sur un nœud pour isoler son voisinage visible, lire son rôle apparent
+          dans le réseau P→P et ouvrir sa fiche détaillée.
+        </span>
       </div>
     `;
     return;
   }
 
   const label = node.data("label") || node.id();
-  const degree = node.data("degree") || 0;
-  const volume = node.data("volume") || 0;
+  const profile = getNetworkNodeRoleProfile(node);
+  const visibleRelations = getVisibleNetworkRelations(node);
+
+  let visibleRelationCount = 0;
+  let visibleVolume = 0;
+  let incomingVisibleVolume = 0;
+  let outgoingVisibleVolume = 0;
+
+  node.connectedEdges().forEach(edge => {
+    if (edge.style("display") === "none") {
+      return;
+    }
+
+    const weight = Number(edge.data("weight") || 0);
+    visibleRelationCount += 1;
+    visibleVolume += weight;
+
+    if (edge.target().id() === node.id()) {
+      incomingVisibleVolume += weight;
+    }
+
+    if (edge.source().id() === node.id()) {
+      outgoingVisibleVolume += weight;
+    }
+  });
+
+  const incomingPeriodVolume = Number(node.data("incoming_volume") || 0);
+  const outgoingPeriodVolume = Number(node.data("outgoing_volume") || 0);
+  const netBalance = Number(node.data("net_relation_balance") || 0);
+  const netBalanceLabel = `${netBalance > 0 ? "+" : ""}${euro(netBalance || 0)}`;
+
+  const neighborCount = Number(node.data("neighbor_count") || 0);
+  const inboundRelations = Number(node.data("inbound_relation_count") || 0);
+  const outboundRelations = Number(node.data("outbound_relation_count") || 0);
 
   panel.innerHTML = `
     <div class="network-sidepanel-card">
+      <div class="stat-label">Acteur sélectionné</div>
       <h3>${escapeHtml(label)}</h3>
-      <p><strong>Code :</strong> ${escapeHtml(node.id())}</p>
-      <p><strong>Connexions :</strong> ${degree}</p>
-      <p><strong>Volume relationnel :</strong> ${euro(volume)}</p>
+      <p class="network-sidepanel-ref">${escapeHtml(node.id())}</p>
+
+      <div class="network-role-chip network-role-chip-${escapeHtml(profile.key)}">
+        ${escapeHtml(profile.label)}
+      </div>
+
+      <p class="network-role-reading">${escapeHtml(profile.text)}</p>
+
+      <div class="network-sidepanel-metric-grid">
+        <div class="network-sidepanel-metric">
+          <span>Relations visibles</span>
+          <strong>${Number(visibleRelationCount || 0).toLocaleString("fr-FR")}</strong>
+        </div>
+
+        <div class="network-sidepanel-metric">
+          <span>Volume visible</span>
+          <strong>${euro(visibleVolume || 0)}</strong>
+        </div>
+      </div>
+
+      <div class="network-sidepanel-period-card">
+        <div class="network-sidepanel-period-title">
+          Profil P→P sur toute la période
+        </div>
+
+        <div class="network-sidepanel-period-grid">
+          <div>
+            <span>Voisins distincts</span>
+            <strong>${neighborCount.toLocaleString("fr-FR")}</strong>
+          </div>
+          <div>
+            <span>Liens entrants</span>
+            <strong>${inboundRelations.toLocaleString("fr-FR")}</strong>
+          </div>
+          <div>
+            <span>Liens sortants</span>
+            <strong>${outboundRelations.toLocaleString("fr-FR")}</strong>
+          </div>
+          <div>
+            <span>Solde relationnel net</span>
+            <strong>${netBalanceLabel}</strong>
+          </div>
+        </div>
+      </div>
+
+      <div class="network-sidepanel-directional">
+        <div class="network-sidepanel-direction">
+          <span>Flux P→P reçus</span>
+          <strong>${euro(incomingPeriodVolume || 0)}</strong>
+        </div>
+
+        <div class="network-sidepanel-direction">
+          <span>Flux P→P émis</span>
+          <strong>${euro(outgoingPeriodVolume || 0)}</strong>
+        </div>
+
+        <div class="network-sidepanel-direction network-sidepanel-direction-muted">
+          <span>Reçu visible au seuil</span>
+          <strong>${euro(incomingVisibleVolume || 0)}</strong>
+        </div>
+
+        <div class="network-sidepanel-direction network-sidepanel-direction-muted">
+          <span>Émis visible au seuil</span>
+          <strong>${euro(outgoingVisibleVolume || 0)}</strong>
+        </div>
+      </div>
+
+      <div class="network-sidepanel-relations">
+        ${renderNetworkRelationGroup(
+          "Principales entrées visibles",
+          visibleRelations.incoming,
+          "Aucune relation entrante visible à ce seuil."
+        )}
+
+        ${renderNetworkRelationGroup(
+          "Principales sorties visibles",
+          visibleRelations.outgoing,
+          "Aucune relation sortante visible à ce seuil."
+        )}
+      </div>
+
+      <p class="network-sidepanel-reading">
+        Les relations visibles dépendent du seuil appliqué au graphe.
+        Les volumes de profil P→P portent, eux, sur l’ensemble des relations de la période.
+      </p>
 
       <div class="network-sidepanel-actions">
         <button class="primary-btn" onclick="renderProDetail('${escapeHtml(node.id())}')">
@@ -1439,39 +1968,41 @@ function renderNetworkGraph(data) {
           selector: "node",
           style: {
             "label": "",
-            "background-color": "#4f86f7",
-            "width": "mapData(volume, 0, 20000, 16, 54)",
-            "height": "mapData(volume, 0, 20000, 16, 54)",
-            "border-width": 2,
-            "border-color": "#ffffff",
-            "overlay-padding": 10,
+            "background-color": "mapData(volume, 0, 60000, #bfdbfe, #1d4ed8)",
+            "width": "mapData(volume, 0, 60000, 18, 68)",
+            "height": "mapData(volume, 0, 60000, 18, 68)",
+            "border-width": 3,
+            "border-color": "#eff6ff",
+            "overlay-padding": 12,
+            "overlay-opacity": 0,
             "z-index": 10
           }
         },
         {
           selector: "edge",
           style: {
-            "width": "mapData(weight, 0, 10000, 1.5, 7)",
-            "line-color": "#cbd5e1",
-            "target-arrow-color": "#cbd5e1",
+            "width": "mapData(weight, 0, 60000, 1.1, 8)",
+            "line-color": "#94a3b8",
+            "target-arrow-color": "#94a3b8",
             "target-arrow-shape": "triangle",
-            "arrow-scale": 0.8,
+            "arrow-scale": 0.72,
             "curve-style": "bezier",
-            "opacity": 0.32
+            "control-point-step-size": 28,
+            "opacity": 0.30
           }
         },
         {
           selector: ".faded",
           style: {
-            "opacity": 0.06
+            "opacity": 0.045
           }
         },
         {
           selector: ".highlighted",
           style: {
-            "line-color": "#ef4444",
-            "target-arrow-color": "#ef4444",
-            "opacity": 0.95,
+            "line-color": "#f97316",
+            "target-arrow-color": "#f97316",
+            "opacity": 0.98,
             "z-index": 30
           }
         },
@@ -1479,15 +2010,15 @@ function renderNetworkGraph(data) {
           selector: ".selected-node",
           style: {
             "background-color": "#0f172a",
-            "border-color": "#ef4444",
-            "border-width": 4
+            "border-color": "#f97316",
+            "border-width": 5
           }
         },
         {
           selector: ".search-match",
           style: {
-            "border-color": "#f59e0b",
-            "border-width": 4
+            "border-color": "#eab308",
+            "border-width": 5
           }
         }
       ],
@@ -1495,9 +2026,15 @@ function renderNetworkGraph(data) {
         name: "cose",
         animate: false,
         fit: true,
-        padding: 60
+        padding: 72,
+        nodeRepulsion: 12000,
+        idealEdgeLength: 108,
+        edgeElasticity: 100,
+        nestingFactor: 1.18,
+        gravity: 0.42,
+        numIter: 1200
       },
-      wheelSensitivity: 0.2
+      wheelSensitivity: 0.14
     });
 
     appState.network.cy = cy;
@@ -2781,6 +3318,18 @@ function markPeriodAsCustom() {
 }
 
 async function reloadCurrentViewForPeriod() {
+  const scrollPositionBeforeRefresh = captureViewportScrollPosition();
+
+  const useSoftPeriodRefresh = (
+    appState.currentView !== "info"
+  );
+
+  if (useSoftPeriodRefresh) {
+    beginPeriodRefreshFeedback();
+  }
+
+  try {
+
   const activeStatsTab = document.querySelector("[data-stats-tab].tab-btn-active")?.dataset.statsTab || null;
   const activePilotageTab = document.querySelector("[data-pilotage-tab].tab-btn-active")?.dataset.pilotageTab || null;
 
@@ -2816,7 +3365,8 @@ async function reloadCurrentViewForPeriod() {
   } else if (appState.currentView === "pros") {
     await renderProsView(true);
   } else if (appState.currentView === "network") {
-    await renderNetworkView();
+    appState.professionalsViewTab = "network";
+    await renderProsView(true);
   } else if (appState.currentView === "cartography") {
     await renderCartographyView(true);
   } else if (appState.currentView === "territories") {
@@ -2828,7 +3378,321 @@ async function reloadCurrentViewForPeriod() {
   } else {
     await renderStatsView(true);
   }
+
+  } finally {
+    restoreViewportScrollPosition(scrollPositionBeforeRefresh);
+
+    if (useSoftPeriodRefresh) {
+      endPeriodRefreshFeedback();
+    }
+  }
 }
+
+function captureViewportScrollPosition() {
+  return {
+    x: window.scrollX || window.pageXOffset || 0,
+    y: window.scrollY || window.pageYOffset || 0
+  };
+}
+
+function restoreViewportScrollPosition(position) {
+  if (!position) return;
+
+  const targetX = Number(position.x || 0);
+  const targetY = Number(position.y || 0);
+
+  // Après un remplacement de DOM, le navigateur peut recalculer la hauteur
+  // de la page sur plusieurs frames. On restaure donc la position deux fois :
+  // une première fois après le rendu immédiat, une seconde après stabilisation.
+  window.requestAnimationFrame(() => {
+    window.scrollTo({
+      left: targetX,
+      top: targetY,
+      behavior: "auto"
+    });
+
+    window.requestAnimationFrame(() => {
+      window.scrollTo({
+        left: targetX,
+        top: targetY,
+        behavior: "auto"
+      });
+    });
+  });
+}
+
+function beginPeriodRefreshFeedback(
+  message = "Mise à jour de la période et des indicateurs…"
+) {
+  appState.periodRefreshInProgress = true;
+  document.body.classList.add("period-refreshing");
+
+  let indicator = document.getElementById("periodRefreshIndicator");
+
+  if (!indicator) {
+    indicator = document.createElement("div");
+    indicator.id = "periodRefreshIndicator";
+    indicator.className = "period-refresh-indicator";
+    indicator.setAttribute("role", "status");
+    indicator.setAttribute("aria-live", "polite");
+    document.body.appendChild(indicator);
+  }
+
+  indicator.hidden = false;
+  indicator.innerHTML = `
+    <span class="period-refresh-indicator-dot" aria-hidden="true"></span>
+    <span data-period-refresh-message></span>
+  `;
+
+  const messageNode = indicator.querySelector("[data-period-refresh-message]");
+  if (messageNode) {
+    messageNode.textContent = message;
+  }
+}
+
+function endPeriodRefreshFeedback() {
+  appState.periodRefreshInProgress = false;
+  document.body.classList.remove("period-refreshing");
+
+  const indicator = document.getElementById("periodRefreshIndicator");
+  if (indicator) {
+    indicator.hidden = true;
+  }
+}
+
+function shouldPreservePeriodRefreshView(viewName, _forceReload = false) {
+  return Boolean(
+    appState.periodRefreshInProgress
+    && appState.currentView === viewName
+    && content?.childElementCount > 0
+  );
+}
+
+
+function waitForNextBrowserPaint() {
+  return new Promise((resolve) => {
+    window.requestAnimationFrame(() => resolve());
+  });
+}
+
+const PROGRESSIVE_VIEW_SHELLS = {
+  stats: {
+    pageTitle: "Statistiques globales",
+    eyebrow: "Lecture globale des flux",
+    heading: "Les principaux indicateurs se mettent en place.",
+    description:
+      "La structure de l’analyse est affichée immédiatement. Les données de la période sélectionnée arrivent ensuite : indicateurs, répartitions et graphiques.",
+    sections: [
+      "Activité économique",
+      "Alimentations et sorties du circuit",
+      "Opérations associatives / techniques",
+      "Comptes particuliers de dispositif"
+    ]
+  },
+
+  "monetary-pilotage": {
+    pageTitle: "Pilotage monétaire",
+    eyebrow: "Analyse croisée Odoo × Cyclos",
+    heading: "Les repères du pilotage monétaire apparaissent d’abord.",
+    description:
+      "Les cadres de lecture sont prêts. Les stocks, flux, ratios de réemploi et séries historiques sont calculés puis injectés dans un second temps.",
+    sections: [
+      "Synthèse monétaire",
+      "Circulation et réemploi",
+      "Détention et ancrage",
+      "Séries historiques"
+    ]
+  },
+
+  pros: {
+    pageTitle: "Professionnels & particuliers",
+    eyebrow: "Utilisateurs de la Gonette",
+    heading: "La vue des communautés d’usage s’ouvre immédiatement.",
+    description:
+      "Les espaces de lecture sont disponibles dès l’entrée dans la page. Les synthèses, flux, réseau interprofessionnel, cartographies de clusters et classements sont ensuite hydratés.",
+    sections: [
+      "Vue d’ensemble U / P",
+      "Circulation et multiplicateur",
+      "Réseau interprofessionnel",
+      "Cartographie des clusters",
+      "Classements et détails"
+    ]
+  },
+
+  sectors: {
+    pageTitle: "Analyse sectorielle",
+    eyebrow: "Activité par grands secteurs",
+    heading: "La lecture sectorielle est déjà en place.",
+    description:
+      "Les familles d’analyse sont affichées avant le calcul des volumes, des ratios de réemploi et des répartitions par secteur.",
+    sections: [
+      "Vue d’ensemble",
+      "Secteurs actifs",
+      "Réutilisation",
+      "Tableau détaillé"
+    ]
+  },
+
+  territories: {
+    pageTitle: "Analyse territoriale — codes postaux",
+    eyebrow: "Géographie de l’activité",
+    heading: "Le cadre territorial est prêt.",
+    description:
+      "Les principaux blocs de lecture apparaissent immédiatement. Les données par code postal et les indicateurs associés sont chargés ensuite.",
+    sections: [
+      "Synthèse territoriale",
+      "Répartition des volumes",
+      "Réemploi local",
+      "Tableau des territoires"
+    ]
+  },
+
+  cartography: {
+    pageTitle: "Cartographie des professionnels",
+    eyebrow: "Implantation et activité",
+    heading: "La cartographie prépare ses données.",
+    description:
+      "La page existe déjà visuellement ; les professionnels géolocalisés, leurs métriques et la carte interactive arrivent ensuite.",
+    sections: [
+      "Carte des professionnels",
+      "Repères d’activité",
+      "Filtres",
+      "Lecture géographique"
+    ]
+  }
+};
+
+function renderProgressiveViewShell(viewKey) {
+  const shell = PROGRESSIVE_VIEW_SHELLS[viewKey];
+  if (!shell) return false;
+
+  appState.currentView = viewKey;
+  syncSidebarView(viewKey);
+  setTitle(shell.pageTitle);
+
+  const sectionCards = shell.sections.map((section) => `
+    <article class="progressive-shell-card">
+      <div class="progressive-shell-card-line progressive-shell-card-line-short"></div>
+      <strong>${section}</strong>
+      <div class="progressive-shell-card-line"></div>
+      <div class="progressive-shell-card-line progressive-shell-card-line-medium"></div>
+    </article>
+  `).join("");
+
+  content.innerHTML = `
+    <section class="card progressive-shell-overview">
+      <div class="stat-label">${shell.eyebrow}</div>
+      <h2>${shell.heading}</h2>
+      <p>${shell.description}</p>
+    </section>
+
+    <section class="progressive-shell-grid">
+      ${sectionCards}
+    </section>
+  `;
+
+  return true;
+}
+
+async function runProgressiveViewHydration({
+  viewKey,
+  hydrate,
+  message = "Chargement des données…"
+}) {
+  const shellRendered = renderProgressiveViewShell(viewKey);
+
+  if (shellRendered) {
+    await waitForNextBrowserPaint();
+
+    beginPeriodRefreshFeedback(message);
+    try {
+      await hydrate();
+    } finally {
+      endPeriodRefreshFeedback();
+    }
+
+    return;
+  }
+
+  await hydrate();
+}
+
+async function openViewProgressively(viewKey) {
+  if (viewKey === "stats") {
+    await runProgressiveViewHydration({
+      viewKey,
+      hydrate: () => renderStatsView(false),
+      message: "Chargement des statistiques de la période…"
+    });
+    return;
+  }
+
+  if (viewKey === "monetary-pilotage") {
+    await runProgressiveViewHydration({
+      viewKey,
+      hydrate: () => renderMonetaryPilotageView(false),
+      message: "Chargement du pilotage monétaire…"
+    });
+    return;
+  }
+
+  if (viewKey === "pros") {
+    await runProgressiveViewHydration({
+      viewKey,
+      hydrate: () => renderProsView(false),
+      message: "Chargement de la vue Professionnels & particuliers…"
+    });
+    return;
+  }
+
+  if (viewKey === "cartography") {
+    await runProgressiveViewHydration({
+      viewKey,
+      hydrate: () => renderCartographyView(false),
+      message: "Chargement de la cartographie…"
+    });
+    return;
+  }
+
+  if (viewKey === "territories") {
+    await runProgressiveViewHydration({
+      viewKey,
+      hydrate: () => renderTerritoriesView(false),
+      message: "Chargement de l’analyse territoriale…"
+    });
+    return;
+  }
+
+  if (viewKey === "sectors") {
+    await runProgressiveViewHydration({
+      viewKey,
+      hydrate: () => renderSectorsView(false),
+      message: "Chargement de l’analyse sectorielle…"
+    });
+    return;
+  }
+
+  if (viewKey === "network") {
+    appState.professionalsViewTab = "network";
+    await runProgressiveViewHydration({
+      viewKey: "pros",
+      hydrate: () => renderProsView(false),
+      message: "Chargement du réseau interprofessionnel…"
+    });
+    return;
+  }
+
+  if (viewKey === "tickets") {
+    await renderTicketsView();
+    return;
+  }
+
+  if (viewKey === "info") {
+    await renderInfoView();
+  }
+}
+
+
 
 async function applyAnalysisPeriod() {
   const presetEl = document.getElementById("periodPreset");
@@ -2893,15 +3757,15 @@ async function initPeriodFilter() {
       max: bounds?.max_date || null
     };
 
-    const { start, end } = getPresetPeriod("all");
+    const { start, end } = getPresetPeriod("currentYear");
 
     appState.analysisPeriod = {
-      preset: "all",
+      preset: "currentYear",
       start,
       end
     };
 
-    syncPeriodInputsFromValues("all", start, end);
+    syncPeriodInputsFromValues("currentYear", start, end);
     updatePeriodHint();
   } catch (err) {
     console.error("Impossible de charger les bornes temporelles :", err);
@@ -2977,6 +3841,50 @@ function decorateInfoMarkdownHeadings(container) {
     heading.id = uniqueId;
   });
 }
+
+function renderInfoMarkdownToc(reader) {
+  const toc = document.getElementById("infoMarkdownToc");
+  const tocCard = document.getElementById("infoMarkdownTocCard");
+
+  if (!toc || !tocCard || !reader) {
+    return;
+  }
+
+  const headings = Array.from(reader.querySelectorAll("h1[id], h2[id], h3[id]"))
+    .filter((heading) => String(heading.textContent || "").trim());
+
+  if (headings.length === 0) {
+    tocCard.classList.add("is-empty");
+    toc.innerHTML = `
+      <p class="info-toc-empty">
+        Aucun titre détecté dans la fiche.
+      </p>
+    `;
+    return;
+  }
+
+  tocCard.classList.remove("is-empty");
+
+  const items = headings.map((heading) => {
+    const rawLevel = Number(String(heading.tagName || "H1").slice(1));
+    const level = Math.min(Math.max(rawLevel || 1, 1), 3);
+    const label = String(heading.textContent || "").trim();
+    const href = `#${encodeURIComponent(heading.id)}`;
+
+    return `
+      <li class="info-toc-item info-toc-level-${level}">
+        <a href="${href}">${escapeHtml(label)}</a>
+      </li>
+    `;
+  }).join("");
+
+  toc.innerHTML = `
+    <ul class="info-toc-list">
+      ${items}
+    </ul>
+  `;
+}
+
 
 function renderInfoMarkdown(markdown) {
   const source = String(markdown || "").replace(/^[\u200B\u200C\u200D\u200E\u200F\uFEFF]/, "");
@@ -3074,6 +3982,7 @@ function bindInfoEditor() {
       appState.info.markdown = markdown;
       reader.innerHTML = renderInfoMarkdown(markdown);
       decorateInfoMarkdownHeadings(reader);
+      renderInfoMarkdownToc(reader);
 
       closeEditor();
       setInfoFeedback(result.message || "Documentation enregistrée.");
@@ -3109,6 +4018,15 @@ async function renderInfoView(forceReload = false) {
       </div>
 
       <div id="infoFeedback" class="info-feedback hidden"></div>
+
+      <details id="infoMarkdownTocCard" class="info-toc-card" open>
+        <summary class="info-toc-summary">
+          Sommaire de la fiche
+        </summary>
+        <nav id="infoMarkdownToc" class="info-toc-nav" aria-label="Sommaire de la fiche">
+          <p class="info-toc-empty">Chargement du sommaire…</p>
+        </nav>
+      </details>
 
       <div id="infoMarkdownReader" class="markdown-body info-markdown-reader">
         <p>Chargement de la documentation…</p>
@@ -3156,6 +4074,7 @@ async function renderInfoView(forceReload = false) {
     if (reader) {
       reader.innerHTML = renderInfoMarkdown(appState.info.markdown || "");
       decorateInfoMarkdownHeadings(reader);
+      renderInfoMarkdownToc(reader);
     }
 
     bindInfoEditor();
@@ -3872,7 +4791,198 @@ async function renderTicketDetail(slug, feedbackMessage = "") {
   }
 }
 
+
+function buildDevicePrivateAccountsInsightHtml(stats) {
+  const integerFr = (value) => Number(value || 0).toLocaleString("fr-FR", {
+    maximumFractionDigits: 0
+  });
+
+  const percentageFr = (value) => Number(value || 0).toLocaleString("fr-FR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  });
+
+  const totalTransactions = Number(stats?.nb_transactions_device_private_accounts || 0);
+
+  if (!totalTransactions) {
+    return "";
+  }
+
+  const activeAccounts = Number(stats?.nb_device_private_accounts_active || 0);
+  const totalVolume = Number(stats?.volume_device_private_accounts || 0);
+  const activityTransactions = Number(stats?.nb_transactions_device_private_activity || 0);
+  const activityVolume = Number(stats?.volume_device_private_activity || 0);
+  const operationsTransactions = Number(stats?.nb_transactions_device_private_operations || 0);
+  const operationsVolume = Number(stats?.volume_device_private_operations || 0);
+  const shareTransactions = Number(stats?.share_device_private_activity_transactions_pct || 0);
+  const shareVolume = Number(stats?.share_device_private_activity_volume_pct || 0);
+
+  return `
+    <details class="card device-private-accounts-disclosure">
+      <summary class="device-private-accounts-disclosure-summary">
+        <span class="device-private-accounts-disclosure-kicker">Zoom complémentaire</span>
+        <strong>Des comptes particuliers liés à un dispositif ponctuel</strong>
+        <span class="device-private-accounts-disclosure-hint">Déplier</span>
+      </summary>
+
+      <div class="device-private-accounts-disclosure-body">
+        <section class="device-private-accounts-overview">
+      <div class="device-private-accounts-header">
+        <p class="device-private-accounts-intro">
+          Sur cette période, MLCFlux repère des comptes particuliers associés à un usage spécifique ou temporaire.
+          Ils participent bien à l’activité économique lorsqu’ils paient des professionnels,
+          mais leur logique n’est pas tout à fait celle des particuliers ordinaires.
+          Ce focus permet donc de les lire à part, sans les confondre avec la dynamique générale.
+        </p>
+      </div>
+
+      <details class="device-private-accounts-helper">
+        <summary>Comment lire ce focus&nbsp;?</summary>
+        <div class="device-private-accounts-helper-content">
+          <p>
+            Ces comptes apparaissent lorsqu’un événement, un projet ou un dispositif particulier
+            mobilise ponctuellement la Gonette numérique. Ils peuvent provoquer un pic de transactions
+            sur une période donnée, sans traduire à eux seuls une évolution durable des usages ordinaires.
+          </p>
+          <p>
+            Les paiements vers les professionnels restent comptés dans l’activité économique.
+            Les mouvements périphériques — par exemple des opérations liées à la clôture ou au fonctionnement du dispositif —
+            sont isolés dans la dernière carte.
+          </p>
+        </div>
+      </details>
+
+      <div class="activity-flow-grid device-private-accounts-grid">
+        <article class="activity-flow-card device-private-accounts-card">
+          <div class="activity-flow-heading">
+            <span class="activity-flow-code">UD</span>
+            <h4>Qui est concerné&nbsp;?</h4>
+          </div>
+          <p class="activity-flow-description">
+            Les comptes de dispositif effectivement actifs sur la période sélectionnée.
+          </p>
+          <div class="activity-flow-metrics">
+            <div class="activity-flow-metric">
+              <span class="activity-flow-metric-label">Comptes actifs</span>
+              <strong>${integerFr(activeAccounts)}</strong>
+            </div>
+            <div class="activity-flow-metric">
+              <span class="activity-flow-metric-label">Transactions</span>
+              <strong>${integerFr(totalTransactions)}</strong>
+            </div>
+            <div class="activity-flow-metric">
+              <span class="activity-flow-metric-label">Volume</span>
+              <strong>${euro(totalVolume)}</strong>
+            </div>
+          </div>
+        </article>
+
+        <article class="activity-flow-card device-private-accounts-card">
+          <div class="activity-flow-heading">
+            <span class="activity-flow-code">UD→éco</span>
+            <h4>Ce qui nourrit l’activité</h4>
+          </div>
+          <p class="activity-flow-description">
+            Les transactions de ces comptes réellement intégrées à l’activité économique centrale.
+          </p>
+          <div class="activity-flow-metrics">
+            <div class="activity-flow-metric">
+              <span class="activity-flow-metric-label">Transactions d’activité</span>
+              <strong>${integerFr(activityTransactions)}</strong>
+            </div>
+            <div class="activity-flow-metric">
+              <span class="activity-flow-metric-label">Volume d’activité</span>
+              <strong>${euro(activityVolume)}</strong>
+            </div>
+          </div>
+        </article>
+
+        <article class="activity-flow-card device-private-accounts-card">
+          <div class="activity-flow-heading">
+            <span class="activity-flow-code">Part</span>
+            <h4>Leur poids sur la période</h4>
+          </div>
+          <p class="activity-flow-description">
+            La place de ces comptes dans l’ensemble de l’activité économique retenue.
+          </p>
+          <div class="activity-flow-metrics">
+            <div class="activity-flow-metric">
+              <span class="activity-flow-metric-label">Part des transactions</span>
+              <strong>${percentageFr(shareTransactions)} %</strong>
+            </div>
+            <div class="activity-flow-metric">
+              <span class="activity-flow-metric-label">Part du volume</span>
+              <strong>${percentageFr(shareVolume)} %</strong>
+            </div>
+          </div>
+        </article>
+
+        <article class="activity-flow-card device-private-accounts-card">
+          <div class="activity-flow-heading">
+            <span class="activity-flow-code">Hors éco</span>
+            <h4>Mouvements périphériques</h4>
+          </div>
+          <p class="activity-flow-description">
+            Les opérations impliquant ces comptes mais non retenues comme paiements économiques centraux.
+          </p>
+          <div class="activity-flow-metrics">
+            <div class="activity-flow-metric">
+              <span class="activity-flow-metric-label">Transactions</span>
+              <strong>${integerFr(operationsTransactions)}</strong>
+            </div>
+            <div class="activity-flow-metric">
+              <span class="activity-flow-metric-label">Volume</span>
+              <strong>${euro(operationsVolume)}</strong>
+            </div>
+          </div>
+        </article>
+      </div>
+        </section>
+      </div>
+    </details>
+  `;
+}
+
+function mountDevicePrivateAccountsInsight(stats) {
+  const html = buildDevicePrivateAccountsInsightHtml(stats);
+
+  document.getElementById("devicePrivateAccountsInsightMount")?.remove();
+
+  if (!html) {
+    return;
+  }
+
+  const statsPanels = [...document.querySelectorAll(".stats-tab-panel")];
+
+  const activityPanel = statsPanels.find((panel) => {
+    const text = String(panel.textContent || "");
+    return text.includes("Activité économique");
+  });
+
+  const fallbackPanel =
+    document.querySelector('[data-stats-panel="activity"]')
+    || document.querySelector('[data-stats-tab-panel="activity"]')
+    || activityPanel;
+
+  const targetPanel = activityPanel || fallbackPanel;
+
+  if (!targetPanel) {
+    console.warn("Bloc comptes particuliers de dispositif : panneau activité introuvable.");
+    return;
+  }
+
+  const mount = document.createElement("div");
+  mount.id = "devicePrivateAccountsInsightMount";
+  mount.innerHTML = html;
+
+  // Le bloc est volontairement placé tout en bas de l’onglet Activité économique :
+  // il constitue un zoom spécifique, pas un indicateur structurant de premier niveau.
+  targetPanel.appendChild(mount);
+}
+
 async function renderStatsView(forceReload = false) {
+  const preserveVisibleView = shouldPreservePeriodRefreshView("stats", forceReload);
+
   destroyCartographyMap();
   appState.currentView = "stats";
   syncSidebarView("stats");
@@ -3886,7 +4996,9 @@ async function renderStatsView(forceReload = false) {
     return;
   }
 
-  content.innerHTML = `<div class="card">Chargement...</div>`;
+  if (!preserveVisibleView) {
+    content.innerHTML = `<div class="card">Chargement...</div>`;
+  }
 
   const [stats, charts] = await Promise.all([
     apiGet(`/api/stats${getPeriodQueryParam()}`),
@@ -3962,17 +5074,17 @@ function renderStatsCardsAndCharts(stats, charts) {
   const circuitInflowDestinations = stats.circuit_inflow_destinations || {};
   const circuitInflowDefinitions = [
     {
-      key: "A→U",
+      key: "T→U",
       title: "Vers les particuliers",
       description: "Alimentations numériques adressées à des comptes particuliers."
     },
     {
-      key: "A→P",
+      key: "T→P",
       title: "Vers les professionnels",
       description: "Alimentations numériques adressées à des comptes professionnels."
     },
     {
-      key: "A→A",
+      key: "T→T",
       title: "Résiduel technique",
       description: "Cas très marginaux d’alimentation technique interne."
     }
@@ -4055,8 +5167,6 @@ function renderStatsCardsAndCharts(stats, charts) {
   }).join("");
 
   content.innerHTML = `
-    <div id="globalStatsOverviewCharts"></div>
-
     <nav class="pro-tabs stats-tabs" aria-label="Sections des statistiques globales">
       <button
         class="tab-btn tab-btn-active"
@@ -4127,6 +5237,8 @@ function renderStatsCardsAndCharts(stats, charts) {
           </div>
         </div>
       </div>
+
+      <div id="globalStatsOverviewCharts"></div>
 
       <section class="card activity-flow-overview">
         <div class="activity-flow-overview-header">
@@ -4214,14 +5326,14 @@ function renderStatsCardsAndCharts(stats, charts) {
         </div>
 
         <div class="card stat-card-static">
-          <div class="stat-label">Particuliers → acteur masqué</div>
-          <div class="stat-value">${integerFr(stats.nb_operations_user_to_masked_actor || 0)}</div>
-          <div class="stat-subtext">${euro(stats.volume_operations_user_to_masked_actor || 0)} sur la période</div>
+          <div class="stat-label">Particuliers → comptes techniques</div>
+          <div class="stat-value">${integerFr(stats.nb_operations_user_to_technical_accounts || 0)}</div>
+          <div class="stat-subtext">${euro(stats.volume_operations_user_to_technical_accounts || 0)} sur la période</div>
         </div>
 
         <div class="card stat-card-static">
-          <div class="stat-label">Montant moyen U→acteur masqué</div>
-          <div class="stat-value">${euro(stats.montant_moyen_user_to_masked_actor || 0)}</div>
+          <div class="stat-label">Montant moyen U→compte technique</div>
+          <div class="stat-value">${euro(stats.montant_moyen_user_to_technical_accounts || 0)}</div>
           <div class="stat-subtext">Bloc structurel à lire comme opérations de gestion / correction</div>
         </div>
       </div>
@@ -4239,21 +5351,21 @@ function renderStatsCardsAndCharts(stats, charts) {
         </div>
       </section>
 
-      <section class="card activity-flow-overview operations-masked-flow-overview">
+      <section class="card activity-flow-overview operations-technical-flow-overview">
         <div class="activity-flow-overview-header">
-          <h3>Flux particuliers vers acteur masqué</h3>
+          <h3>Flux particuliers vers comptes techniques</h3>
           <p>
-            Cette famille regroupe structurellement les flux <strong>U→A</strong>.
+            Cette famille regroupe structurellement les flux <strong>U→T</strong>.
             L’audit des libellés montre qu’il s’agit très majoritairement d’annulations,
             avoirs, clôtures ou corrections, mais la classification affichée ici ne dépend pas des libellés libres.
           </p>
         </div>
 
-        <div class="activity-flow-grid operations-masked-flow-grid">
+        <div class="activity-flow-grid operations-technical-flow-grid">
           <article class="activity-flow-card">
             <div class="activity-flow-heading">
-              <span class="activity-flow-code">U→A</span>
-              <h4>Particuliers vers acteur technique / masqué</h4>
+              <span class="activity-flow-code">U→T</span>
+              <h4>Particuliers vers compte technique</h4>
             </div>
             <p class="activity-flow-description">
               Mouvements sortant d’un compte particulier vers l’acteur technique.
@@ -4262,15 +5374,15 @@ function renderStatsCardsAndCharts(stats, charts) {
             <div class="activity-flow-metrics">
               <div class="activity-flow-metric">
                 <span class="activity-flow-metric-label">Opérations</span>
-                <strong>${integerFr(stats.nb_operations_user_to_masked_actor || 0)}</strong>
+                <strong>${integerFr(stats.nb_operations_user_to_technical_accounts || 0)}</strong>
               </div>
               <div class="activity-flow-metric">
                 <span class="activity-flow-metric-label">Volume</span>
-                <strong>${euro(stats.volume_operations_user_to_masked_actor || 0)}</strong>
+                <strong>${euro(stats.volume_operations_user_to_technical_accounts || 0)}</strong>
               </div>
               <div class="activity-flow-metric">
                 <span class="activity-flow-metric-label">Montant moyen</span>
-                <strong>${euro(stats.montant_moyen_user_to_masked_actor || 0)}</strong>
+                <strong>${euro(stats.montant_moyen_user_to_technical_accounts || 0)}</strong>
               </div>
             </div>
           </article>
@@ -4288,6 +5400,7 @@ function renderStatsCardsAndCharts(stats, charts) {
       </div>
     </section>
   `;
+  mountDevicePrivateAccountsInsight(stats);
 
   bindStatsTabs();
   renderGlobalStatsChartsFromSeries(charts);
@@ -4430,11 +5543,11 @@ function buildMonetaryEffectivePeriodNotice(requestedPeriod, effectivePeriod) {
 
   return `
     <div class="monetary-period-warning">
-      <strong>Périmètre monétaire effectif :</strong>
-      les stocks Odoo disponibles couvrent ici la période
-      <strong>${formatIsoDateFr(effectivePeriod.start)} → ${formatIsoDateFr(effectivePeriod.end)}</strong>,
-      qui diffère du filtre global demandé
-      (${formatIsoDateFr(requestedPeriod.start)} → ${formatIsoDateFr(requestedPeriod.end)}).
+      <strong>Périmètre comptable disponible :</strong>
+      les stocks Odoo commencent au
+      <strong>${formatIsoDateFr(effectivePeriod.start)}</strong>,
+      tandis que le filtre global demandé remonte au
+      <strong>${formatIsoDateFr(requestedPeriod.start)}</strong>.
     </div>
   `;
 }
@@ -5202,6 +6315,73 @@ function formatPilotageMonthLabel(itemOrMonthKey) {
   return isPilotagePartialMonth(item) ? `${label}*` : label;
 }
 
+function getPilotageMonthKeyFromIsoDate(isoDate) {
+  const match = String(isoDate || "").match(/^(\d{4})-(\d{2})-/);
+
+  if (!match) {
+    return null;
+  }
+
+  return `${match[1]}-${match[2]}`;
+}
+
+function isPilotageChartGap(item) {
+  return Boolean(item?.__pilotage_chart_gap__);
+}
+
+function buildPilotageMonthlyChartSeries(items = [], requestedPeriod = null) {
+  const sourceItems = Array.isArray(items) ? items : [];
+  const startMonthKey = getPilotageMonthKeyFromIsoDate(requestedPeriod?.start);
+  const endMonthKey = getPilotageMonthKeyFromIsoDate(requestedPeriod?.end);
+
+  if (!startMonthKey || !endMonthKey) {
+    return sourceItems;
+  }
+
+  const [startYear, startMonth] = startMonthKey.split("-").map(Number);
+  const [endYear, endMonth] = endMonthKey.split("-").map(Number);
+
+  if (
+    !startYear || !startMonth || !endYear || !endMonth ||
+    Number.isNaN(startYear) || Number.isNaN(startMonth) ||
+    Number.isNaN(endYear) || Number.isNaN(endMonth)
+  ) {
+    return sourceItems;
+  }
+
+  const startDate = new Date(startYear, startMonth - 1, 1);
+  const endDate = new Date(endYear, endMonth - 1, 1);
+
+  if (startDate > endDate) {
+    return sourceItems;
+  }
+
+  const itemsByMonth = new Map(
+    sourceItems
+      .filter((item) => item?.month_key)
+      .map((item) => [item.month_key, item])
+  );
+
+  const chartItems = [];
+  const cursor = new Date(startDate);
+
+  while (cursor <= endDate) {
+    const monthKey = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`;
+    const existingItem = itemsByMonth.get(monthKey);
+
+    chartItems.push(existingItem || {
+      month_key: monthKey,
+      day_count: 0,
+      aligned_day_count: 0,
+      __pilotage_chart_gap__: true
+    });
+
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+
+  return chartItems;
+}
+
 function formatPilotageChartG(value) {
   const numericValue = Number(value || 0);
   return `${numericValue.toLocaleString("fr-FR", {
@@ -5340,6 +6520,7 @@ function destroyMonetaryPilotageCharts() {
     "pilotageInternalReuseHistory",
     "pilotageLm3History",
     "pilotageHoldingsStockShare",
+    "pilotageHoldingsMassComposition",
     "pilotageHoldingsMobilization",
     "pilotageHoldingsDormancy"
   ];
@@ -5380,7 +6561,9 @@ function buildPilotageRotationChartConfig(items, summary) {
     datasets.push({
       type: "line",
       label: "Référence de la période",
-      data: items.map(() => periodReference),
+      data: items.map((item) => (
+        isPilotageChartGap(item) ? null : periodReference
+      )),
       borderDash: [6, 5],
       pointRadius: 0,
       pointHoverRadius: 0
@@ -5914,12 +7097,16 @@ function buildPilotageHoldingsPartialMonthNote(items) {
   return `
     <p class="pilotage-chart-footnote">
       * Certains mois sont partiels : les moyennes portent uniquement sur les jours
-      communs effectivement disponibles entre soldes particuliers et stocks Odoo.
+      communs effectivement disponibles entre soldes particuliers, soldes professionnels et stocks Odoo.
     </p>
   `;
 }
 
 function getPilotageHoldingsDormancyStock(item, bucketKey) {
+  if (isPilotageChartGap(item)) {
+    return null;
+  }
+
   const bucket = getPilotageHoldingsDormancyBucket(
     item?.dormancy?.buckets || [],
     bucketKey
@@ -5949,14 +7136,17 @@ function buildPilotageHoldingsStockShareChartConfig(items) {
           pointHoverRadius: 6
         },
         {
-          label: "Part de la masse numérique",
-          data: items.map((item) => (
-            item.average_user_stock_share_of_numeric_mass === null ||
-            item.average_user_stock_share_of_numeric_mass === undefined
-              ? null
-              : item.average_user_stock_share_of_numeric_mass * 100
-          )),
-          yAxisID: "yShare",
+          label: "Stock professionnels du réseau moyen",
+          data: items.map((item) => item.average_positive_professional_network_stock ?? null),
+          yAxisID: "yStock",
+          tension: 0.28,
+          pointRadius: 4,
+          pointHoverRadius: 6
+        },
+        {
+          label: "Stock comptes entreprise Gonette moyen",
+          data: items.map((item) => item.average_positive_gonette_business_accounts_stock ?? null),
+          yAxisID: "yStock",
           tension: 0.28,
           pointRadius: 4,
           pointHoverRadius: 6
@@ -5977,14 +7167,9 @@ function buildPilotageHoldingsStockShareChartConfig(items) {
         tooltip: {
           callbacks: {
             label(context) {
-              const label = context.dataset.label || "";
-
-              if (context.dataset.yAxisID === "yShare") {
-                return `${label} : ${formatPilotageChartPercent(context.raw)}`;
-              }
-
-              return `${label} : ${formatPilotageChartG(context.raw)}`;
-            },
+                const label = context.dataset.label || "";
+                return `${label} : ${formatPilotageChartG(context.raw)}`;
+              },
             afterTitle(context) {
               const index = context?.[0]?.dataIndex;
               const item = items[index];
@@ -6006,16 +7191,131 @@ function buildPilotageHoldingsStockShareChartConfig(items) {
             display: true,
             text: "Stock particulier moyen (G)"
           }
+        }
+      }
+    }
+  };
+}
+
+
+function buildPilotageHoldingsMassCompositionChartConfig(items) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return null;
+  }
+
+  const labels = items.map((item) => formatPilotageHoldingsMonthLabel(item));
+
+  const sharePercent = (value) => (
+    value === null || value === undefined
+      ? null
+      : Number(value || 0) * 100
+  );
+
+  const residualSharePercent = (item) => {
+    const userShare = sharePercent(item.average_user_stock_share_of_numeric_mass);
+    const professionalShare = sharePercent(
+      item.average_professional_network_stock_share_of_numeric_mass
+    );
+    const gonetteShare = sharePercent(
+      item.average_gonette_business_accounts_stock_share_of_numeric_mass
+    );
+
+    if (
+      userShare === null &&
+      professionalShare === null &&
+      gonetteShare === null
+    ) {
+      return null;
+    }
+
+    return Math.max(
+      0,
+      100 -
+      Number(userShare || 0) -
+      Number(professionalShare || 0) -
+      Number(gonetteShare || 0)
+    );
+  };
+
+  return {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Particuliers",
+          data: items.map((item) => sharePercent(
+            item.average_user_stock_share_of_numeric_mass
+          )),
+          stack: "massComposition"
         },
-        yShare: {
+        {
+          label: "Professionnels du réseau",
+          data: items.map((item) => sharePercent(
+            item.average_professional_network_stock_share_of_numeric_mass
+          )),
+          stack: "massComposition"
+        },
+        {
+          label: "Comptes entreprise Gonette",
+          data: items.map((item) => sharePercent(
+            item.average_gonette_business_accounts_stock_share_of_numeric_mass
+          )),
+          stack: "massComposition"
+        },
+        {
+          label: "Reste non encore ventilé",
+          data: items.map((item) => residualSharePercent(item)),
+          stack: "massComposition"
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: "index",
+        intersect: false
+      },
+      plugins: {
+        legend: {
+          display: true
+        },
+        tooltip: {
+          callbacks: {
+            label(context) {
+              const label = context.dataset.label || "";
+              return `${label} : ${formatPilotageChartPercent(context.raw)}`;
+            },
+            afterTitle(context) {
+              const index = context?.[0]?.dataIndex;
+              const item = items[index];
+
+              if (!item || !isPilotageHoldingsPartialMonth(item)) {
+                return "";
+              }
+
+              return `Mois partiel : ${item.aligned_day_count} jour(s) aligné(s)`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          stacked: true
+        },
+        y: {
+          stacked: true,
           beginAtZero: true,
-          position: "right",
-          grid: {
-            drawOnChartArea: false
-          },
+          max: 100,
           title: {
             display: true,
-            text: "Part de la masse numérique (%)"
+            text: "Part de la masse numérique moyenne (%)"
+          },
+          ticks: {
+            callback(value) {
+              return formatPilotageChartPercent(value);
+            }
           }
         }
       }
@@ -6029,17 +7329,35 @@ function buildPilotageHoldingsMobilizationChartConfig(items) {
   }
 
   const labels = items.map((item) => formatPilotageHoldingsMonthLabel(item));
+  const mobilizationValues = items.map((item) => (
+    item.economic_up_volume_per_100_g_average_user_stock ?? null
+  ));
 
   return {
-    type: "bar",
+    type: "line",
     data: {
       labels,
       datasets: [
         {
-          label: "G U→P pour 100 G de stock particulier moyen",
+          label: "Dépenses U→P / 100 G détenues",
+          data: mobilizationValues,
+          tension: 0.28,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          fill: false,
+          spanGaps: false
+        },
+        {
+          label: "Repère 100 G / 100 G",
           data: items.map((item) => (
-            item.economic_up_volume_per_100_g_average_user_stock ?? null
-          ))
+            isPilotageChartGap(item) ? null : 100
+          )),
+          tension: 0,
+          pointRadius: 0,
+          pointHoverRadius: 0,
+          borderDash: [6, 5],
+          borderWidth: 1.5,
+          fill: false
         }
       ]
     },
@@ -6052,12 +7370,17 @@ function buildPilotageHoldingsMobilizationChartConfig(items) {
       },
       plugins: {
         legend: {
-          display: false
+          display: true,
+          position: "bottom"
         },
         tooltip: {
           callbacks: {
             label(context) {
-              return `Mobilisation : ${formatPilotageGonetteYield(context.raw)} pour 100 G détenues`;
+              if (context.dataset?.label === "Repère 100 G / 100 G") {
+                return "Repère : 100 G vers les pros pour 100 G détenues";
+              }
+
+              return `Intensité : ${formatPilotageGonetteYield(context.raw)} vers les pros pour 100 G détenues`;
             },
             afterTitle(context) {
               const index = context?.[0]?.dataIndex;
@@ -6077,7 +7400,7 @@ function buildPilotageHoldingsMobilizationChartConfig(items) {
           beginAtZero: true,
           title: {
             display: true,
-            text: "G dépensées vers les pros / 100 G détenues"
+            text: "G U→P pour 100 G détenues"
           }
         }
       }
@@ -6173,6 +7496,17 @@ function renderPilotageHoldingsStockShareChart(items) {
   appState.charts.pilotageHoldingsStockShare = new Chart(canvas, config);
 }
 
+function renderPilotageHoldingsMassCompositionChart(items) {
+  const canvas = document.getElementById("pilotageHoldingsMassCompositionChart");
+  const config = buildPilotageHoldingsMassCompositionChartConfig(items);
+
+  if (!canvas || !config) {
+    return;
+  }
+
+  appState.charts.pilotageHoldingsMassComposition = new Chart(canvas, config);
+}
+
 function renderPilotageHoldingsMobilizationChart(items) {
   const canvas = document.getElementById("pilotageHoldingsMobilizationChart");
   const config = buildPilotageHoldingsMobilizationChartConfig(items);
@@ -6231,6 +7565,7 @@ function renderMonetaryPilotageCharts(
 
   if (Array.isArray(holdingsItems) && holdingsItems.length > 0) {
     renderPilotageHoldingsStockShareChart(holdingsItems);
+    renderPilotageHoldingsMassCompositionChart(holdingsItems);
     renderPilotageHoldingsMobilizationChart(holdingsItems);
     renderPilotageHoldingsDormancyChart(holdingsItems);
   }
@@ -7239,6 +8574,292 @@ const PILOTAGE_INDICATOR_HELP = {
     ]
   },
 
+  holdingsAverageUserStock: {
+    title: "Stock particulier moyen",
+    summary: "Cet indicateur mesure le volume moyen de Gonettes numériques détenues par les particuliers avec un solde positif sur la période analysée.",
+    usefulness: "Il donne une première lecture de la monnaie disponible côté usagers. Ce stock peut être immédiatement mobilisable, en attente de dépense, ou progressivement s’éloigner de l’activité : il doit donc être lu avec la dormance et les paiements U→P.",
+    reading: [
+      "Une valeur élevée signifie qu’un volume important de Gonettes numériques stationne chez les particuliers en moyenne sur la période.",
+      "Une hausse de ce stock n’est pas automatiquement positive ou négative : elle peut traduire davantage de détention active, une alimentation récente, ou une accumulation moins dépensée.",
+      "La part indiquée sous la valeur rapporte ce stock à la masse numérique moyenne Odoo."
+    ],
+    crossReading: [
+      "À croiser avec la « Masse particulière active / dormante » pour distinguer stock vivant et stock éloigné de l’usage.",
+      "À rapprocher de la « Mobilisation économique du stock particulier » pour voir si cette détention se transforme en paiements vers les pros.",
+      "À lire avec les alimentations : une hausse du stock particulier peut suivre une augmentation des entrées dans le circuit."
+    ],
+    pilotage: [
+      "Cet indicateur aide à repérer l’importance du réservoir de monnaie porté par les particuliers.",
+      "Il devient particulièrement utile lorsqu’on cherche à comprendre si la croissance de la masse numérique améliore réellement l’usage ou alimente surtout une détention peu mobilisée."
+    ],
+    perimeter: [
+      "Moyenne journalière des soldes positifs particuliers sur les jours alignés entre les soldes Cyclos et la masse numérique Odoo.",
+      "Les soldes nuls ou négatifs ne contribuent pas au stock positif."
+    ],
+    formulas: [
+      "Stock particulier moyen = moyenne quotidienne de la somme des soldes particuliers positifs.",
+      "Part de masse = stock particulier moyen / masse numérique moyenne."
+    ],
+    sources: [
+      "pilotage-holdings-summary.holdings_reference.average_positive_user_stock",
+      "pilotage-holdings-summary.holdings_reference.average_user_stock_share_of_numeric_mass"
+    ]
+  },
+
+  holdingsAverageProfessionalNetworkStock: {
+    title: "Stock professionnels du réseau moyen",
+    summary: "Cet indicateur mesure le volume moyen de Gonettes numériques détenues par les professionnels du réseau, hors comptes entreprise Gonette P0000 / P9999.",
+    usefulness: "Il renseigne l’ancrage de la monnaie dans le tissu économique professionnel. Une monnaie locale bien implantée peut logiquement s’accumuler temporairement chez les pros, mais ce signal gagne à être lu avec leur capacité de réemploi interne.",
+    reading: [
+      "Une valeur élevée indique que les professionnels portent une part importante de la masse numérique moyenne.",
+      "Cette détention peut refléter un réseau professionnel bien irrigué, mais elle ne prouve pas à elle seule que la monnaie recircule activement.",
+      "La part affichée sous la valeur permet de comparer ce stock à l’ensemble de la masse numérique moyenne."
+    ],
+    crossReading: [
+      "À croiser avec le réemploi interne professionnel et les flux P→P.",
+      "À rapprocher des reconversions : un stock professionnel élevé n’a pas le même sens s’il s’accompagne d’une pression de sortie croissante.",
+      "À lire avec le graphe de composition de la masse numérique pour suivre la place relative des pros dans le circuit."
+    ],
+    pilotage: [
+      "Cet indicateur est central pour apprécier l’ancrage économique de la Gonette.",
+      "Une hausse peut être encourageante si elle accompagne davantage de débouchés internes ; elle peut inviter à vigilance si elle signale une accumulation sans redépense."
+    ],
+    perimeter: [
+      "Moyenne journalière des soldes professionnels positifs.",
+      "Les comptes P0000 et P9999 sont exclus afin de distinguer le réseau professionnel ordinaire des comptes entreprise Gonette."
+    ],
+    formulas: [
+      "Stock professionnels du réseau moyen = moyenne quotidienne de la somme des soldes professionnels positifs, hors P0000 / P9999.",
+      "Part de masse = stock professionnels du réseau moyen / masse numérique moyenne."
+    ],
+    sources: [
+      "pilotage-holdings-summary.holdings_reference.average_positive_professional_network_stock",
+      "pilotage-holdings-summary.holdings_reference.average_professional_network_stock_share_of_numeric_mass"
+    ]
+  },
+
+  holdingsAverageGonetteBusinessAccountsStock: {
+    title: "Stock comptes entreprise Gonette",
+    summary: "Cet indicateur isole le stock moyen porté par les comptes entreprise Gonette P0000 / P9999.",
+    usefulness: "Ces comptes n’ont pas la même signification que les professionnels ordinaires du réseau. Les distinguer évite de mélanger détention économique diffuse et mouvements liés aux comptes opérateurs de la structure Gonette.",
+    reading: [
+      "La valeur affichée mesure le stock positif moyen porté par P0000 / P9999.",
+      "Une hausse ou une baisse doit être interprétée comme un signal opérateur spécifique, pas comme une évolution directe de l’ancrage professionnel.",
+      "La part indiquée sous la valeur rapporte ces comptes à la masse numérique moyenne."
+    ],
+    crossReading: [
+      "À lire séparément du stock professionnel du réseau, justement pour éviter les confusions de périmètre.",
+      "À rapprocher de l’onglet sur les opérations associatives / techniques lorsque l’on cherche à comprendre les mouvements impliquant les comptes opérateurs.",
+      "À croiser avec la composition de la masse numérique pour voir si ces comptes prennent ou non davantage de place dans le stock total."
+    ],
+    pilotage: [
+      "Cet indicateur sert surtout de garde-fou analytique : il empêche de surinterpréter comme « professionnel » un stock qui relève des comptes entreprise Gonette.",
+      "Une variation forte de ce stock peut justifier un contrôle des opérations de structure ou des rythmes de régularisation."
+    ],
+    perimeter: [
+      "Comptes retenus : P0000 et P9999.",
+      "Moyenne journalière des soldes positifs de ces comptes sur les jours alignés."
+    ],
+    formulas: [
+      "Stock comptes entreprise Gonette = moyenne quotidienne de la somme des soldes positifs P0000 / P9999.",
+      "Part de masse = stock comptes entreprise Gonette / masse numérique moyenne."
+    ],
+    sources: [
+      "pilotage-holdings-summary.holdings_reference.average_positive_gonette_business_accounts_stock",
+      "pilotage-holdings-summary.holdings_reference.average_gonette_business_accounts_stock_share_of_numeric_mass"
+    ]
+  },
+
+  holdingsActive30Stock: {
+    title: "Stock actif ≤ 30 jours",
+    summary: "Cette carte mesure le stock positif particulier détenu à la clôture par des comptes ayant connu une activité dans les 30 derniers jours.",
+    usefulness: "Elle donne une photographie du stock encore proche de l’usage récent. C’est une manière simple d’estimer la part de détention qui reste, à court terme, reliée à une dynamique de circulation.",
+    reading: [
+      "La valeur en Gonettes correspond au stock détenu par les particuliers considérés comme actifs à la clôture.",
+      "Le nombre de comptes mesure l’étendue du groupe concerné.",
+      "Le pourcentage indique la part de ce stock actif dans l’ensemble du stock particulier positif de clôture."
+    ],
+    crossReading: [
+      "À lire avec les catégories dormantes 31–90 j et > 90 j pour comprendre la structure complète du stock particulier.",
+      "À rapprocher du graphe de dormance, qui montre l’évolution mensuelle de ces masses.",
+      "À croiser avec la mobilisation vers les pros : un stock plus actif peut contribuer davantage aux paiements U→P, sans relation mécanique."
+    ],
+    pilotage: [
+      "Une part active élevée suggère que la détention particulière reste largement connectée à un usage récent.",
+      "Une baisse durable peut justifier d’examiner les leviers de relance des usagers ou la disponibilité des usages concrets."
+    ],
+    perimeter: [
+      "Comptes particuliers à solde positif à la date de clôture.",
+      "Activité récente définie par au moins une transaction impliquant le compte dans les 30 jours précédant la clôture."
+    ],
+    formulas: [
+      "Stock actif ≤ 30 j = somme des soldes positifs des comptes particuliers dont la dernière activité date de 30 jours ou moins.",
+      "Part active = stock actif ≤ 30 j / stock particulier positif total de clôture."
+    ],
+    sources: [
+      "pilotage-holdings-summary.holdings_metrics.dormancy.buckets[active_30]"
+    ]
+  },
+
+  holdingsDormant31To90Stock: {
+    title: "Stock dormant 31–90 jours",
+    summary: "Cette carte mesure le stock particulier positif porté à la clôture par des comptes sans activité depuis 31 à 90 jours.",
+    usefulness: "Elle décrit une zone intermédiaire : la monnaie s’éloigne de l’usage récent, mais elle n’appartient pas encore à la dormance longue. C’est souvent une strate intéressante pour des actions de remobilisation précoce.",
+    reading: [
+      "La valeur en Gonettes mesure le stock concerné.",
+      "Le nombre de comptes indique combien de porteurs se situent dans cette phase de décrochage modéré.",
+      "Le pourcentage rapporte ce stock au total du stock particulier positif de clôture."
+    ],
+    crossReading: [
+      "À comparer à la part active ≤ 30 j et au stock dormant > 90 j.",
+      "À suivre avec le graphe de dormance pour repérer un glissement progressif du stock vers des durées d’inactivité plus longues.",
+      "À mettre en regard des politiques de relance ou de communication vers les utilisateurs."
+    ],
+    pilotage: [
+      "Une hausse de cette strate peut être un signal précoce d’essoufflement de l’usage particulier.",
+      "Elle peut aider à cibler des interventions avant que la dormance ne devienne plus installée."
+    ],
+    perimeter: [
+      "Comptes particuliers à solde positif à la clôture.",
+      "Dernière activité située entre 31 et 90 jours avant la clôture."
+    ],
+    formulas: [
+      "Stock dormant 31–90 j = somme des soldes positifs des comptes particuliers dont la dernière activité remonte à 31–90 jours.",
+      "Part dormante 31–90 j = stock dormant 31–90 j / stock particulier positif total de clôture."
+    ],
+    sources: [
+      "pilotage-holdings-summary.holdings_metrics.dormancy.buckets[dormant_31_90]"
+    ]
+  },
+
+  holdingsDormantGt90Stock: {
+    title: "Stock dormant > 90 jours",
+    summary: "Cette carte agrège le stock particulier positif porté par des comptes sans activité depuis plus de 90 jours.",
+    usefulness: "Elle matérialise la part du stock la plus éloignée de l’usage récent. C’est un indicateur important pour suivre les masses durablement stationnées chez les particuliers et évaluer l’ampleur d’un éventuel chantier de réactivation.",
+    reading: [
+      "La valeur en Gonettes additionne les strates 91–180 jours et > 180 jours.",
+      "Le nombre de comptes affiché suit la même logique d’agrégation.",
+      "Le pourcentage rapporte cette dormance longue au stock particulier positif de clôture."
+    ],
+    crossReading: [
+      "À lire avec la réactivation des stocks dormants : un stock > 90 jours élevé prend un sens différent si une part significative revient ensuite en circulation.",
+      "À rapprocher du stock actif ≤ 30 j pour suivre le contraste entre monnaie encore proche de l’usage et monnaie très éloignée.",
+      "À croiser avec les stratégies de réengagement des sociétaires ou usagers."
+    ],
+    pilotage: [
+      "Une hausse prolongée de ce stock peut révéler un affaiblissement de la mise en usage côté particuliers.",
+      "Cet indicateur peut servir à mesurer l’enjeu potentiel de campagnes de remobilisation ciblées."
+    ],
+    perimeter: [
+      "Comptes particuliers à solde positif à la clôture.",
+      "Agrégation des strates de dormance 91–180 jours et > 180 jours."
+    ],
+    formulas: [
+      "Stock dormant > 90 j = stock dormant 91–180 j + stock dormant > 180 j.",
+      "Part dormante > 90 j = stock dormant > 90 j / stock particulier positif total de clôture."
+    ],
+    sources: [
+      "pilotage-holdings-summary.holdings_metrics.dormancy.buckets[dormant_91_180]",
+      "pilotage-holdings-summary.holdings_metrics.dormancy.buckets[dormant_gt_180]"
+    ]
+  },
+
+  holdingsReactivatedUserCount: {
+    title: "Comptes réactivés",
+    summary: "Cette carte compte les particuliers qui détenaient un solde positif, étaient dormants depuis plus de 90 jours à l’ouverture de la période, puis ont enregistré au moins une transaction.",
+    usefulness: "Elle permet de mesurer si un stock éloigné de l’usage peut effectivement revenir vers une activité observable. C’est un indicateur de remobilisation, pas seulement de présence de soldes.",
+    reading: [
+      "Le nombre affiché compte les comptes effectivement réactivés pendant la période.",
+      "Le pourcentage les rapporte à l’ensemble des comptes dormants > 90 jours identifiés à l’ouverture.",
+      "Une réactivation signifie ici retour à une activité quelconque, pas nécessairement un paiement vers un professionnel."
+    ],
+    crossReading: [
+      "À lire avec le « Stock dormant porté par ces comptes » pour connaître le poids monétaire associé.",
+      "À rapprocher des « Paiements U→P issus des comptes réactivés » pour savoir si la réactivation se traduit en circulation économique vers le réseau professionnel.",
+      "À comparer avec le stock dormant > 90 jours à la clôture afin de distinguer réactivation partielle et renouvellement de la dormance."
+    ],
+    pilotage: [
+      "Cet indicateur peut servir à évaluer l’efficacité de dispositifs de relance ou d’accompagnement des utilisateurs.",
+      "Une faible réactivation malgré un stock dormant élevé peut signaler un gisement de monnaie encore peu remobilisé."
+    ],
+    perimeter: [
+      "Population de départ : comptes particuliers à solde positif et dormants > 90 jours à l’ouverture de la période.",
+      "Réactivation : au moins une transaction impliquant le compte pendant la période."
+    ],
+    formulas: [
+      "Comptes réactivés = nombre de comptes dormants > 90 j à l’ouverture ayant enregistré au moins une transaction pendant la période.",
+      "Taux de réactivation = comptes réactivés / comptes dormants > 90 j à l’ouverture."
+    ],
+    sources: [
+      "pilotage-holdings-summary.holdings_metrics.reactivation.reactivated_user_count",
+      "pilotage-holdings-summary.holdings_metrics.reactivation.reactivated_user_share_of_dormant_gt_90_opening_users"
+    ]
+  },
+
+  holdingsReactivatedOpeningStock: {
+    title: "Stock dormant porté par les comptes réactivés",
+    summary: "Cette carte mesure le volume de Gonettes qui était détenu à l’ouverture par les comptes dormants > 90 jours ayant ensuite été réactivés.",
+    usefulness: "Elle complète le simple nombre de comptes réactivés. Quelques comptes peuvent représenter un stock important ; inversement, un grand nombre de réactivations peut ne concerner qu’un volume monétaire limité.",
+    reading: [
+      "La valeur affichée porte sur le stock dormant d’ouverture associé aux comptes qui seront réactivés pendant la période.",
+      "Le pourcentage le rapporte au stock dormant > 90 jours total identifié à l’ouverture.",
+      "Cet indicateur mesure un potentiel remobilisé, pas le volume réellement dépensé ensuite."
+    ],
+    crossReading: [
+      "À lire avec le nombre de comptes réactivés pour distinguer ampleur sociale et ampleur monétaire de la réactivation.",
+      "À rapprocher des paiements U→P issus des comptes réactivés pour voir quelle part de ce stock revient effectivement vers les professionnels.",
+      "À croiser avec la dormance longue totale."
+    ],
+    pilotage: [
+      "Une part élevée signifie que les comptes réactivés représentaient une fraction importante du stock dormant initial.",
+      "Une part faible peut indiquer que les réactivations concernent surtout de petits soldes ou qu’un stock important reste encore à remobiliser."
+    ],
+    perimeter: [
+      "Stock mesuré à l’ouverture de la période.",
+      "Comptes concernés : particuliers dormants > 90 jours à l’ouverture, puis réactivés au cours de la période."
+    ],
+    formulas: [
+      "Stock dormant porté par les comptes réactivés = somme des soldes d’ouverture des comptes réactivés.",
+      "Part de stock réactivé = stock d’ouverture de ces comptes / stock dormant > 90 j total à l’ouverture."
+    ],
+    sources: [
+      "pilotage-holdings-summary.holdings_metrics.reactivation.reactivated_opening_stock",
+      "pilotage-holdings-summary.holdings_metrics.reactivation.reactivated_stock_share_of_dormant_gt_90_opening_stock"
+    ]
+  },
+
+  holdingsReactivatedEconomicUpVolume: {
+    title: "Paiements U→P issus des comptes réactivés",
+    summary: "Cette carte mesure le volume de paiements vers les professionnels réalisé, pendant la période, par les comptes particuliers réactivés.",
+    usefulness: "Elle indique si la réactivation se traduit en circulation économique directement utile au réseau professionnel. C’est un pont entre remobilisation d’usagers et activité effective.",
+    reading: [
+      "La valeur en Gonettes correspond au volume des paiements U→P réalisés par les comptes réactivés.",
+      "Le nombre de transactions précise l’intensité d’usage associée.",
+      "Un compte peut être réactivé sans effectuer de paiement U→P ; cette carte se concentre uniquement sur les flux économiques vers les pros."
+    ],
+    crossReading: [
+      "À lire avec le nombre de comptes réactivés : beaucoup de réactivations n’impliquent pas forcément beaucoup de paiements vers les pros.",
+      "À rapprocher du stock dormant porté par ces comptes pour estimer la capacité de transformation d’un stock remobilisé en activité économique.",
+      "À comparer au volume U→P global si l’on veut mesurer le poids relatif des réactivations dans l’activité des particuliers."
+    ],
+    pilotage: [
+      "Cet indicateur permet de distinguer une réactivation simplement administrative ou ponctuelle d’une réactivation réellement contributive à la circulation économique.",
+      "Il peut aider à objectiver l’impact de campagnes de relance orientées vers l’usage marchand."
+    ],
+    perimeter: [
+      "Comptes particuliers identifiés comme réactivés sur la période.",
+      "Flux retenus : paiements économiques U→P effectués par ces comptes pendant la période."
+    ],
+    formulas: [
+      "Volume U→P des comptes réactivés = somme des paiements particuliers → professionnels réalisés par les comptes réactivés.",
+      "Nombre de transactions = nombre de paiements U→P associés à ces comptes."
+    ],
+    sources: [
+      "pilotage-holdings-summary.holdings_metrics.reactivation.economic_up_volume_from_reactivated_users",
+      "pilotage-holdings-summary.holdings_metrics.reactivation.economic_up_transaction_count_from_reactivated_users"
+    ]
+  },
+
   stockFlowResidual: {
     title: "Résiduel de rapprochement",
     summary: "Cet indicateur mesure l’écart entre la variation du stock numérique Odoo et le flux net d’alimentations / sorties identifié dans Cyclos.",
@@ -7376,6 +8997,7 @@ function bindPilotageTabs() {
           "pilotageInternalReuseHistory",
           "pilotageLm3History",
           "pilotageHoldingsStockShare",
+          "pilotageHoldingsMassComposition",
           "pilotageHoldingsMobilization",
           "pilotageHoldingsDormancy"
         ].forEach((chartKey) => {
@@ -7390,13 +9012,22 @@ function bindPilotageTabs() {
 }
 
 async function renderMonetaryPilotageView(forceReload = false) {
-  destroyMonetaryPilotageCharts();
+  const preserveVisibleView = shouldPreservePeriodRefreshView(
+    "monetary-pilotage",
+    forceReload
+  );
+
+  if (!preserveVisibleView) {
+    destroyMonetaryPilotageCharts();
+  }
 
   appState.currentView = "monetary-pilotage";
   syncSidebarView("monetary-pilotage");
   setTitle("Pilotage monétaire");
 
-  content.innerHTML = `<div class="card">Chargement du pilotage monétaire...</div>`;
+  if (!preserveVisibleView) {
+    content.innerHTML = `<div class="card">Chargement du pilotage monétaire...</div>`;
+  }
 
   try {
     const [
@@ -7425,6 +9056,10 @@ async function renderMonetaryPilotageView(forceReload = false) {
     const reference = data?.monetary_reference || {};
     const metrics = data?.pilotage_metrics || {};
     const pilotageSeries = timeseries?.items || [];
+    const pilotageSeriesForCharts = buildPilotageMonthlyChartSeries(
+      pilotageSeries,
+      requestedPeriod
+    );
     const pilotageReuseYearlySeries = reuseYearly?.items || [];
     const pilotageLm3YearlySeries = lm3Yearly?.items || [];
 
@@ -7437,6 +9072,10 @@ async function renderMonetaryPilotageView(forceReload = false) {
     const holdingsDormancy = holdingsMetrics?.dormancy || {};
     const holdingsReactivation = holdingsMetrics?.reactivation || {};
     const holdingsSeries = holdingsTimeseries?.items || [];
+    const holdingsSeriesForCharts = buildPilotageMonthlyChartSeries(
+      holdingsSeries,
+      requestedPeriod
+    );
 
     const circulation = metrics.circulation || {};
     const entryExit = metrics.entry_exit_pressure || {};
@@ -7496,6 +9135,24 @@ async function renderMonetaryPilotageView(forceReload = false) {
       holdingsDisplayedPeriod?.end
     );
 
+    const holdingsPeriodDiffersFromPilotage = (
+      holdingsDisplayedPeriod?.start &&
+      holdingsDisplayedPeriod?.end &&
+      (
+        holdingsDisplayedPeriod.start !== displayedPilotagePeriod?.start ||
+        holdingsDisplayedPeriod.end !== displayedPilotagePeriod?.end
+      )
+    );
+
+    const holdingsPeriodNotice = holdingsPeriodDiffersFromPilotage
+      ? `
+          <div class="pilotage-period-line">
+            Période de détention effective :
+            <strong>${holdingsEffectiveStartLabel} → ${holdingsEffectiveEndLabel}</strong>
+          </div>
+        `
+      : "";
+
     const effectiveStartLabel = formatIsoDateFr(displayedPilotagePeriod.start);
     const effectiveEndLabel = formatIsoDateFr(displayedPilotagePeriod.end);
 
@@ -7521,26 +9178,23 @@ async function renderMonetaryPilotageView(forceReload = false) {
         </div>
       `;
 
+    if (preserveVisibleView) {
+      destroyMonetaryPilotageCharts();
+    }
+
     content.innerHTML = `
       <section class="card pilotage-overview-card">
         <div class="pilotage-overview-header pilotage-overview-header-refined">
           <div>
             <div class="stat-label">Analyse croisée Odoo × Cyclos</div>
-            <h2>Pilotage monétaire</h2>
+            <h2>La Gonette numérique circule. Mais que raconte vraiment son mouvement ?</h2>
             <p>
-              Cette vue analyse la vitalité de la Gonette numérique à partir de cinq dimensions :
-              <strong>rotation économique</strong>, <strong>rétention des alimentations</strong>,
-              <strong>rendement circulatoire</strong>, <strong>robustesse apparente face aux reconversions</strong>
-              et <strong>détention mobilisable chez les particuliers</strong>.
+              Cette lecture croise les <strong>flux Cyclos</strong> et les <strong>stocks comptables Odoo</strong>
+              pour distinguer ce qui <strong>entre</strong>, ce qui <strong>circule</strong>,
+              ce qui <strong>s’ancre</strong> et ce qui reste <strong>à remobiliser</strong>.
             </p>
           </div>
         </div>
-
-        <div class="pilotage-period-line">
-          ${pilotagePeriodLabel} :
-          <strong>${effectiveStartLabel} → ${effectiveEndLabel}</strong>
-        </div>
-
         ${pilotagePeriodNotice}
       </section>
 
@@ -8057,21 +9711,37 @@ async function renderMonetaryPilotageView(forceReload = false) {
         <section class="card pilotage-section-card pilotage-holdings-overview-card">
           <div class="pilotage-section-heading">
             <div class="stat-label">Détention &amp; ancrage</div>
-            <h3>Des soldes particuliers à leur mobilisation économique</h3>
+            <h3>Où la Gonette numérique stationne-t-elle — et reste-t-elle disponible pour circuler ?</h3>
             <p>
-              Cette lecture observe la part de Gonettes numériques stationnée chez les particuliers,
-              la frontière entre masse active et masse dormante, ainsi que la capacité de ce stock
-              à se transformer en paiements vers les professionnels.
+              Une Gonette dépensée ne disparaît pas : elle change de main.
+              Cet onglet suit où elle stationne — chez les <strong>particuliers</strong>,
+              les <strong>professionnels du réseau</strong> ou les <strong>comptes entreprise Gonette</strong> —
+              puis mesure ce qui reste <strong>mobilisable</strong>, <strong>dormant</strong> ou <strong>réactivé</strong>.
             </p>
           </div>
 
-          <div class="pilotage-period-line">
-            Période de détention effective :
-            <strong>${holdingsEffectiveStartLabel} → ${holdingsEffectiveEndLabel}</strong>
+          ${holdingsPeriodNotice}
+
+          <aside class="pilotage-holdings-monetary-reference-pill">
+            <span>Repère comptable</span>
+            <strong>${gonettes(holdingsReference.average_numeric_mass || 0)}</strong>
+            <small>
+              Masse numérique moyenne Odoo · référence des parts affichées ici
+            </small>
+          </aside>
+
+          <div class="pilotage-holdings-story-step pilotage-holdings-story-step-opening">
+            <span>1</span>
+            <div>
+              <h3>Où stationne la Gonette numérique ?</h3>
+              <p>
+                Ces trois familles de comptes donnent la première lecture de la détention numérique sur la période.
+              </p>
+            </div>
           </div>
 
-          <div class="pilotage-metric-grid pilotage-holdings-kpi-grid">
-            <article class="pilotage-metric-card pilotage-holdings-highlight-card">
+          <div class="pilotage-metric-grid pilotage-holdings-category-grid">
+            <article class="pilotage-metric-card pilotage-holdings-highlight-card pilotage-holdings-category-card pilotage-holdings-category-users" data-pilotage-help="holdingsAverageUserStock">
               <span>Stock particulier moyen</span>
               <strong>${gonettes(holdingsReference.average_positive_user_stock || 0)}</strong>
               <small>
@@ -8080,40 +9750,66 @@ async function renderMonetaryPilotageView(forceReload = false) {
               </small>
             </article>
 
-            <article class="pilotage-metric-card pilotage-holdings-highlight-card">
-              <span>Particuliers avec solde positif</span>
-              <strong>${formatPilotageInteger(holdingsClosing.users_positive || 0)}</strong>
+            <article class="pilotage-metric-card pilotage-holdings-highlight-card pilotage-holdings-category-card pilotage-holdings-category-professionals" data-pilotage-help="holdingsAverageProfessionalNetworkStock">
+              <span>Stock professionnels du réseau moyen</span>
+              <strong>${gonettes(holdingsReference.average_positive_professional_network_stock || 0)}</strong>
               <small>
-                ${gonettes(holdingsClosing.positive_user_stock || 0)}
-                détenues à la clôture
+                ${formatPilotagePercent(holdingsReference.average_professional_network_stock_share_of_numeric_mass)}
+                de la masse numérique moyenne · hors P0000 / P9999
               </small>
             </article>
 
-            <article class="pilotage-metric-card pilotage-holdings-highlight-card">
-              <span>Stock actif ≤ 30 jours</span>
-              <strong>${gonettes(holdingsActive30Bucket.positive_user_stock || 0)}</strong>
+            <article class="pilotage-metric-card pilotage-holdings-highlight-card pilotage-holdings-category-card pilotage-holdings-category-gonette" data-pilotage-help="holdingsAverageGonetteBusinessAccountsStock">
+              <span>Stock comptes entreprise Gonette</span>
+              <strong>${gonettes(holdingsReference.average_positive_gonette_business_accounts_stock || 0)}</strong>
               <small>
-                ${formatPilotagePercent(holdingsActive30Bucket.stock_share_of_positive_user_stock)}
-                du stock particulier de clôture
+                ${formatPilotagePercent(holdingsReference.average_gonette_business_accounts_stock_share_of_numeric_mass)}
+                de la masse numérique moyenne · P0000 / P9999
               </small>
             </article>
 
-            <article class="pilotage-metric-card pilotage-holdings-highlight-card">
-              <span>Mobilisation du stock particulier</span>
-              <strong>${formatPilotageGonetteYield(holdingsMobilization.economic_up_volume_per_100_g_average_user_stock)}</strong>
-              <small>
-                dépensées vers les pros pour 100 G détenues en moyenne
-              </small>
-            </article>
           </div>
-        </section>
 
-        <section class="pilotage-charts-stack">
+          <div class="pilotage-holdings-ownership-context">
+              <span>À la clôture</span>
+              <strong>${formatPilotageInteger(holdingsClosing.users_positive || 0)} particuliers à solde positif</strong>
+              <small>${gonettes(holdingsClosing.positive_user_stock || 0)} détenues</small>
+            </div>
+
+            </section>
+
+                  <section class="pilotage-charts-stack">
+            <div class="pilotage-holdings-story-step">
+              <span>2</span>
+              <div>
+                <h3>Comment cette détention se répartit-elle et évolue-t-elle ?</h3>
+                <p>
+                  La composition situe les grandes parts de masse ; les stocks moyens montrent ensuite
+                  les volumes réellement détenus et leur déplacement dans le temps.
+                </p>
+              </div>
+            </div>
+
+<article class="card stats-chart-card stats-chart-card-full pilotage-chart-card">
+            ${buildStatsChartHeader({
+              chartKey: "pilotageHoldingsMassComposition",
+              title: "Composition de la masse numérique par catégorie de détenteurs",
+              description: "Les barres empilées montrent la part moyenne de la masse numérique portée par les particuliers, les professionnels du réseau, les comptes entreprise Gonette et le reste non encore ventilé.",
+              supportsMetricToggle: false
+            })}
+
+            <div class="pilotage-chart-frame pilotage-chart-frame-compact">
+              <canvas id="pilotageHoldingsMassCompositionChart"></canvas>
+            </div>
+          </article>
+
+          
+
           <article class="card stats-chart-card stats-chart-card-full pilotage-chart-card">
             ${buildStatsChartHeader({
               chartKey: "pilotageHoldingsStockShare",
-              title: "Stock particulier moyen et poids dans la masse numérique",
-              description: "Ce graphe suit le stock positif moyen détenu par les particuliers et sa part dans la masse numérique Odoo moyenne, mois par mois.",
+              title: "Stocks numériques moyens par catégorie de détenteurs",
+              description: "Ce graphe compare, mois par mois, le stock positif moyen détenu par les particuliers, celui des professionnels du réseau et celui des comptes entreprise Gonette.",
               supportsMetricToggle: false
             })}
 
@@ -8122,20 +9818,20 @@ async function renderMonetaryPilotageView(forceReload = false) {
             </div>
           </article>
 
-          <article class="card stats-chart-card stats-chart-card-full pilotage-chart-card">
-            ${buildStatsChartHeader({
-              chartKey: "pilotageHoldingsMobilization",
-              title: "Mobilisation économique du stock particulier",
-              description: "Chaque barre indique le volume U→P observé pour 100 G de stock particulier moyen sur le mois.",
-              supportsMetricToggle: false
-            })}
+          
 
-            <div class="pilotage-chart-frame pilotage-chart-frame-compact">
-              <canvas id="pilotageHoldingsMobilizationChart"></canvas>
+            <div class="pilotage-holdings-story-step">
+              <span>3</span>
+              <div>
+                <h3>Quelle part du stock particulier reste proche de l’activité ?</h3>
+                <p>
+                  Une monnaie détenue n’est pas nécessairement immobilisée. Cette lecture distingue
+                  ce qui reste lié à une activité récente de ce qui s’éloigne progressivement de l’usage.
+                </p>
+              </div>
             </div>
-          </article>
 
-          <article class="card stats-chart-card stats-chart-card-full pilotage-chart-card">
+<article class="card stats-chart-card stats-chart-card-full pilotage-chart-card">
             ${buildStatsChartHeader({
               chartKey: "pilotageHoldingsDormancy",
               title: "Masse particulière active / dormante",
@@ -8148,11 +9844,7 @@ async function renderMonetaryPilotageView(forceReload = false) {
             </div>
           </article>
 
-          ${holdingsPartialMonthNote}
-        </section>
-
-        <section class="pilotage-dashboard-grid">
-          <article class="card pilotage-section-card pilotage-holdings-dormancy-card">
+            <article class="card pilotage-section-card pilotage-holdings-dormancy-card">
             <div class="pilotage-section-heading">
               <h3>Masse active / dormante à la clôture</h3>
               <p>
@@ -8162,7 +9854,7 @@ async function renderMonetaryPilotageView(forceReload = false) {
             </div>
 
             <div class="pilotage-metric-grid pilotage-holdings-dormancy-grid">
-              <article class="pilotage-metric-card">
+              <article class="pilotage-metric-card" data-pilotage-help="holdingsActive30Stock">
                 <span>Actif ≤ 30 j</span>
                 <strong>${gonettes(holdingsActive30Bucket.positive_user_stock || 0)}</strong>
                 <small>
@@ -8171,7 +9863,7 @@ async function renderMonetaryPilotageView(forceReload = false) {
                 </small>
               </article>
 
-              <article class="pilotage-metric-card">
+              <article class="pilotage-metric-card" data-pilotage-help="holdingsDormant31To90Stock">
                 <span>Dormant 31–90 j</span>
                 <strong>${gonettes(holdingsDormant31To90Bucket.positive_user_stock || 0)}</strong>
                 <small>
@@ -8180,7 +9872,7 @@ async function renderMonetaryPilotageView(forceReload = false) {
                 </small>
               </article>
 
-              <article class="pilotage-metric-card">
+              <article class="pilotage-metric-card" data-pilotage-help="holdingsDormantGt90Stock">
                 <span>Dormant > 90 j</span>
                 <strong>${gonettes(holdingsDormantGt90Stock || 0)}</strong>
                 <small>
@@ -8194,7 +9886,34 @@ async function renderMonetaryPilotageView(forceReload = false) {
             </div>
           </article>
 
-          <article class="card pilotage-section-card pilotage-holdings-reactivation-card">
+
+          
+
+            <div class="pilotage-holdings-story-step">
+              <span>4</span>
+              <div>
+                <h3>Cette détention revient-elle vers l’économie locale ?</h3>
+                <p>
+                  La mobilisation rapporte les paiements U→P au stock particulier moyen :
+                  elle relie la monnaie détenue à sa capacité à revenir vers les professionnels.
+                </p>
+              </div>
+            </div>
+
+<article class="card stats-chart-card stats-chart-card-full pilotage-chart-card">
+            ${buildStatsChartHeader({
+              chartKey: "pilotageHoldingsMobilization",
+              title: "Intensité de mobilisation du stock particulier",
+              description: "Chaque point indique le volume mensuel U→P observé pour 100 G de stock particulier moyen. L’unité est exprimée en G / 100 G détenues, pas en pourcentage.",
+              supportsMetricToggle: false
+            })}
+
+            <div class="pilotage-chart-frame pilotage-chart-frame-compact">
+              <canvas id="pilotageHoldingsMobilizationChart"></canvas>
+            </div>
+          </article>
+
+            <article class="card pilotage-section-card pilotage-holdings-reactivation-card">
             <div class="pilotage-section-heading">
               <h3>Réactivation des stocks dormants</h3>
               <p>
@@ -8204,7 +9923,7 @@ async function renderMonetaryPilotageView(forceReload = false) {
             </div>
 
             <div class="pilotage-metric-grid pilotage-holdings-reactivation-grid">
-              <article class="pilotage-metric-card">
+              <article class="pilotage-metric-card" data-pilotage-help="holdingsReactivatedUserCount">
                 <span>Comptes réactivés</span>
                 <strong>${formatPilotageInteger(holdingsReactivation.reactivated_user_count || 0)}</strong>
                 <small>
@@ -8213,7 +9932,7 @@ async function renderMonetaryPilotageView(forceReload = false) {
                 </small>
               </article>
 
-              <article class="pilotage-metric-card">
+              <article class="pilotage-metric-card" data-pilotage-help="holdingsReactivatedOpeningStock">
                 <span>Stock dormant porté par ces comptes</span>
                 <strong>${gonettes(holdingsReactivation.reactivated_opening_stock || 0)}</strong>
                 <small>
@@ -8222,7 +9941,7 @@ async function renderMonetaryPilotageView(forceReload = false) {
                 </small>
               </article>
 
-              <article class="pilotage-metric-card">
+              <article class="pilotage-metric-card" data-pilotage-help="holdingsReactivatedEconomicUpVolume">
                 <span>Paiements U→P issus des comptes réactivés</span>
                 <strong>${gonettes(holdingsReactivation.economic_up_volume_from_reactivated_users || 0)}</strong>
                 <small>
@@ -8232,23 +9951,31 @@ async function renderMonetaryPilotageView(forceReload = false) {
               </article>
             </div>
           </article>
-        </section>
-      </section>
+
+
+          
+
+            ${holdingsPartialMonthNote}
+          </section>      </section>
     `;
 
     bindPilotageIndicatorHelpButtons();
     bindPilotageTabs();
     bindPilotageLm3ChainsDetails();
     renderMonetaryPilotageCharts(
-      pilotageSeries,
+      pilotageSeriesForCharts,
       data,
       pilotageReuseYearlySeries,
       pilotageLm3YearlySeries,
-      holdingsSeries,
+      holdingsSeriesForCharts,
       holdingsSummary
     );
   } catch (error) {
     console.error("Erreur lors du chargement du pilotage monétaire :", error);
+
+    if (preserveVisibleView) {
+      destroyMonetaryPilotageCharts();
+    }
 
     content.innerHTML = `
       <section class="card pilotage-empty-card">
@@ -8259,18 +9986,2741 @@ async function renderMonetaryPilotageView(forceReload = false) {
   }
 }
 
-async function renderProsView(forceReload = false) {
-  destroyCartographyMap();
-  appState.currentView = "pros";
-  syncSidebarView("pros");
-  setTitle("Activité des professionnels");
 
-  if (forceReload || appState.prosData.length === 0) {
-    content.innerHTML = `<div class="card">Chargement...</div>`;
-    appState.prosData = await apiGet(`/api/pros${getPeriodQueryParam()}`);
+
+function formatProfessionalSummaryInteger(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return "—";
   }
 
+  return Number(value).toLocaleString("fr-FR", {
+    maximumFractionDigits: 0
+  });
+}
+
+function formatProfessionalSummaryRatio(value, digits = 1) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return "—";
+  }
+
+  return `${(Number(value) * 100).toLocaleString("fr-FR", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits
+  })} %`;
+}
+
+function formatProfessionalSummaryMultiple(value, digits = 2) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return "—";
+  }
+
+  return `${Number(value).toLocaleString("fr-FR", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits
+  })}×`;
+}
+
+function renderProfessionalSummaryKpiCard(label, value, subtext) {
+  return `
+    <article class="professional-summary-kpi-card">
+      <div class="stat-label">${escapeHtml(label)}</div>
+      <div class="professional-summary-kpi-value">${value}</div>
+      <p>${escapeHtml(subtext)}</p>
+    </article>
+  `;
+}
+
+function renderProfessionalSummaryReferenceCard(label, value, subtext) {
+  return `
+    <article class="professional-summary-reference-card">
+      <div class="stat-label">${escapeHtml(label)}</div>
+      <strong>${value}</strong>
+      <span>${escapeHtml(subtext)}</span>
+    </article>
+  `;
+}
+
+function renderProfessionalSummaryPanel(flowSummary, holdingsSummary, pilotageSummary) {
+  const flowPayload = flowSummary || {};
+  const counts = flowPayload.professional_counts || {};
+  const flows = flowPayload.flows || {};
+  const aggregates = flowPayload.aggregates || {};
+
+  const up = flows.up || {};
+  const pp = flows.pp || {};
+  const pu = flows.pu || {};
+
+  const professionalReuse = (
+    pilotageSummary?.pilotage_metrics?.internal_reuse?.professionals
+    || {}
+  );
+
+  const professionalReusePropensity = (
+    professionalReuse.weighted_internal_reuse_propensity
+  );
+
+  const professionalMultiplierEstimated = (
+    professionalReuse.internal_multiplier_estimated
+  );
+
+  const professionalReuseAvailable = (
+    professionalReusePropensity !== null
+    && professionalReusePropensity !== undefined
+    && !Number.isNaN(Number(professionalReusePropensity))
+  );
+
+  const professionalMultiplierAvailable = (
+    professionalMultiplierEstimated !== null
+    && professionalMultiplierEstimated !== undefined
+    && !Number.isNaN(Number(professionalMultiplierEstimated))
+  );
+
+  const holdingsEffectivePeriod = holdingsSummary?.effective_period || null;
+  const holdingsReference = holdingsSummary?.holdings_reference || {};
+  const holdingsAvailable = Boolean(
+    holdingsEffectivePeriod
+    && holdingsReference
+    && holdingsReference.average_positive_professional_network_stock !== undefined
+  );
+
+  const averageProfessionalNetworkStock = holdingsAvailable
+    ? holdingsReference.average_positive_professional_network_stock
+    : null;
+
+  const averageProfessionalNetworkStockShare = holdingsAvailable
+    ? holdingsReference.average_professional_network_stock_share_of_numeric_mass
+    : null;
+
+  const userHoldingsAvailable = Boolean(
+    holdingsEffectivePeriod
+    && holdingsReference
+    && holdingsReference.average_positive_user_stock !== undefined
+  );
+
+  const averageUserStock = userHoldingsAvailable
+    ? holdingsReference.average_positive_user_stock
+    : null;
+
+  const averageUserStockShare = userHoldingsAvailable
+    ? holdingsReference.average_user_stock_share_of_numeric_mass
+    : null;
+
+  const averageNumericMass = holdingsAvailable
+    ? holdingsReference.average_numeric_mass
+    : null;
+
+  const stockReading = userHoldingsAvailable && holdingsAvailable
+    ? `
+      Sur les jours monétaires effectivement couverts, les
+      <strong>particuliers</strong> détenaient en moyenne
+      <strong>${euro(averageUserStock || 0)}</strong>,
+      soit <strong>${formatProfessionalSummaryRatio(averageUserStockShare)}</strong>
+      de la masse numérique moyenne. Les
+      <strong>professionnels du réseau</strong> détenaient de leur côté
+      <strong>${euro(averageProfessionalNetworkStock || 0)}</strong>,
+      soit <strong>${formatProfessionalSummaryRatio(averageProfessionalNetworkStockShare)}</strong>.
+    `
+    : holdingsAvailable
+      ? `
+        Sur les jours monétaires effectivement couverts, les
+        <strong>professionnels du réseau</strong> détenaient en moyenne
+        <strong>${euro(averageProfessionalNetworkStock || 0)}</strong>,
+        soit <strong>${formatProfessionalSummaryRatio(averageProfessionalNetworkStockShare)}</strong>
+        de la masse numérique moyenne. Le stock particulier moyen n’est pas disponible
+        sur cette période.
+      `
+      : userHoldingsAvailable
+        ? `
+          Sur les jours monétaires effectivement couverts, les
+          <strong>particuliers</strong> détenaient en moyenne
+          <strong>${euro(averageUserStock || 0)}</strong>,
+          soit <strong>${formatProfessionalSummaryRatio(averageUserStockShare)}</strong>
+          de la masse numérique moyenne. Le stock professionnel moyen n’est pas disponible
+          sur cette période.
+        `
+        : `
+          Les indicateurs de stock particulier et professionnel ne sont pas disponibles
+          sur cette période. Les flux économiques restent, eux, pleinement lisibles
+          sur l’historique transactionnel.
+        `;
+
+  return `
+    <section class="professional-summary-shell">
+      <div class="professional-summary-kpi-grid professional-summary-kpi-grid-balanced">
+        ${renderProfessionalSummaryKpiCard(
+          "Paiements particuliers → professionnels",
+          euro(up.volume || 0),
+          `${formatProfessionalSummaryInteger(up.count || 0)} paiement(s) U→P observé(s).`
+        )}
+
+        ${renderProfessionalSummaryKpiCard(
+          "Part des recettes pros venant des particuliers",
+          formatProfessionalSummaryRatio(aggregates.received_from_users_share),
+          "Poids des paiements U→P dans les recettes professionnelles observées."
+        )}
+
+        ${renderProfessionalSummaryKpiCard(
+          "Stock particulier moyen",
+          userHoldingsAvailable ? euro(averageUserStock || 0) : "—",
+          userHoldingsAvailable
+            ? `${formatProfessionalSummaryRatio(averageUserStockShare)} de la masse numérique moyenne.`
+            : "Disponible uniquement sur les périodes couvertes par les snapshots monétaires."
+        )}
+
+        ${renderProfessionalSummaryKpiCard(
+          "Professionnels actifs",
+          formatProfessionalSummaryInteger(counts.active || 0),
+          "Professionnels impliqués dans l’activité économique centrale observée."
+        )}
+
+        ${renderProfessionalSummaryKpiCard(
+          "Gonettes reçues par les pros",
+          euro(aggregates.received_volume || 0),
+          "Recettes reçues depuis les particuliers et les autres professionnels."
+        )}
+
+        ${renderProfessionalSummaryKpiCard(
+          "Stock pros du réseau moyen",
+          holdingsAvailable ? euro(averageProfessionalNetworkStock || 0) : "—",
+          holdingsAvailable
+            ? `${formatProfessionalSummaryRatio(averageProfessionalNetworkStockShare)} de la masse numérique moyenne.`
+            : "Disponible uniquement sur les périodes couvertes par les snapshots monétaires."
+        )}
+      </div>
+
+      <section class="card professional-summary-reading-card">
+        <div class="professional-analysis-section-heading">
+          <div class="stat-label">Lecture rapide de la période</div>
+          <h3>Ce que la rencontre entre particuliers et professionnels révèle ici</h3>
+        </div>
+
+        <p>
+          Sur la période, les particuliers ont réalisé
+          <strong>${formatProfessionalSummaryInteger(up.count || 0)}</strong>
+          paiement(s) vers les professionnels pour un volume de
+          <strong>${euro(up.volume || 0)}</strong>.
+          Ces flux <strong>U→P</strong> représentent
+          <strong>${formatProfessionalSummaryRatio(aggregates.received_from_users_share)}</strong>
+          des recettes professionnelles observées.
+        </p>
+
+        <p>
+          Du côté du réseau professionnel,
+          <strong>${formatProfessionalSummaryInteger(counts.active || 0)}</strong>
+          professionnels ont participé à l’activité économique numérique retenue par MLCFlux.
+          Ils ont reçu <strong>${euro(aggregates.received_volume || 0)}</strong>,
+          puis réémis <strong>${euro(aggregates.emitted_volume || 0)}</strong>
+          vers le réseau, soit une <strong>remise en circulation observée</strong> de
+          <strong>${formatProfessionalSummaryRatio(aggregates.observed_reemission_rate)}</strong>.
+          <strong>${formatProfessionalSummaryInteger(counts.involved_in_b2b || 0)}</strong>
+          professionnels ont été impliqués dans au moins un flux interprofessionnel.
+        </p>
+
+        <p>${stockReading}</p>
+      </section>
+
+      <section class="card professional-summary-reuse-card">
+        <div class="professional-analysis-section-heading">
+          <div class="stat-label">Qualité de circulation professionnelle</div>
+          <h3>Réémettre ne suffit pas : les recettes sont-elles réellement réemployées&nbsp;?</h3>
+          <p>
+            La remise en circulation observée rapporte les flux sortants des professionnels
+            aux recettes reçues sur la période. Le réemploi interne professionnel adopte
+            une lecture plus exigeante : il mesure la part pondérée des recettes professionnelles
+            effectivement redépensée dans l’activité économique du réseau.
+          </p>
+        </div>
+
+        <div class="professional-summary-reuse-grid">
+          ${renderProfessionalSummaryKpiCard(
+            "Remise en circulation observée",
+            formatProfessionalSummaryRatio(aggregates.observed_reemission_rate),
+            "Volumes économiquement réémis par les pros rapportés à leurs recettes économiques de la période."
+          )}
+
+          ${renderProfessionalSummaryKpiCard(
+            "Réemploi interne professionnel",
+            professionalReuseAvailable
+              ? formatProfessionalSummaryRatio(professionalReusePropensity)
+              : "—",
+            professionalReuseAvailable
+              ? "Part pondérée des recettes pros effectivement redépensée dans le réseau."
+              : "Indicateur indisponible pour cette période."
+          )}
+
+          ${renderProfessionalSummaryKpiCard(
+            "Multiplicateur professionnel estimé",
+            professionalMultiplierAvailable
+              ? formatProfessionalSummaryMultiple(professionalMultiplierEstimated)
+              : "—",
+            professionalMultiplierAvailable
+              ? "Capacité de recirculation associée au réemploi interne des professionnels."
+              : "Indicateur indisponible pour cette période."
+          )}
+        </div>
+
+        <div class="professional-summary-reuse-note">
+          <strong>Comment lire l’écart&nbsp;?</strong>
+          La <strong>remise en circulation observée</strong> peut intégrer des dépenses
+          financées par un stock accumulé avant la période. Le
+          <strong>réemploi interne professionnel</strong> cherche plutôt à estimer,
+          sur les recettes professionnelles effectivement observées,
+          la fraction qui revient dans l’économie Gonette.
+        </div>
+      </section>
+
+      <section class="card professional-summary-reference-block">
+        <div class="professional-analysis-section-heading">
+          <div class="stat-label">Grandeurs de référence</div>
+          <h3>Recevoir, réémettre, détenir</h3>
+          <p>
+            Ces repères donnent une première lecture de l’usage professionnel :
+            qui paie les pros, vers qui ils redépensent, et quelle masse numérique
+            reste portée par le tissu professionnel lorsqu’elle est mesurable.
+          </p>
+        </div>
+
+        <div class="professional-summary-reference-grid">
+          ${renderProfessionalSummaryReferenceCard(
+            "Particuliers → professionnels",
+            euro(up.volume || 0),
+            `${formatProfessionalSummaryInteger(up.count || 0)} paiement(s) U→P observé(s).`
+          )}
+
+          ${renderProfessionalSummaryReferenceCard(
+            "Professionnels → professionnels",
+            euro(pp.volume || 0),
+            `${formatProfessionalSummaryInteger(pp.count || 0)} paiement(s) P→P observé(s).`
+          )}
+
+          ${renderProfessionalSummaryReferenceCard(
+            "Professionnels → particuliers",
+            euro(pu.volume || 0),
+            `${formatProfessionalSummaryInteger(pu.count || 0)} flux P→U observé(s).`
+          )}
+
+          ${renderProfessionalSummaryReferenceCard(
+            "Professionnels receveurs",
+            formatProfessionalSummaryInteger(counts.receiving || 0),
+            "Professionnels ayant reçu au moins un flux économique."
+          )}
+
+          ${renderProfessionalSummaryReferenceCard(
+            "Professionnels émetteurs",
+            formatProfessionalSummaryInteger(counts.emitting || 0),
+            "Professionnels ayant réémis vers le réseau."
+          )}
+
+          ${renderProfessionalSummaryReferenceCard(
+            "Masse numérique moyenne",
+            holdingsAvailable ? euro(averageNumericMass || 0) : "—",
+            holdingsAvailable
+              ? "Repère comptable Odoo aligné avec les stocks professionnels."
+              : "Non disponible sur cette période."
+          )}
+        </div>
+      </section>
+
+      <section class="professional-summary-method-note">
+        <strong>Point méthodologique.</strong>
+        Les flux présentés ici reposent sur l’<strong>activité économique centrale MLCFlux</strong> :
+        les comptes techniques <strong>T_*</strong> en sont exclus, les particuliers de dispositif
+        <strong>UD_*</strong> sont intégrés à la famille des particuliers, et les comptes opérateurs
+        <strong>P0000 / P9999</strong> ne sont pas assimilés aux professionnels du réseau.
+        Côté stock, la catégorie <strong>professionnels du réseau</strong> reprend exactement
+        la définition du Pilotage monétaire : soldes professionnels positifs hors
+        <strong>comptes entreprise Gonette P0000 / P9999</strong>.
+      </section>
+    </section>
+  `;
+}
+
+
+function formatProfessionalCirculationMonthLabel(item) {
+  const monthKey = String(item?.month_key || "").trim();
+  const match = /^(\d{4})-(\d{2})$/.exec(monthKey);
+
+  if (!match) {
+    return monthKey || "—";
+  }
+
+  const year = match[1];
+  const monthIndex = Number(match[2]) - 1;
+  const monthLabels = [
+    "janv.",
+    "févr.",
+    "mars",
+    "avr.",
+    "mai",
+    "juin",
+    "juil.",
+    "août",
+    "sept.",
+    "oct.",
+    "nov.",
+    "déc."
+  ];
+
+  return `${monthLabels[monthIndex] || match[2]} ${year}`;
+}
+
+
+function isProfessionalReusePartialYear(item) {
+  const year = Number(item?.year || 0);
+  const start = String(item?.period_start || "");
+  const end = String(item?.period_end || "");
+
+  if (!year || !start || !end) {
+    return false;
+  }
+
+  return (
+    start !== `${year}-01-01`
+    || end !== `${year}-12-31`
+  );
+}
+
+function formatProfessionalReuseYearLabel(item) {
+  if (!item?.year) {
+    return "—";
+  }
+
+  return isProfessionalReusePartialYear(item)
+    ? `${item.year}*`
+    : String(item.year);
+}
+
+
+function buildProfessionalOutflowsComparisonChartConfig(items) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return null;
+  }
+
+  const labels = items.map((item) => formatProfessionalCirculationMonthLabel(item));
+
+  return {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Volumes réémis économiquement",
+          data: items.map((item) => Number(item?.aggregates?.emitted_volume || 0)),
+          tension: 0.28,
+          pointRadius: 2,
+          borderWidth: 2
+        },
+        {
+          label: "Sorties professionnelles du circuit",
+          data: items.map((item) => Number(item?.flows?.pt_outflows?.volume || 0)),
+          tension: 0.28,
+          pointRadius: 2,
+          borderWidth: 2,
+          borderDash: [7, 5]
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: "index",
+        intersect: false
+      },
+      plugins: {
+        legend: {
+          position: "bottom"
+        },
+        tooltip: {
+          callbacks: {
+            label(context) {
+              const value = Number(context.parsed?.y ?? context.raw ?? 0);
+              return `${context.dataset.label}: ${euro(value)}`;
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            callback(value) {
+              return Number(value || 0).toLocaleString("fr-FR", {
+                maximumFractionDigits: 0
+              });
+            }
+          }
+        }
+      }
+    }
+  };
+}
+
+function getProfessionalChainFatePrimaryModel(chainFateSummary) {
+  const payload = chainFateSummary || {};
+  const primaryModelKey = payload.primary_model || "u_to_p_seeds_only";
+
+  return payload?.models?.[primaryModelKey] || null;
+}
+
+function getProfessionalChainFateExtendedModel(chainFateSummary) {
+  return chainFateSummary?.models?.u_to_p_plus_t_to_p_seeds || null;
+}
+
+function formatProfessionalChainFateDays(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return "—";
+  }
+
+  return `${Number(value).toLocaleString("fr-FR", {
+    maximumFractionDigits: 0
+  })} j`;
+}
+
+function buildProfessionalChainFateDelayChartConfig(chainFateSummary) {
+  const model = getProfessionalChainFatePrimaryModel(chainFateSummary);
+  const buckets = model?.tracked_exit_to_t?.summary?.volume_by_delay_bucket || {};
+
+  const bucketSpecs = [
+    { key: "same_day", label: "Même jour" },
+    { key: "d1_7", label: "1–7 j" },
+    { key: "d8_30", label: "8–30 j" },
+    { key: "d31_90", label: "31–90 j" },
+    { key: "gt90", label: "> 90 j" }
+  ];
+
+  const values = bucketSpecs.map((item) => Number(buckets?.[item.key]?.volume || 0));
+
+  if (!values.some((value) => value > 0)) {
+    return null;
+  }
+
+  return {
+    type: "bar",
+    data: {
+      labels: bucketSpecs.map((item) => item.label),
+      datasets: [
+        {
+          label: "Volume sorti vers compte technique",
+          data: values,
+          borderWidth: 1
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: "index",
+        intersect: false
+      },
+      plugins: {
+        legend: {
+          position: "bottom"
+        },
+        tooltip: {
+          callbacks: {
+            label(context) {
+              const value = Number(context.parsed?.y ?? context.raw ?? 0);
+              const spec = bucketSpecs[context.dataIndex];
+              const bucket = buckets?.[spec?.key] || {};
+              const fragments = formatProfessionalSummaryInteger(bucket.fragment_count || 0);
+
+              return `${context.dataset.label}: ${euro(value)} · ${fragments} fragment(s)`;
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            callback(value) {
+              return Number(value || 0).toLocaleString("fr-FR", {
+                maximumFractionDigits: 0
+              });
+            }
+          }
+        }
+      }
+    }
+  };
+}
+
+function buildProfessionalChainFateDepthChartConfig(chainFateSummary) {
+  const model = getProfessionalChainFatePrimaryModel(chainFateSummary);
+  const buckets = model?.tracked_exit_to_t?.summary?.volume_by_depth_bucket || {};
+
+  const bucketSpecs = [
+    { key: "0", label: "0" },
+    { key: "1", label: "1" },
+    { key: "2", label: "2" },
+    { key: "3", label: "3" },
+    { key: "4", label: "4" },
+    { key: "5_plus", label: "5+" }
+  ];
+
+  const values = bucketSpecs.map((item) => Number(buckets?.[item.key]?.volume || 0));
+
+  if (!values.some((value) => value > 0)) {
+    return null;
+  }
+
+  return {
+    type: "bar",
+    data: {
+      labels: bucketSpecs.map((item) => item.label),
+      datasets: [
+        {
+          label: "Volume sorti selon le nombre de passages P→P",
+          data: values,
+          borderWidth: 1
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: "index",
+        intersect: false
+      },
+      plugins: {
+        legend: {
+          position: "bottom"
+        },
+        tooltip: {
+          callbacks: {
+            label(context) {
+              const value = Number(context.parsed?.y ?? context.raw ?? 0);
+              const spec = bucketSpecs[context.dataIndex];
+              const bucket = buckets?.[spec?.key] || {};
+              const fragments = formatProfessionalSummaryInteger(bucket.fragment_count || 0);
+
+              return `${context.dataset.label}: ${euro(value)} · ${fragments} fragment(s)`;
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            callback(value) {
+              return Number(value || 0).toLocaleString("fr-FR", {
+                maximumFractionDigits: 0
+              });
+            }
+          }
+        }
+      }
+    }
+  };
+}
+
+function buildProfessionalReuseHistoryChartConfig(items) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return null;
+  }
+
+  const labels = items.map((item) => formatProfessionalReuseYearLabel(item));
+
+  return {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Réemploi interne professionnel",
+          data: items.map((item) => (
+            item?.professionals?.weighted_internal_reuse_propensity ?? null
+          )),
+          yAxisID: "yReuse",
+          tension: 0.28,
+          pointRadius: 3,
+          borderWidth: 2
+        },
+        {
+          label: "Multiplicateur professionnel estimé",
+          data: items.map((item) => (
+            item?.professionals?.internal_multiplier_estimated ?? null
+          )),
+          yAxisID: "yMultiplier",
+          tension: 0.28,
+          pointRadius: 3,
+          borderWidth: 2,
+          borderDash: [7, 5]
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: "index",
+        intersect: false
+      },
+      plugins: {
+        legend: {
+          position: "bottom"
+        },
+        tooltip: {
+          callbacks: {
+            label(context) {
+              const value = context.parsed?.y ?? context.raw;
+
+              if (context.dataset.yAxisID === "yReuse") {
+                return `${context.dataset.label}: ${formatProfessionalSummaryRatio(value)}`;
+              }
+
+              return `${context.dataset.label}: ${formatProfessionalSummaryMultiple(value)}`;
+            }
+          }
+        }
+      },
+      scales: {
+        yReuse: {
+          type: "linear",
+          position: "left",
+          beginAtZero: true,
+          ticks: {
+            callback(value) {
+              return `${(Number(value || 0) * 100).toLocaleString("fr-FR", {
+                maximumFractionDigits: 0
+              })} %`;
+            }
+          }
+        },
+        yMultiplier: {
+          type: "linear",
+          position: "right",
+          beginAtZero: false,
+          grid: {
+            drawOnChartArea: false
+          },
+          ticks: {
+            callback(value) {
+              return `${Number(value || 0).toLocaleString("fr-FR", {
+                minimumFractionDigits: 1,
+                maximumFractionDigits: 2
+              })}×`;
+            }
+          }
+        }
+      }
+    }
+  };
+}
+
+function buildProfessionalReuseHistoryFootnote(items) {
+  const partialYears = (items || []).filter(isProfessionalReusePartialYear);
+
+  if (!partialYears.length) {
+    return "";
+  }
+
+  return `
+    <p class="professional-circulation-footnote">
+      <strong>* Année partielle.</strong>
+      La première année disponible et l’année en cours ne couvrent pas nécessairement
+      douze mois complets. Leur comparaison avec les années pleines doit rester prudente.
+    </p>
+  `;
+}
+
+function buildProfessionalCirculationFlowsChartConfig(items) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return null;
+  }
+
+  const labels = items.map((item) => formatProfessionalCirculationMonthLabel(item));
+
+  return {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Particuliers → professionnels",
+          data: items.map((item) => Number(item?.flows?.up?.volume || 0)),
+          tension: 0.28,
+          pointRadius: 2,
+          borderWidth: 2
+        },
+        {
+          label: "Professionnels → professionnels",
+          data: items.map((item) => Number(item?.flows?.pp?.volume || 0)),
+          tension: 0.28,
+          pointRadius: 2,
+          borderWidth: 2
+        },
+        {
+          label: "Professionnels → particuliers",
+          data: items.map((item) => Number(item?.flows?.pu?.volume || 0)),
+          tension: 0.28,
+          pointRadius: 2,
+          borderWidth: 2
+        },
+        {
+          label: "Professionnels → compte technique",
+          data: items.map((item) => Number(item?.flows?.pt_outflows?.volume || 0)),
+          tension: 0.28,
+          pointRadius: 2,
+          borderWidth: 2,
+          borderDash: [7, 5]
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: "index",
+        intersect: false
+      },
+      plugins: {
+        legend: {
+          position: "bottom"
+        },
+        tooltip: {
+          callbacks: {
+            label(context) {
+              const value = Number(context.parsed?.y ?? context.raw ?? 0);
+              return `${context.dataset.label}: ${euro(value)}`;
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            callback(value) {
+              return Number(value || 0).toLocaleString("fr-FR", {
+                maximumFractionDigits: 0
+              });
+            }
+          }
+        }
+      }
+    }
+  };
+}
+
+function destroyProfessionalCirculationCharts() {
+  const chartKeys = [
+    "professionalCirculationFlows",
+    "professionalOutflowsComparison",
+    "professionalChainFateDelay",
+    "professionalChainFateDepth",
+    "professionalReuseHistory"
+  ];
+
+  chartKeys.forEach((chartKey) => {
+    const chart = appState.charts?.[chartKey];
+
+    if (chart && typeof chart.destroy === "function") {
+      chart.destroy();
+    }
+
+    if (appState.charts) {
+      delete appState.charts[chartKey];
+    }
+  });
+}
+
+function renderProfessionalCirculationCharts() {
+  const flowItems = appState.professionalCirculationTimeseries?.items || [];
+  const flowCanvas = document.getElementById("professionalCirculationFlowsChart");
+  const flowConfig = buildProfessionalCirculationFlowsChartConfig(flowItems);
+  const flowExisting = appState.charts?.professionalCirculationFlows;
+
+  if (flowExisting && typeof flowExisting.resize === "function") {
+    flowExisting.resize();
+  } else if (flowCanvas && flowConfig) {
+    appState.charts.professionalCirculationFlows = new Chart(flowCanvas, flowConfig);
+  }
+
+  const outflowItems = appState.professionalCirculationTimeseries?.items || [];
+  const outflowCanvas = document.getElementById("professionalOutflowsComparisonChart");
+  const outflowConfig = buildProfessionalOutflowsComparisonChartConfig(outflowItems);
+  const outflowExisting = appState.charts?.professionalOutflowsComparison;
+
+  if (outflowExisting && typeof outflowExisting.resize === "function") {
+    outflowExisting.resize();
+  } else if (outflowCanvas && outflowConfig) {
+    appState.charts.professionalOutflowsComparison = new Chart(outflowCanvas, outflowConfig);
+  }
+
+  const chainFateSummary = appState.professionalChainFateSummary || null;
+
+  const chainDelayCanvas = document.getElementById("professionalChainFateDelayChart");
+  const chainDelayConfig = buildProfessionalChainFateDelayChartConfig(chainFateSummary);
+  const chainDelayExisting = appState.charts?.professionalChainFateDelay;
+
+  if (chainDelayExisting && typeof chainDelayExisting.resize === "function") {
+    chainDelayExisting.resize();
+  } else if (chainDelayCanvas && chainDelayConfig) {
+    appState.charts.professionalChainFateDelay = new Chart(chainDelayCanvas, chainDelayConfig);
+  }
+
+  const chainDepthCanvas = document.getElementById("professionalChainFateDepthChart");
+  const chainDepthConfig = buildProfessionalChainFateDepthChartConfig(chainFateSummary);
+  const chainDepthExisting = appState.charts?.professionalChainFateDepth;
+
+  if (chainDepthExisting && typeof chainDepthExisting.resize === "function") {
+    chainDepthExisting.resize();
+  } else if (chainDepthCanvas && chainDepthConfig) {
+    appState.charts.professionalChainFateDepth = new Chart(chainDepthCanvas, chainDepthConfig);
+  }
+
+  const reuseItems = appState.professionalReuseYearlySummary?.items || [];
+  const reuseCanvas = document.getElementById("professionalReuseHistoryChart");
+  const reuseConfig = buildProfessionalReuseHistoryChartConfig(reuseItems);
+  const reuseExisting = appState.charts?.professionalReuseHistory;
+
+  if (reuseExisting && typeof reuseExisting.resize === "function") {
+    reuseExisting.resize();
+  } else if (reuseCanvas && reuseConfig) {
+    appState.charts.professionalReuseHistory = new Chart(reuseCanvas, reuseConfig);
+  }
+
+ }
+
+function renderProfessionalConsumptionMapCard(consumptionMapSummary = null) {
+  const consumptionMapPayload = getProfessionalConsumptionMapPayload(
+    consumptionMapSummary
+  );
+  const consumptionMapCoverage = consumptionMapPayload?.coverage || {};
+  const consumptionMapGeometry = consumptionMapPayload?.geometry || {};
+  const consumptionMapSources = consumptionMapPayload?.sources || [];
+  const consumptionMapDestinations = consumptionMapPayload?.destinations || [];
+  const consumptionMapRoutes = consumptionMapPayload?.routes || [];
+  const consumptionMapTimeline = consumptionMapPayload?.timeline || {};
+  const consumptionMapTimelineSteps = consumptionMapTimeline?.steps || [];
+  const consumptionMapTimelineLastIndex = Math.max(
+    0,
+    consumptionMapTimelineSteps.length - 1
+  );
+  const consumptionMapTimelineLastLabel =
+    consumptionMapTimelineSteps[consumptionMapTimelineLastIndex]?.label
+    || "Fin de période";
+
+  const consumptionMapViewMode = getProfessionalConsumptionMapViewMode();
+
+  const hasConsumptionMap = Array.isArray(consumptionMapRoutes)
+    && consumptionMapRoutes.length > 0;
+
+  return `
+      <section class="card professional-consumption-map-card">
+        <div class="professional-analysis-section-heading professional-consumption-map-heading">
+          <div class="professional-consumption-map-heading-main">
+            <div class="stat-label">Bassins de consommation Gonette</div>
+            <h3>Des origines postales anonymisées vers les professionnels</h3>
+            <p>
+              Cette vue expérimentale représente les paiements <strong>U→P</strong>
+              cartographiables, en agrégeant les particuliers par bassin postal.
+              Les points de départ sont <strong>synthétiques</strong> :
+              ils sont répartis de façon stable à l’intérieur des périmètres postaux,
+              sans jamais indiquer une adresse réelle.
+            </p>
+          </div>
+
+          <div class="professional-consumption-map-heading-actions">
+            <button
+              type="button"
+              class="stats-chart-tool-btn"
+              data-professional-consumption-map-help
+              aria-label="Afficher l’aide de lecture de la carte"
+              title="Aide à la lecture"
+            >
+              ?
+            </button>
+
+            <button
+              type="button"
+              class="stats-chart-tool-btn stats-chart-zoom-btn"
+              data-professional-consumption-map-zoom
+              aria-label="Agrandir la carte"
+              title="Agrandir la carte"
+            >
+              ⤢
+            </button>
+          </div>
+        </div>
+
+        ${
+          hasConsumptionMap
+            ? `
+              <div class="professional-consumption-map-kpi-grid">
+                ${renderProfessionalSummaryKpiCard(
+                  "Faisceaux visibles",
+                  formatProfessionalSummaryInteger(consumptionMapCoverage.visible_route_count || 0),
+                  "Routes bassin postal → professionnel avec au moins 2 particuliers distincts."
+                )}
+
+                ${renderProfessionalSummaryKpiCard(
+                  "Volume représenté",
+                  euro(consumptionMapCoverage.visible_volume || 0),
+                  `${formatProfessionalSummaryRatio(consumptionMapCoverage.visible_volume_share_of_cartographiable)} du volume U→P cartographiable.`
+                )}
+
+                ${renderProfessionalSummaryKpiCard(
+                  "Bassins sources",
+                  formatProfessionalSummaryInteger(consumptionMapSources.length || 0),
+                  "Codes postaux d’origine conservés après le seuil de confidentialité."
+                )}
+
+                ${renderProfessionalSummaryKpiCard(
+                  "Professionnels atteints",
+                  formatProfessionalSummaryInteger(consumptionMapDestinations.length || 0),
+                  "Destinations professionnelles géolocalisées dans la représentation."
+                )}
+              </div>
+
+              <div
+                class="professional-consumption-map-mode-toggle"
+                data-professional-consumption-map-mode-toggle
+              >
+                <button
+                  type="button"
+                  class="professional-consumption-map-mode-btn ${consumptionMapViewMode === "static" ? "is-active" : ""}"
+                  data-consumption-map-view-mode="static"
+                  aria-pressed="${consumptionMapViewMode === "static" ? "true" : "false"}"
+                >
+                  Carte statique
+                </button>
+
+                <button
+                  type="button"
+                  class="professional-consumption-map-mode-btn ${consumptionMapViewMode === "dynamic" ? "is-active" : ""}"
+                  data-consumption-map-view-mode="dynamic"
+                  aria-pressed="${consumptionMapViewMode === "dynamic" ? "true" : "false"}"
+                >
+                  Lecture dynamique
+                </button>
+              </div>
+
+              <div class="professional-consumption-map-frame">
+                <canvas id="professionalConsumptionMapCanvas"></canvas>
+
+                <div
+                  class="professional-consumption-map-player professional-consumption-map-player-overlay"
+                  data-professional-consumption-map-player
+                  aria-hidden="${consumptionMapViewMode === "dynamic" ? "false" : "true"}"
+                  ${consumptionMapViewMode === "dynamic" ? "" : "hidden"}
+                >
+                <div class="professional-consumption-map-player-controls">
+                  <div class="professional-consumption-map-player-buttons">
+                    <button
+                      type="button"
+                      class="professional-consumption-map-player-btn"
+                      data-consumption-map-play
+                    >
+                      ▶ Lecture
+                    </button>
+
+                    <button
+                      type="button"
+                      class="professional-consumption-map-player-btn"
+                      data-consumption-map-pause
+                      disabled
+                    >
+                      ⏸ Pause
+                    </button>
+
+                    <button
+                      type="button"
+                      class="professional-consumption-map-player-btn"
+                      data-consumption-map-replay
+                    >
+                      ↺ Rejouer
+                    </button>
+                  </div>
+
+                  <div class="professional-consumption-map-player-durations">
+                    <span>Construire en</span>
+
+                    <button
+                      type="button"
+                      class="professional-consumption-map-duration-btn"
+                      data-consumption-map-duration="10000"
+                    >
+                      10 s
+                    </button>
+
+                    <button
+                      type="button"
+                      class="professional-consumption-map-duration-btn is-active"
+                      data-consumption-map-duration="30000"
+                    >
+                      30 s
+                    </button>
+
+                    <button
+                      type="button"
+                      class="professional-consumption-map-duration-btn"
+                      data-consumption-map-duration="60000"
+                    >
+                      60 s
+                    </button>
+                  </div>
+                </div>
+
+                <div class="professional-consumption-map-player-timeline">
+                  <input
+                    type="range"
+                    min="0"
+                    max="${consumptionMapTimelineLastIndex}"
+                    value="${consumptionMapTimelineLastIndex}"
+                    step="1"
+                    data-consumption-map-range
+                  />
+
+                  <div class="professional-consumption-map-player-readout">
+                    <strong data-consumption-map-current-label>
+                      ${consumptionMapTimelineLastLabel}
+                    </strong>
+                    <span data-consumption-map-current-metrics>
+                      ${formatProfessionalSummaryInteger(consumptionMapCoverage.visible_route_count || 0)} faisceau(x)
+                      · ${formatProfessionalSummaryInteger(consumptionMapCoverage.visible_tx_count || 0)} paiement(s)
+                      · ${euro(consumptionMapCoverage.visible_volume || 0)}
+                    </span>
+                  </div>
+                </div>
+                </div>
+              </div>
+
+              <div class="professional-consumption-map-note">
+                <strong>Lecture.</strong>
+                Les lignes illustrent des <strong>faisceaux de consommation</strong>,
+                pas des trajets individuels réels.
+                La carte affiche
+                <strong>${formatProfessionalSummaryInteger(consumptionMapCoverage.visible_tx_count || 0)} paiements</strong>
+                et
+                <strong>${euro(consumptionMapCoverage.visible_volume || 0)}</strong>,
+                retenus après un seuil minimal de
+                <strong>2 particuliers distincts par faisceau</strong>.
+                Les périmètres postaux sont disponibles pour
+                <strong>${formatProfessionalSummaryInteger(consumptionMapGeometry?.route_area_status_counts?.available || 0)}</strong>
+                routes visibles.
+              </div>
+            `
+            : `
+              <div class="professional-circulation-empty">
+                Aucune donnée cartographique de consommation n’est disponible pour cette période.
+              </div>
+            `
+        }
+      </section>
+
+  `;
+}
+
+function renderProfessionalCirculationPanel(
+  flowSummary,
+  pilotageSummary,
+  circulationTimeseries,
+  reuseYearlySummary,
+  chainFateSummary,
+  consumptionMapSummary
+) {
+  const flowPayload = flowSummary || {};
+  const flows = flowPayload.flows || {};
+  const aggregates = flowPayload.aggregates || {};
+  const professionalCounts = flowPayload.professional_counts || {};
+
+  const up = flows.up || {};
+  const pp = flows.pp || {};
+  const ptOutflows = flows.pt_outflows || {};
+
+  const professionalReuse = (
+    pilotageSummary?.pilotage_metrics?.internal_reuse?.professionals
+    || {}
+  );
+
+  const reusePropensity = professionalReuse.weighted_internal_reuse_propensity;
+  const multiplierEstimated = professionalReuse.internal_multiplier_estimated;
+
+  const circulationItems = circulationTimeseries?.items || [];
+  const hasCirculationItems = Array.isArray(circulationItems) && circulationItems.length > 0;
+
+  const professionalReuseYearlyItems = reuseYearlySummary?.items || [];
+  const hasProfessionalReuseYearlyItems = (
+    Array.isArray(professionalReuseYearlyItems)
+    && professionalReuseYearlyItems.length > 0
+  );
+
+  const professionalReuseHistoryFootnote = buildProfessionalReuseHistoryFootnote(
+    professionalReuseYearlyItems
+  );
+
+  const chainFatePayload = chainFateSummary || null;
+  const chainFateModel = getProfessionalChainFatePrimaryModel(chainFatePayload);
+  const chainFateExtendedModel = getProfessionalChainFateExtendedModel(chainFatePayload);
+  const chainExit = chainFateModel?.tracked_exit_to_t || {};
+  const chainExitSummary = chainExit?.summary || {};
+  const chainDelayDays = chainExitSummary?.delay_days || {};
+  const chainFocus = chainFateModel?.focus_indicators || {};
+  const chainLongLived = chainFocus?.long_lived_exit_gt_90d || {};
+  const chainQuasiImmediate = chainFocus?.quasi_immediate_direct_exit_depth0_le_7d || {};
+  const chainDeep = chainFocus?.deep_chains_depth_ge_3 || {};
+  const chainCoverage = chainExit?.matched_share_of_p_to_t ?? null;
+  const chainExtendedCoverage = chainFateExtendedModel?.tracked_exit_to_t?.matched_share_of_p_to_t ?? null;
+
+  const chainMetadata = chainFatePayload?.metadata || {};
+  const chainPeriodStart = formatIsoDateFr(
+    String(chainMetadata?.first_transaction_date || "").slice(0, 10)
+  );
+  const chainPeriodEnd = formatIsoDateFr(
+    String(chainMetadata?.last_transaction_date || "").slice(0, 10)
+  );
+
+  const hasChainFateSummary = Boolean(chainFateModel);
+
+  return `
+    <section class="professional-circulation-shell">
+      <div class="professional-circulation-kpi-grid">
+        ${renderProfessionalSummaryKpiCard(
+          "Recettes depuis les particuliers",
+          euro(up.volume || 0),
+          "Volume U→P observé sur la période."
+        )}
+
+        ${renderProfessionalSummaryKpiCard(
+          "Recettes interprofessionnelles",
+          euro(pp.volume || 0),
+          "Volume P→P reçu par les professionnels du réseau."
+        )}
+
+        ${renderProfessionalSummaryKpiCard(
+          "Réemploi interne professionnel",
+          formatProfessionalSummaryRatio(reusePropensity),
+          "Part pondérée des recettes pros effectivement redépensée dans le réseau."
+        )}
+
+        ${renderProfessionalSummaryKpiCard(
+          "Multiplicateur professionnel estimé",
+          formatProfessionalSummaryMultiple(multiplierEstimated),
+          "Capacité de recirculation associée au réemploi professionnel."
+        )}
+      </div>
+
+      <section class="card professional-circulation-chart-card">
+        <div class="professional-analysis-section-heading">
+          <div class="stat-label">Flux professionnels dans le temps</div>
+          <h3>Ce qui entre, ce qui circule, ce qui repart</h3>
+          <p>
+            Cette première série mensuelle suit les grands flux impliquant les professionnels :
+            paiements des particuliers, échanges interprofessionnels, reversements vers les particuliers
+            et sorties professionnelles vers les comptes techniques.
+          </p>
+        </div>
+
+        ${
+          hasCirculationItems
+            ? `
+              <div class="professional-circulation-chart-frame">
+                <canvas id="professionalCirculationFlowsChart"></canvas>
+              </div>
+            `
+            : `
+              <div class="professional-circulation-empty">
+                Aucun flux professionnel mensuel n’est disponible sur cette période.
+              </div>
+            `
+        }
+      </section>
+
+      <section class="card professional-circulation-pressure-card">
+        <div class="professional-analysis-section-heading">
+          <div class="stat-label">Sorties professionnelles &amp; tension de réemploi</div>
+          <h3>Ce qui repart dans le réseau, et ce qui sort du circuit</h3>
+          <p>
+            Les sorties professionnelles vers les comptes techniques éclairent un autre versant
+            de l’usage de la Gonette : lorsqu’un professionnel encaisse, quelle part est remise
+            en circulation dans le réseau, et quelle part quitte le circuit numérique observé ?
+          </p>
+        </div>
+
+        <div class="professional-circulation-pressure-grid">
+          ${renderProfessionalSummaryKpiCard(
+            "Sorties professionnelles du circuit",
+            euro(ptOutflows.volume || 0),
+            `${formatProfessionalSummaryInteger(ptOutflows.count || 0)} flux P→T observé(s).`
+          )}
+
+          ${renderProfessionalSummaryKpiCard(
+            "Sorties / recettes reçues",
+            formatProfessionalSummaryRatio(aggregates.outflow_to_received_rate),
+            "Rapport entre les volumes P→T et les recettes économiques reçues par les pros."
+          )}
+
+          ${renderProfessionalSummaryKpiCard(
+            "Réémis / sorties",
+            formatProfessionalSummaryMultiple(aggregates.reemission_to_outflow_ratio),
+            "Comparaison entre les volumes réémis économiquement et les volumes sortis du circuit."
+          )}
+
+          ${renderProfessionalSummaryKpiCard(
+            "Professionnels concernés",
+            formatProfessionalSummaryInteger(professionalCounts.outflowing || 0),
+            "Professionnels ayant porté au moins une sortie P→T sur la période."
+          )}
+        </div>
+
+        <div class="professional-circulation-chart-frame professional-outflows-comparison-frame">
+          <canvas id="professionalOutflowsComparisonChart"></canvas>
+        </div>
+      </section>
+
+      <section class="card professional-chain-fate-card">
+        <div class="professional-analysis-section-heading">
+          <div class="stat-label">Destin des Gonettes encaissées par les professionnels</div>
+          <h3>Après l’encaissement : sortie rapide, séjour prolongé ou circulation profonde&nbsp;?</h3>
+          <p>
+            Cette lecture suit, sur l’historique complet
+            <strong>${chainPeriodStart} → ${chainPeriodEnd}</strong>,
+            des lots de Gonettes reçus par les professionnels depuis les particuliers,
+            puis estime leur délai et leur profondeur de circulation avant une sortie
+            vers compte technique.
+          </p>
+        </div>
+
+        ${
+          hasChainFateSummary
+            ? `
+              <div class="professional-chain-fate-kpi-grid">
+                ${renderProfessionalSummaryKpiCard(
+                  "Délai médian avant sortie",
+                  formatProfessionalChainFateDays(chainDelayDays.median),
+                  "Temps médian entre l’encaissement U→P et la sortie P→T attribuée."
+                )}
+
+                ${renderProfessionalSummaryKpiCard(
+                  "Sorties après plus de 90 jours",
+                  euro(chainLongLived.volume || 0),
+                  `${formatProfessionalSummaryInteger(chainLongLived.fragment_count || 0)} fragment(s) suivis.`
+                )}
+
+                ${renderProfessionalSummaryKpiCard(
+                  "Sorties directes quasi immédiates",
+                  euro(chainQuasiImmediate.volume || 0),
+                  `${formatProfessionalSummaryInteger(chainQuasiImmediate.exit_professional_count || 0)} professionnel(s) concernés.`
+                )}
+
+                ${renderProfessionalSummaryKpiCard(
+                  "Acteurs des chaînes longues",
+                  formatProfessionalSummaryInteger(chainDeep.distinct_chain_actor_count || 0),
+                  "Acteurs distincts impliqués dans des chaînes de profondeur ≥ 3."
+                )}
+              </div>
+
+              <div class="professional-chain-fate-chart-grid">
+                <article class="professional-chain-fate-chart-block">
+                  <h4>Temps avant sortie vers compte technique</h4>
+                  <div class="professional-chain-fate-chart-frame">
+                    <canvas id="professionalChainFateDelayChart"></canvas>
+                  </div>
+                </article>
+
+                <article class="professional-chain-fate-chart-block">
+                  <h4>Profondeur de circulation avant sortie</h4>
+                  <div class="professional-chain-fate-chart-frame">
+                    <canvas id="professionalChainFateDepthChart"></canvas>
+                  </div>
+                </article>
+              </div>
+
+              <div class="professional-chain-fate-method-note">
+                <strong>Modèle principal.</strong>
+                Attribution FIFO par lots issus des paiements <strong>U→P</strong>.
+                Il couvre <strong>${formatProfessionalSummaryRatio(chainCoverage)}</strong>
+                des sorties professionnelles <strong>P→T</strong> observées.
+                Le modèle de contrôle élargi <strong>U→P + T→P</strong>
+                couvre <strong>${formatProfessionalSummaryRatio(chainExtendedCoverage)}</strong>.
+              </div>
+            `
+            : `
+              <div class="professional-circulation-empty">
+                Le résumé précalculé des trajectoires professionnelles n’est pas disponible.
+              </div>
+            `
+        }
+      </section>
+
+      <section class="card professional-circulation-chart-card">
+        <div class="professional-analysis-section-heading">
+          <div class="stat-label">Trajectoire historique</div>
+          <h3>Réemploi interne et multiplicateur professionnel, année après année</h3>
+          <p>
+            Cette série reprend les indicateurs annuels déjà stabilisés dans le Pilotage monétaire,
+            mais en isolant ici le rôle des professionnels : propension pondérée de réemploi interne
+            et multiplicateur professionnel estimé.
+          </p>
+        </div>
+
+        ${
+          hasProfessionalReuseYearlyItems
+            ? `
+              <div class="professional-circulation-chart-frame professional-reuse-history-frame">
+                <canvas id="professionalReuseHistoryChart"></canvas>
+              </div>
+              ${professionalReuseHistoryFootnote}
+            `
+            : `
+              <div class="professional-circulation-empty">
+                Aucun historique annuel de réemploi professionnel n’est disponible.
+              </div>
+            `
+        }
+      </section>
+    </section>
+  `;
+}
+
+function buildProfessionalAnalysisShell(flowSummary = null, holdingsSummary = null, pilotageSummary = null, circulationTimeseries = null, reuseYearlySummary = null, chainFateSummary = null, consumptionMapSummary = null) {
+  const activeProfessionals = Array.isArray(appState.prosData)
+    ? appState.prosData.length
+    : 0;
+
+  return `
+    <section class="card professional-analysis-hero">
+      <div class="professional-analysis-hero-main">
+        <div class="stat-label">Professionnels &amp; particuliers · usages, circulation et ancrage des communautés d’échange</div>
+        <h2>Comment les utilisateurs de la Gonette — particuliers et professionnels — structurent-ils la circulation, les pôles d’usage et les communautés d’échange&nbsp;?</h2>
+        <p>
+          Cette vue croise les flux, les soldes, les cartes, les secteurs et les trajectoires
+          historiques pour analyser ensemble les particuliers et les professionnels :
+          qui alimente la circulation, qui la capte, quels clusters se forment,
+          et quels leviers peuvent renforcer l’ancrage de la Gonette dans ses usages réels.
+        </p>
+      </div>
+
+      <div class="professional-analysis-hero-aside">
+        <div class="professional-analysis-hero-kpi">
+          <strong>${Number(activeProfessionals || 0).toLocaleString("fr-FR")}</strong>
+          <span>professionnel(s) visibles dans le classement de la période</span>
+        </div>
+        <div class="professional-analysis-hero-note">
+          Le classement professionnel existant reste disponible dans l’onglet
+          <strong>Liste &amp; fiches</strong> pendant la refonte de cette vue élargie
+          aux usages des particuliers et des professionnels.
+        </div>
+      </div>
+    </section>
+
+    <nav class="professional-analysis-tabs" aria-label="Analyse des professionnels et particuliers">
+      <button
+        type="button"
+        class="professional-analysis-tab-btn"
+        data-professional-analysis-tab="summary"
+      >
+        Synthèse
+      </button>
+
+      <button
+        type="button"
+        class="professional-analysis-tab-btn"
+        data-professional-analysis-tab="circulation"
+      >
+        Circulation &amp; multiplicateur
+      </button>
+
+      <button
+        type="button"
+        class="professional-analysis-tab-btn"
+        data-professional-analysis-tab="network"
+      >
+        Réseau
+      </button>
+
+      <button
+        type="button"
+        class="professional-analysis-tab-btn"
+        data-professional-analysis-tab="clusters"
+      >
+        Cartographie des clusters
+      </button>
+
+      <button
+        type="button"
+        class="professional-analysis-tab-btn"
+        data-professional-analysis-tab="structures"
+      >
+        Analyse sectorielle
+      </button>
+
+      <button
+        type="button"
+        class="professional-analysis-tab-btn"
+        data-professional-analysis-tab="directory"
+      >
+        Liste &amp; fiches
+      </button>
+    </nav>
+
+    <section
+      class="professional-analysis-panel"
+      data-professional-analysis-panel="summary"
+    >
+      ${renderProfessionalSummaryPanel(flowSummary, holdingsSummary, pilotageSummary)}
+    </section>
+
+    <section
+      class="professional-analysis-panel hidden"
+      data-professional-analysis-panel="circulation"
+    >
+      ${renderProfessionalCirculationPanel(
+        flowSummary,
+        pilotageSummary,
+        circulationTimeseries,
+        reuseYearlySummary,
+        chainFateSummary,
+        consumptionMapSummary
+      )}
+    </section>
+
+    <section
+      class="professional-analysis-panel hidden"
+      data-professional-analysis-panel="network"
+    >
+      <section class="card professional-analysis-roadmap-card">
+        <div class="professional-analysis-section-heading">
+          <div class="stat-label">Onglet 3 · Réseau interprofessionnel</div>
+          <h3>Explorer la structure relationnelle des échanges P→P</h3>
+          <p>
+            Cet onglet cartographie les relations monétaires entre professionnels :
+            liens dirigés, volumes cumulés, profils de réception et de réémission,
+            voisinages actifs et acteurs structurants du réseau.
+          </p>
+        </div>
+      </section>
+
+      <section
+        id="professionalNetworkPanel"
+        class="professional-network-panel"
+        data-professional-network-hydrated="false"
+      >
+        <section class="card professional-analysis-roadmap-card">
+          <div class="professional-analysis-section-heading">
+            <div class="stat-label">Chargement à l’ouverture</div>
+            <h3>L’atlas relationnel apparaîtra ici</h3>
+            <p>
+              Les données réseau sont chargées uniquement lorsque cet onglet est ouvert,
+              afin de préserver le temps d’entrée dans la vue générale.
+            </p>
+          </div>
+        </section>
+      </section>
+    </section>
+
+    <section
+      class="professional-analysis-panel hidden"
+      data-professional-analysis-panel="clusters"
+    >
+      <section class="card professional-analysis-roadmap-card">
+        <div class="professional-analysis-section-heading">
+          <div class="stat-label">Onglet 4 · Cartographie des clusters</div>
+          <h3>Relier les pôles d’activité et les territoires d’usage</h3>
+          <p>
+            Cet onglet devient l’espace cartographique de la vue
+            <strong>Professionnels &amp; particuliers</strong>. Il réunit la cartographie
+            des professionnels et l’analyse territoriale par code postal, afin de faire
+            apparaître les pôles d’activité, les bassins d’usage et les structures spatiales
+            de circulation de la Gonette.
+          </p>
+        </div>
+      </section>
+
+      <section
+        id="professionalClustersPanel"
+        class="professional-clusters-panel"
+        data-professional-clusters-hydrated="false"
+      >
+        <section class="card professional-analysis-roadmap-card">
+          <div class="professional-analysis-section-heading">
+            <div class="stat-label">Chargement à l’ouverture</div>
+            <h3>Les cartes et analyses territoriales apparaîtront ici</h3>
+            <p>
+              Les données cartographiques et territoriales sont chargées uniquement
+              lorsque cet onglet est ouvert, afin de préserver le temps d’entrée
+              dans la vue générale.
+            </p>
+          </div>
+        </section>
+      </section>
+    </section>
+
+    <section
+      class="professional-analysis-panel hidden"
+      data-professional-analysis-panel="structures"
+    >
+      <section class="card professional-analysis-roadmap-card">
+        <div class="professional-analysis-section-heading">
+          <div class="stat-label">Onglet 5 · Analyse sectorielle</div>
+          <h3>Comprendre comment les secteurs structurent l’activité en Gonette</h3>
+          <p>
+            Cet onglet reprend désormais l’analyse sectorielle auparavant isolée
+            dans le menu principal : poids des grandes familles d’activité,
+            volumes reçus et réémis, origine des recettes, réutilisation
+            et profils sectoriels du réseau.
+          </p>
+        </div>
+      </section>
+
+      <section
+        id="professionalSectorAnalysisPanel"
+        class="professional-sector-analysis-panel"
+        data-professional-sector-analysis-hydrated="false"
+      >
+        <section class="card professional-analysis-roadmap-card">
+          <div class="professional-analysis-section-heading">
+            <div class="stat-label">Chargement à l’ouverture</div>
+            <h3>L’analyse sectorielle apparaîtra ici</h3>
+            <p>
+              Les données sectorielles sont chargées uniquement lorsque cet onglet est ouvert,
+              afin de ne pas alourdir l’arrivée dans la vue générale.
+            </p>
+          </div>
+        </section>
+      </section>
+    </section>
+
+    <section
+      class="professional-analysis-panel hidden"
+      data-professional-analysis-panel="directory"
+    >
+      <section class="card professional-analysis-directory-intro">
+        <div class="professional-analysis-section-heading">
+          <div class="stat-label">Onglet 6 · Liste &amp; fiches individuelles</div>
+          <h3>Explorer les professionnels acteur par acteur</h3>
+          <p>
+            Le classement existant est conservé ici. Il servira de base à la future
+            exploration enrichie : soldes, trajectoires, profils de réemploi,
+            contexte sectoriel et territorial, puis enrichissements publics lorsque
+            nous ouvrirons ce chantier.
+          </p>
+        </div>
+      </section>
+
+      <section id="professionalsDirectoryPanel"></section>
+    </section>
+  `;
+}
+
+
+
+function buildProfessionalClustersLoadingHtml() {
+  return `
+    <section class="card professional-analysis-roadmap-card">
+      <div class="professional-analysis-section-heading">
+        <div class="stat-label">Cartographie des clusters</div>
+        <h3>Chargement de la carte et des territoires…</h3>
+        <p>
+          Les données sont recalculées pour la période actuellement sélectionnée.
+        </p>
+      </div>
+    </section>
+  `;
+}
+
+function buildProfessionalClustersErrorHtml() {
+  return `
+    <section class="card professional-analysis-roadmap-card">
+      <div class="professional-analysis-section-heading">
+        <div class="stat-label">Cartographie des clusters</div>
+        <h3>Les données cartographiques ne sont pas disponibles</h3>
+        <p>
+          La carte des professionnels ou l’analyse territoriale n’ont pas pu être
+          chargées pour cette période. Les autres onglets restent utilisables.
+        </p>
+      </div>
+    </section>
+  `;
+}
+
+
+function formatUserPostalClusterInteger(value) {
+  return Number(value || 0).toLocaleString("fr-FR");
+}
+
+function formatUserPostalClusterAverage(value, decimals = 1) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return "—";
+  }
+
+  return Number(value).toLocaleString("fr-FR", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals
+  });
+}
+
+function buildUserPostalClusterGeoJson(points = []) {
+  return {
+    type: "FeatureCollection",
+    features: (Array.isArray(points) ? points : [])
+      .filter(point =>
+        Number.isFinite(Number(point?.longitude))
+        && Number.isFinite(Number(point?.latitude))
+      )
+      .map(point => ({
+        type: "Feature",
+        geometry: {
+          type: "Point",
+          coordinates: [
+            Number(point.longitude),
+            Number(point.latitude)
+          ]
+        },
+        properties: {
+          postal_code: point.postal_code || "",
+          city_label: point.city_label || "",
+          individual_count: Number(point.individual_count || 0),
+          professional_count: Number(point.professional_count || 0),
+          weight: Number(point.weight || point.individual_count || 0)
+        }
+      }))
+  };
+}
+
+function fitUserPostalClustersMapToPoints(map, points = []) {
+  if (!map || !window.maplibregl || !Array.isArray(points) || points.length === 0) {
+    return;
+  }
+
+  const bounds = new window.maplibregl.LngLatBounds();
+  let validCount = 0;
+
+  points.forEach(point => {
+    const longitude = Number(point?.longitude);
+    const latitude = Number(point?.latitude);
+
+    if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) {
+      return;
+    }
+
+    bounds.extend([longitude, latitude]);
+    validCount += 1;
+  });
+
+  if (!validCount) {
+    return;
+  }
+
+  map.fitBounds(bounds, {
+    padding: 58,
+    maxZoom: 12.6,
+    duration: 700
+  });
+}
+
+function destroyUserPostalClustersMap() {
+  if (
+    appState.userPostalClustersMap
+    && typeof appState.userPostalClustersMap.remove === "function"
+  ) {
+    appState.userPostalClustersMap.remove();
+  }
+
+  appState.userPostalClustersMap = null;
+}
+
+function initializeUserPostalClustersMap(points = []) {
+  const mapNode = document.getElementById("userPostalClustersMap");
+  if (!mapNode) {
+    return;
+  }
+
+  const validPoints = (Array.isArray(points) ? points : []).filter(point =>
+    Number.isFinite(Number(point?.longitude))
+    && Number.isFinite(Number(point?.latitude))
+  );
+
+  if (!validPoints.length) {
+    mapNode.innerHTML = `
+      <div class="user-postal-clusters-map-empty">
+        Aucun point cartographique exploitable pour cette période.
+      </div>
+    `;
+    return;
+  }
+
+  if (!window.maplibregl) {
+    mapNode.innerHTML = `
+      <div class="user-postal-clusters-map-empty">
+        La bibliothèque cartographique n’est pas disponible.
+      </div>
+    `;
+    return;
+  }
+
+  destroyUserPostalClustersMap();
+
+  const maxIndividualCount = Math.max(
+    1,
+    ...validPoints.map(point => Number(point.individual_count || point.weight || 0))
+  );
+
+  const geojson = buildUserPostalClusterGeoJson(validPoints);
+
+  const map = new window.maplibregl.Map({
+    container: "userPostalClustersMap",
+    style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+    center: [4.8357, 45.7640],
+    zoom: 9,
+    pitch: 0,
+    bearing: 0
+  });
+
+  // Empêche la carte de capturer le scroll de page.
+  map.scrollZoom.disable();
+
+  map.addControl(new window.maplibregl.NavigationControl(), "top-right");
+
+  map.once("load", () => {
+    map.addSource("user-postal-clusters", {
+      type: "geojson",
+      data: geojson
+    });
+
+    map.addLayer({
+      id: "user-postal-clusters-heat",
+      type: "heatmap",
+      source: "user-postal-clusters",
+      maxzoom: 15,
+      paint: {
+        "heatmap-weight": [
+          "interpolate",
+          ["linear"],
+          ["get", "weight"],
+          0, 0,
+          maxIndividualCount, 1
+        ],
+        "heatmap-intensity": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          8, 0.95,
+          12, 1.55
+        ],
+        "heatmap-radius": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          8, 28,
+          11, 46,
+          14, 72
+        ],
+        "heatmap-opacity": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          8, 0.88,
+          13, 0.70
+        ],
+        "heatmap-color": [
+          "interpolate",
+          ["linear"],
+          ["heatmap-density"],
+          0, "rgba(37, 99, 235, 0)",
+          0.18, "rgba(59, 130, 246, 0.42)",
+          0.42, "rgba(14, 165, 233, 0.72)",
+          0.64, "rgba(250, 204, 21, 0.86)",
+          0.84, "rgba(249, 115, 22, 0.94)",
+          1, "rgba(220, 38, 38, 0.98)"
+        ]
+      }
+    });
+
+    map.addLayer({
+      id: "user-postal-clusters-points",
+      type: "circle",
+      source: "user-postal-clusters",
+      paint: {
+        "circle-radius": [
+          "interpolate",
+          ["linear"],
+          ["get", "individual_count"],
+          5, 4,
+          maxIndividualCount, 13
+        ],
+        "circle-color": "rgba(15, 23, 42, 0.82)",
+        "circle-stroke-color": "rgba(255, 255, 255, 0.92)",
+        "circle-stroke-width": 1.2,
+        "circle-opacity": 0.72
+      }
+    });
+
+    map.on("mouseenter", "user-postal-clusters-points", () => {
+      map.getCanvas().style.cursor = "pointer";
+    });
+
+    map.on("mouseleave", "user-postal-clusters-points", () => {
+      map.getCanvas().style.cursor = "";
+    });
+
+    map.on("click", "user-postal-clusters-points", event => {
+      const feature = event?.features?.[0];
+      const properties = feature?.properties || {};
+      const coordinates = feature?.geometry?.coordinates;
+
+      if (!coordinates || !window.maplibregl?.Popup) {
+        return;
+      }
+
+      const postalCode = properties.postal_code || "Code postal inconnu";
+      const cityLabel = properties.city_label || "";
+      const individualCount = Number(properties.individual_count || 0);
+      const professionalCount = Number(properties.professional_count || 0);
+
+      new window.maplibregl.Popup({
+        closeButton: true,
+        closeOnClick: true
+      })
+        .setLngLat(coordinates)
+        .setHTML(`
+          <div class="user-postal-clusters-popup">
+            <strong>${postalCode}${cityLabel ? ` — ${cityLabel}` : ""}</strong>
+            <span>${formatUserPostalClusterInteger(individualCount)} particulier(s)</span>
+            <span>${formatUserPostalClusterInteger(professionalCount)} professionnel(s)</span>
+          </div>
+        `)
+        .addTo(map);
+    });
+
+    fitUserPostalClustersMapToPoints(map, validPoints);
+  });
+
+  const fitButton = document.getElementById("userPostalClustersFitBtn");
+  if (fitButton) {
+    fitButton.addEventListener("click", () => {
+      fitUserPostalClustersMapToPoints(map, validPoints);
+    });
+  }
+
+  appState.userPostalClustersMap = map;
+}
+
+function buildUserPostalClustersTableHtml(postalCodes = []) {
+  const rows = Array.isArray(postalCodes) ? postalCodes : [];
+
+  if (!rows.length) {
+    return `
+      <div class="user-postal-clusters-empty-state">
+        Aucun code postal ne franchit le seuil minimal de particuliers sur cette période.
+      </div>
+    `;
+  }
+
+  return `
+    <div class="user-postal-clusters-table-wrap">
+      <table class="data-table user-postal-clusters-table">
+        <thead>
+          <tr>
+            <th>Code postal</th>
+            <th>Ville</th>
+            <th>Pros</th>
+            <th>Particuliers</th>
+            <th>Solde P début</th>
+            <th>Solde P fin</th>
+            <th>Solde U début</th>
+            <th>Solde U fin</th>
+            <th>Vol. moy. émis P</th>
+            <th>Vol. moy. émis U</th>
+            <th>Nb tx moy. P</th>
+            <th>Nb tx moy. U</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(row => `
+            <tr>
+              <td><strong>${row.postal_code || "—"}</strong></td>
+              <td>${row.city_label || "—"}</td>
+              <td>${formatUserPostalClusterInteger(row.professional_count)}</td>
+              <td>${formatUserPostalClusterInteger(row.individual_count)}</td>
+              <td>${euro(row.professional_opening_balance || 0)}</td>
+              <td>${euro(row.professional_closing_balance || 0)}</td>
+              <td>${euro(row.individual_opening_balance || 0)}</td>
+              <td>${euro(row.individual_closing_balance || 0)}</td>
+              <td>${row.avg_emitted_volume_per_professional_emitter === null ? "—" : euro(row.avg_emitted_volume_per_professional_emitter || 0)}</td>
+              <td>${row.avg_emitted_volume_per_individual_emitter === null ? "—" : euro(row.avg_emitted_volume_per_individual_emitter || 0)}</td>
+              <td>${formatUserPostalClusterAverage(row.avg_emitted_tx_count_per_professional_emitter)}</td>
+              <td>${formatUserPostalClusterAverage(row.avg_emitted_tx_count_per_individual_emitter)}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function buildUserPostalClustersSectionHtml(userPostalClustersData = null) {
+  const payload = userPostalClustersData || {};
+  const summary = payload.summary || {};
+  const effectivePeriod = payload.effective_period || {};
+  const points = Array.isArray(payload.heatmap_points)
+    ? payload.heatmap_points
+    : [];
+  const postalCodes = Array.isArray(payload.postal_codes)
+    ? payload.postal_codes
+    : [];
+
+  return `
+    <section class="card user-postal-clusters-overview-card">
+      <div class="user-postal-clusters-overview-header">
+        <div>
+          <div class="stat-label">2 · Foyers d’usage des particuliers</div>
+          <h2>${formatUserPostalClusterInteger(summary.individual_count_included || 0)} particuliers répartis sur ${formatUserPostalClusterInteger(summary.postal_code_count || 0)} codes postaux</h2>
+          <p>
+            Cette carte met en évidence les foyers territoriaux d’usage. Les points sont agrégés
+            par code postal et n’exposent jamais de localisation individuelle.
+          </p>
+          <p class="user-postal-clusters-period-note">
+            Période analytique :
+            <strong>${effectivePeriod.start || "—"}</strong>
+            →
+            <strong>${effectivePeriod.end || "—"}</strong>.
+          </p>
+        </div>
+
+        <div class="user-postal-clusters-kpis">
+          <div class="user-postal-clusters-kpi">
+            <strong>${formatUserPostalClusterInteger(summary.postal_code_count || 0)}</strong>
+            <span>codes postaux</span>
+          </div>
+          <div class="user-postal-clusters-kpi">
+            <strong>${formatUserPostalClusterInteger(summary.heatmap_point_count || 0)}</strong>
+            <span>points heatmap</span>
+          </div>
+          <div class="user-postal-clusters-kpi">
+            <strong>${formatUserPostalClusterInteger(summary.professional_count_included || 0)}</strong>
+            <span>professionnels associés</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card user-postal-clusters-map-card">
+      <div class="cartography-map-toolbar">
+        <div>
+          <strong>${formatUserPostalClusterInteger(points.length)}</strong> foyer(s) territoriaux ·
+          intensité pondérée par le nombre de particuliers.
+        </div>
+        <button id="userPostalClustersFitBtn" class="secondary-btn" type="button">
+          Recentrer
+        </button>
+      </div>
+
+      <div id="userPostalClustersMap" class="user-postal-clusters-map"></div>
+
+      <div class="user-postal-clusters-map-note">
+        <strong>Lecture.</strong>
+        La chaleur représente une concentration agrégée de particuliers par code postal,
+        pas une localisation individuelle. Les points sont placés au niveau du centroïde
+        géographique du code postal.
+      </div>
+    </section>
+
+    <section class="card user-postal-clusters-table-card">
+      <div class="territory-section-heading">
+        <h3>Tableau territorial U / P</h3>
+      </div>
+
+      <div class="user-postal-clusters-table-note">
+        Les moyennes d’émission sont calculées par
+        <strong>émetteur distinct actif sur la période</strong> :
+        un professionnel ou un particulier n’entre dans la moyenne que s’il a émis
+        au moins une transaction dans l’intervalle retenu.
+      </div>
+
+      ${buildUserPostalClustersTableHtml(postalCodes)}
+    </section>
+  `;
+}
+
+function buildProfessionalClustersPanelHtml(cartographyData = null, territoriesData = null, consumptionMapSummary = null, userPostalClustersData = null) {
+  const cartographyPayload = cartographyData || {};
+  const cartographySummary = cartographyPayload.summary || {};
+  const professionals = Array.isArray(cartographyPayload.professionals)
+    ? cartographyPayload.professionals
+    : [];
+
+  const territoriesPayload = territoriesData || {};
+  const territorySummary = territoriesPayload.summary || {};
+  const territories = Array.isArray(territoriesPayload.territories)
+    ? territoriesPayload.territories
+    : [];
+
+  return `
+    ${renderProfessionalConsumptionMapCard(consumptionMapSummary)}
+
+    <section class="card professional-clusters-secondary-intro-card">
+      <div class="professional-clusters-secondary-intro">
+        <div class="stat-label">Lecture territoriale croisée</div>
+        <h3>Où se situent les foyers d’usage et les pôles d’acceptation&nbsp;?</h3>
+        <p>
+          Ces deux cartes se lisent ensemble. À gauche, la Gonette est observée du point de vue
+          des particuliers : on repère les foyers territoriaux d’usage, c’est-à-dire les zones où
+          se concentrent les utilisateurs présents dans la période. À droite, on observe le réseau
+          des professionnels effectivement implantés et géolocalisés, avec un relief d’activité
+          qui signale les pôles de réception monétaire. Leur comparaison aide à repérer les
+          centralités fortes, mais aussi les décalages entre présence d’usagers et densité de
+          points d’acceptation.
+        </p>
+      </div>
+    </section>
+
+    ${buildUserPostalClustersSectionHtml(userPostalClustersData)}
+
+    <section class="card cartography-overview-card">
+      <div class="cartography-overview-header">
+        <div>
+          <div class="stat-label">3 · Implantation des professionnels</div>
+          <h2>${cartographySummary.cartographiable_count ?? professionals.length} professionnels affichés</h2>
+          <p>
+            Cette carte montre les professionnels géolocalisés et confirmés. Le relief 3D aide à
+            repérer les pôles de réception monétaire et les concentrations d’activité de la période.
+          </p>
+        </div>
+
+        <div class="cartography-kpis">
+          <div class="cartography-kpi">
+            <strong>${cartographySummary.total_enriched ?? 0}</strong>
+            <span>pros enrichis</span>
+          </div>
+          <div class="cartography-kpi">
+            <strong>${cartographySummary.confirmed ?? 0}</strong>
+            <span>confirmés</span>
+          </div>
+          <div class="cartography-kpi">
+            <strong>${cartographySummary.mismatch ?? 0}</strong>
+            <span>divergences</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="cartography-quality-note">
+        Non affichés :
+        ${cartographySummary.no_odoo_coordinates ?? 0} sans coordonnées Odoo,
+        ${cartographySummary.no_cyclos_coordinates ?? 0} sans coordonnées Cyclos,
+        ${cartographySummary.no_cyclos_address ?? 0} sans adresse Cyclos.
+      </div>
+    </section>
+
+    <section class="card cartography-map-card">
+      <div class="cartography-map-toolbar">
+        <div>
+          <strong>${professionals.length}</strong> points confirmés · relief d’activité monétaire.
+        </div>
+        <button id="cartographyFitBtn" class="secondary-btn" type="button">
+          Recentrer
+        </button>
+      </div>
+
+      <div id="professionalsMap" class="cartography-map"></div>
+
+      <div class="cartography-map-note">
+        <strong>Lecture.</strong>
+        La hauteur des colonnes représente une concentration d’activité monétaire sur la période.
+        Elle signale des pôles de réception plus intenses, sans résumer à elle seule toute la
+        diversité des usages locaux.
+      </div>
+    </section>
+
+    <section class="card territory-overview-card">
+      <div class="territory-overview-header">
+        <div>
+          <div class="stat-label">2 · Ancrage territorial des échanges</div>
+          <h2>${Number(territorySummary.territory_count || 0).toLocaleString("fr-FR")} codes postaux analysés</h2>
+          <p>
+            Cette lecture ventile l’activité numérique des professionnels par code postal :
+            gonettes reçues, gonettes réémises et taux de réutilisation territorial.
+          </p>
+        </div>
+
+        <div class="territory-kpis">
+          <div class="territory-kpi">
+            <strong>${Number(territorySummary.territorialized_professional_count || 0).toLocaleString("fr-FR")}</strong>
+            <span>pros rattachés à un CP</span>
+          </div>
+          <div class="territory-kpi">
+            <strong>${Number(territorySummary.territorialized_active_professional_count || 0).toLocaleString("fr-FR")}</strong>
+            <span>pros actifs</span>
+          </div>
+          <div class="territory-kpi">
+            <strong>${formatTerritoryPercent(territorySummary.overall_reuse_rate)}</strong>
+            <span>réutilisation globale</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="territory-flow-grid">
+        <div class="territory-flow-card">
+          <span>Gonettes reçues territorialisées</span>
+          <strong>${euro(territorySummary.territorialized_received_volume || 0)}</strong>
+        </div>
+        <div class="territory-flow-card">
+          <span>Gonettes émises territorialisées</span>
+          <strong>${euro(territorySummary.territorialized_emitted_volume || 0)}</strong>
+        </div>
+        <div class="territory-flow-card">
+          <span>Volume total brassé</span>
+          <strong>${euro(territorySummary.territorialized_total_flow_volume || 0)}</strong>
+        </div>
+      </div>
+
+      <div class="territory-quality-note">
+        Couverture :
+        ${formatTerritoryPercent(territorySummary.received_volume_coverage)} du volume reçu
+        et ${formatTerritoryPercent(territorySummary.emitted_volume_coverage)} du volume émis
+        sont rattachés à un code postal.
+        ${Number(territorySummary.professionals_without_zip || 0).toLocaleString("fr-FR")} professionnel(s)
+        enrichi(s) restent sans code postal exploitable.
+      </div>
+    </section>
+
+    <section class="card territory-ranking-card">
+      <div class="territory-section-heading">
+        <h3>Principaux territoires par gonettes reçues</h3>
+      </div>
+      ${buildTerritoryRankingHtml(territories)}
+    </section>
+
+    <section class="card territory-table-card">
+      <div class="territory-section-heading">
+        <h3>Détail par code postal</h3>
+      </div>
+      ${buildTerritoriesTableHtml(territories)}
+    </section>
+  `;
+}
+
+async function renderProfessionalClustersPanel(forceReload = false) {
+  const panel = document.getElementById("professionalClustersPanel");
+  if (!panel) {
+    return;
+  }
+
+  const periodKey = getPeriodQueryParam() || "__no_period__";
+  const alreadyHydrated = (
+    panel.dataset.professionalClustersHydrated === "true"
+    && panel.dataset.professionalClustersPeriodKey === periodKey
+  );
+
+  if (alreadyHydrated && !forceReload) {
+    window.requestAnimationFrame(() => {
+      renderProfessionalConsumptionMapCanvas();
+
+      if (
+        appState.userPostalClustersMap
+        && typeof appState.userPostalClustersMap.resize === "function"
+      ) {
+        appState.userPostalClustersMap.resize();
+      }
+
+      if (appState.cartography?.map && typeof appState.cartography.map.resize === "function") {
+        appState.cartography.map.resize();
+      }
+    });
+    return;
+  }
+
+  destroyCartographyMap();
+  destroyUserPostalClustersMap();
+
+  panel.dataset.professionalClustersHydrated = "false";
+  panel.dataset.professionalClustersPeriodKey = periodKey;
+  panel.innerHTML = buildProfessionalClustersLoadingHtml();
+
+  try {
+    const userPostalClustersQuery = getPeriodQueryParam()
+      ? `${getPeriodQueryParam()}&min_individuals=5`
+      : "?min_individuals=5";
+
+    const [cartographyData, territoriesData, userPostalClustersData] = await Promise.all([
+      apiGet(`/api/professionals-map${getPeriodQueryParam()}`),
+      apiGet(`/api/territories/zip${getPeriodQueryParam()}`),
+      apiGet(`/api/user-postal-clusters${userPostalClustersQuery}`)
+    ]);
+
+    appState.cartography.data = cartographyData;
+    appState.territories.data = territoriesData;
+    appState.userPostalClustersData = userPostalClustersData;
+
+    panel.innerHTML = buildProfessionalClustersPanelHtml(
+      cartographyData,
+      territoriesData,
+      appState.professionalConsumptionMap,
+      userPostalClustersData
+    );
+
+    panel.dataset.professionalClustersHydrated = "true";
+
+    const professionals = Array.isArray(cartographyData?.professionals)
+      ? cartographyData.professionals
+      : [];
+
+    window.requestAnimationFrame(() => {
+      renderProfessionalConsumptionMapCanvas();
+      initializeUserPostalClustersMap(userPostalClustersData?.heatmap_points || []);
+      initializeProfessionalsMap(professionals);
+    });
+  } catch (error) {
+    console.warn(
+      "Cartographie des clusters indisponible dans la vue Professionnels & particuliers.",
+      error
+    );
+    panel.innerHTML = buildProfessionalClustersErrorHtml();
+    panel.dataset.professionalClustersHydrated = "false";
+  }
+}
+
+
+function buildProfessionalSectorAnalysisLoadingHtml() {
+  return `
+    <section class="card professional-analysis-roadmap-card">
+      <div class="professional-analysis-section-heading">
+        <div class="stat-label">Analyse sectorielle</div>
+        <h3>Chargement des répartitions par secteur…</h3>
+        <p>
+          Les données sont recalculées pour la période actuellement sélectionnée.
+        </p>
+      </div>
+    </section>
+  `;
+}
+
+function buildProfessionalSectorAnalysisErrorHtml() {
+  return `
+    <section class="card professional-analysis-roadmap-card">
+      <div class="professional-analysis-section-heading">
+        <div class="stat-label">Analyse sectorielle</div>
+        <h3>Les données sectorielles ne sont pas disponibles</h3>
+        <p>
+          L’analyse par secteur n’a pas pu être chargée pour cette période.
+          Les autres onglets restent utilisables.
+        </p>
+      </div>
+    </section>
+  `;
+}
+
+function buildProfessionalSectorAnalysisPanelHtml(sectorsData = null) {
+  const sectorPayload = sectorsData || {};
+  const summary = sectorPayload.summary || {};
+  const sectors = Array.isArray(sectorPayload.sectors)
+    ? sectorPayload.sectors
+    : [];
+
+  return `
+    <section class="card sector-overview-card">
+      <div class="sector-overview-header">
+        <div>
+          <div class="stat-label">Activité monétaire par secteur principal</div>
+          <h2>${Number(summary.sector_count || 0).toLocaleString("fr-FR")} secteurs analysés</h2>
+          <p>
+            Cette lecture répartit l’activité numérique des professionnels par secteur principal :
+            volume reçu, volume réémis, réutilisation et origine des recettes.
+          </p>
+        </div>
+
+        <div class="sector-kpis">
+          <div class="sector-kpi">
+            <strong>${Number(summary.professionals_with_sector || 0).toLocaleString("fr-FR")}</strong>
+            <span>pros sectorisés</span>
+          </div>
+          <div class="sector-kpi">
+            <strong>${Number(summary.active_professionals_with_sector || 0).toLocaleString("fr-FR")}</strong>
+            <span>pros actifs sectorisés</span>
+          </div>
+          <div class="sector-kpi">
+            <strong>${formatSectorPercent(summary.overall_reuse_rate)}</strong>
+            <span>réutilisation globale</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="sector-flow-grid">
+        <div class="sector-flow-card">
+          <span>Gonettes reçues</span>
+          <strong>${euro(summary.total_received_volume || 0)}</strong>
+        </div>
+        <div class="sector-flow-card">
+          <span>Gonettes émises</span>
+          <strong>${euro(summary.total_emitted_volume || 0)}</strong>
+        </div>
+        <div class="sector-flow-card">
+          <span>Volume total brassé</span>
+          <strong>${euro(summary.total_flow_volume || 0)}</strong>
+        </div>
+      </div>
+
+      <div class="sector-quality-note">
+        ${Number(summary.professionals_without_sector || 0).toLocaleString("fr-FR")} professionnel(s)
+        restent sans secteur principal renseigné.
+        Sur les recettes sectorialisées :
+        ${euro(summary.total_c2b_received_volume || 0)} proviennent des particuliers,
+        ${euro(summary.total_b2b_received_volume || 0)} des autres professionnels.
+      </div>
+    </section>
+
+    <section class="card sector-ranking-card">
+      <div class="sector-section-heading">
+        <h3>Principaux secteurs par gonettes reçues</h3>
+      </div>
+      ${buildSectorRankingHtml(sectors)}
+    </section>
+
+    <section class="card sector-mix-card">
+      <div class="sector-section-heading">
+        <h3>Origine des recettes : C2B / B2B</h3>
+      </div>
+      ${buildSectorReceiptsMixHtml(sectors)}
+    </section>
+
+    <section class="card sector-table-card">
+      <div class="sector-section-heading">
+        <h3>Détail par secteur</h3>
+      </div>
+      ${buildSectorsTableHtml(sectors)}
+    </section>
+  `;
+}
+
+async function renderProfessionalSectorAnalysisPanel(forceReload = false) {
+  const panel = document.getElementById("professionalSectorAnalysisPanel");
+  if (!panel) {
+    return;
+  }
+
+  const periodKey = getPeriodQueryParam() || "__no_period__";
+  const alreadyHydrated = (
+    panel.dataset.professionalSectorAnalysisHydrated === "true"
+    && panel.dataset.professionalSectorAnalysisPeriodKey === periodKey
+  );
+
+  if (alreadyHydrated && !forceReload) {
+    return;
+  }
+
+  panel.dataset.professionalSectorAnalysisHydrated = "false";
+  panel.dataset.professionalSectorAnalysisPeriodKey = periodKey;
+  panel.innerHTML = buildProfessionalSectorAnalysisLoadingHtml();
+
+  try {
+    const sectorsData = await apiGet(
+      `/api/sectors/activity${getPeriodQueryParam()}`
+    );
+
+    appState.sectors.data = sectorsData;
+    panel.innerHTML = buildProfessionalSectorAnalysisPanelHtml(sectorsData);
+    panel.dataset.professionalSectorAnalysisHydrated = "true";
+  } catch (error) {
+    console.warn(
+      "Analyse sectorielle indisponible dans la vue Professionnels & particuliers.",
+      error
+    );
+    panel.innerHTML = buildProfessionalSectorAnalysisErrorHtml();
+    panel.dataset.professionalSectorAnalysisHydrated = "false";
+  }
+}
+
+function setProfessionalAnalysisTab(tabName) {
+  appState.professionalsViewTab = tabName || "summary";
+  updateProfessionalAnalysisTabs();
+
+  if (appState.professionalsViewTab === "circulation") {
+    window.requestAnimationFrame(() => {
+      renderProfessionalCirculationCharts();
+    });
+  }
+
+  if (appState.professionalsViewTab === "network") {
+    window.requestAnimationFrame(() => {
+      void renderProfessionalNetworkPanel(false);
+    });
+  }
+
+  if (appState.professionalsViewTab === "clusters") {
+    window.requestAnimationFrame(() => {
+      void renderProfessionalClustersPanel(false);
+    });
+  }
+
+  if (appState.professionalsViewTab === "structures") {
+    window.requestAnimationFrame(() => {
+      void renderProfessionalSectorAnalysisPanel(false);
+    });
+  }
+}
+
+function bindProfessionalAnalysisTabs() {
+  document.querySelectorAll("[data-professional-analysis-tab]").forEach((button) => {
+    if (button.dataset.bound === "true") {
+      return;
+    }
+
+    button.addEventListener("click", () => {
+      const tabName = button.dataset.professionalAnalysisTab || "summary";
+      setProfessionalAnalysisTab(tabName);
+    });
+
+    button.dataset.bound = "true";
+  });
+}
+
+function updateProfessionalAnalysisTabs() {
+  const activeTab = appState.professionalsViewTab || "summary";
+
+  document.querySelectorAll("[data-professional-analysis-tab]").forEach((button) => {
+    const isActive = button.dataset.professionalAnalysisTab === activeTab;
+    button.classList.toggle("professional-analysis-tab-btn-active", isActive);
+    button.setAttribute("aria-pressed", isActive ? "true" : "false");
+  });
+
+  document.querySelectorAll("[data-professional-analysis-panel]").forEach((panel) => {
+    const isActive = panel.dataset.professionalAnalysisPanel === activeTab;
+    panel.classList.toggle("hidden", !isActive);
+  });
+}
+
+async function renderProsView(forceReload = false) {
+  const preserveVisibleView = shouldPreservePeriodRefreshView(
+    "pros",
+    forceReload
+  );
+
+  // La vue Pros reconstruit son HTML à chaque rendu / changement de période.
+  // Lors d'un refresh doux, on conserve l'ancienne vue affichée pendant le chargement,
+  // puis on détruit les charts juste avant le remplacement effectif du DOM.
+  if (!preserveVisibleView) {
+    destroyProfessionalCirculationCharts();
+    destroyCartographyMap();
+  }
+
+  appState.currentView = "pros";
+  syncSidebarView("pros");
+  setTitle("Professionnels & particuliers");
+
+  const periodQuery = getPeriodQueryParam();
+
+  const shouldLoadProsData = (
+    forceReload
+    || appState.prosData.length === 0
+  );
+
+  const shouldLoadProfessionalActivityFlowSummary = (
+    forceReload
+    || !appState.professionalActivityFlowSummary
+    || appState.professionalActivityFlowSummaryPeriodKey !== periodQuery
+  );
+
+  const shouldLoadProfessionalHoldingsSummary = (
+    forceReload
+    || !appState.professionalHoldingsSummary
+    || appState.professionalHoldingsSummaryPeriodKey !== periodQuery
+  );
+
+  const shouldLoadProfessionalPilotageSummary = (
+    forceReload
+    || !appState.professionalPilotageSummary
+    || appState.professionalPilotageSummaryPeriodKey !== periodQuery
+  );
+
+  const shouldLoadProfessionalCirculationTimeseries = (
+    forceReload
+    || !appState.professionalCirculationTimeseries
+    || appState.professionalCirculationTimeseriesPeriodKey !== periodQuery
+  );
+
+  const shouldLoadProfessionalReuseYearlySummary = (
+    forceReload
+    || !appState.professionalReuseYearlySummary
+  );
+
+  const shouldLoadProfessionalChainFateSummary = (
+    forceReload
+    || !appState.professionalChainFateSummary
+  );
+
+  const professionalConsumptionMapQuery = periodQuery
+    ? `${periodQuery}&min_users=2`
+    : "?min_users=2";
+
+  const shouldLoadProfessionalConsumptionMap = (
+    forceReload
+    || !appState.professionalConsumptionMap
+    || appState.professionalConsumptionMapPeriodKey !== professionalConsumptionMapQuery
+  );
+
+  if (shouldLoadProsData && !preserveVisibleView) {
+    content.innerHTML = `<div class="card">Chargement.</div>`;
+  }
+
+  const prosDataPromise = shouldLoadProsData
+    ? apiGet(`/api/pros${periodQuery}`).then((data) => {
+        appState.prosData = data;
+      })
+    : Promise.resolve();
+
+  const professionalActivityFlowSummaryPromise = shouldLoadProfessionalActivityFlowSummary
+    ? apiGet(`/api/professionals/activity-summary${periodQuery}`).then((data) => {
+        appState.professionalActivityFlowSummary = data;
+        appState.professionalActivityFlowSummaryPeriodKey = periodQuery;
+      })
+    : Promise.resolve();
+
+  const professionalHoldingsSummaryPromise = shouldLoadProfessionalHoldingsSummary
+    ? (async () => {
+        try {
+          appState.professionalHoldingsSummary = await apiGet(
+            `/api/monetary-indicators/pilotage-holdings-summary${periodQuery}`
+          );
+        } catch (error) {
+          console.warn(
+            "Synthèse de détention indisponible pour la vue professionnels.",
+            error
+          );
+          appState.professionalHoldingsSummary = null;
+        }
+
+        appState.professionalHoldingsSummaryPeriodKey = periodQuery;
+      })()
+    : Promise.resolve();
+
+  const professionalPilotageSummaryPromise = shouldLoadProfessionalPilotageSummary
+    ? (async () => {
+        try {
+          appState.professionalPilotageSummary = await apiGet(
+            `/api/monetary-indicators/pilotage-summary${periodQuery}`
+          );
+        } catch (error) {
+          console.warn(
+            "Synthèse de pilotage indisponible pour la vue professionnels.",
+            error
+          );
+          appState.professionalPilotageSummary = null;
+        }
+
+        appState.professionalPilotageSummaryPeriodKey = periodQuery;
+      })()
+    : Promise.resolve();
+
+  const professionalCirculationTimeseriesPromise = shouldLoadProfessionalCirculationTimeseries
+    ? apiGet(`/api/professionals/circulation-timeseries${periodQuery}`).then((data) => {
+        appState.professionalCirculationTimeseries = data;
+        appState.professionalCirculationTimeseriesPeriodKey = periodQuery;
+      })
+    : Promise.resolve();
+
+  const professionalReuseYearlySummaryPromise = shouldLoadProfessionalReuseYearlySummary
+    ? apiGet("/api/monetary-indicators/pilotage-reuse-yearly").then((data) => {
+        appState.professionalReuseYearlySummary = data;
+      })
+    : Promise.resolve();
+
+  const professionalChainFateSummaryPromise = shouldLoadProfessionalChainFateSummary
+    ? (async () => {
+        try {
+          appState.professionalChainFateSummary = await apiGet(
+            "/api/professionals/chain-fate-summary"
+          );
+        } catch (error) {
+          console.warn(
+            "Résumé des trajectoires professionnelles indisponible.",
+            error
+          );
+          appState.professionalChainFateSummary = null;
+        }
+      })()
+    : Promise.resolve();
+
+  const professionalConsumptionMapPromise = shouldLoadProfessionalConsumptionMap
+    ? (async () => {
+        try {
+          appState.professionalConsumptionMap = await apiGet(
+            `/api/professionals/consumption-map${professionalConsumptionMapQuery}`
+          );
+          appState.professionalConsumptionMapPeriodKey = professionalConsumptionMapQuery;
+          resetProfessionalConsumptionMapRenderCaches();
+          appState.professionalConsumptionMapRenderPayload =
+            getProfessionalConsumptionMapFinalRenderPayload(
+              appState.professionalConsumptionMap
+            );
+          appState.professionalConsumptionMapPlayer = null;
+
+          if (!appState.professionalConsumptionMapViewMode) {
+            appState.professionalConsumptionMapViewMode = "static";
+          }
+        } catch (error) {
+          console.warn(
+            "Carte des bassins de consommation U→P indisponible.",
+            error
+          );
+          appState.professionalConsumptionMap = null;
+          appState.professionalConsumptionMapRenderPayload = null;
+          appState.professionalConsumptionMapPlayer = null;
+          appState.professionalConsumptionMapViewMode = "static";
+          resetProfessionalConsumptionMapRenderCaches();
+          restoreProfessionalConsumptionMapDynamicTheme();
+          appState.professionalConsumptionMapPeriodKey = professionalConsumptionMapQuery;
+        }
+      })()
+    : Promise.resolve();
+
+  await Promise.all([
+    prosDataPromise,
+    professionalActivityFlowSummaryPromise,
+    professionalHoldingsSummaryPromise,
+    professionalPilotageSummaryPromise,
+    professionalCirculationTimeseriesPromise,
+    professionalReuseYearlySummaryPromise,
+    professionalChainFateSummaryPromise,
+    professionalConsumptionMapPromise
+  ]);
+
+  if (preserveVisibleView) {
+    destroyProfessionalCirculationCharts();
+    destroyCartographyMap();
+  }
+
+  content.innerHTML = buildProfessionalAnalysisShell(
+    appState.professionalActivityFlowSummary,
+    appState.professionalHoldingsSummary,
+    appState.professionalPilotageSummary,
+    appState.professionalCirculationTimeseries,
+    appState.professionalReuseYearlySummary,
+    appState.professionalChainFateSummary,
+    appState.professionalConsumptionMap
+  );
   drawProsTable();
+  bindProfessionalAnalysisTabs();
+  updateProfessionalAnalysisTabs();
+
+  if (appState.professionalsViewTab === "circulation") {
+    window.requestAnimationFrame(() => {
+      renderProfessionalCirculationCharts();
+    });
+  }
+
+  if (appState.professionalsViewTab === "network") {
+    window.requestAnimationFrame(() => {
+      void renderProfessionalNetworkPanel(forceReload);
+    });
+  }
+
+  if (appState.professionalsViewTab === "clusters") {
+    window.requestAnimationFrame(() => {
+      void renderProfessionalClustersPanel(forceReload);
+    });
+  }
+
+  if (appState.professionalsViewTab === "structures") {
+    window.requestAnimationFrame(() => {
+      void renderProfessionalSectorAnalysisPanel(forceReload);
+    });
+  }
 }
 
 function getDailyChartDatasets(charts, metric = "count") {
@@ -8311,6 +12761,49 @@ function getDailyChartDatasets(charts, metric = "count") {
     }
   ];
 }
+
+
+const PROFESSIONAL_CONSUMPTION_MAP_HELP = {
+  title: "Bassins de consommation Gonette — trajectoires U→P",
+  summary: "Cette carte représente une géographie agrégée des paiements des particuliers vers les professionnels. Elle ne montre jamais les adresses réelles des utilisateurs : les origines sont synthétiques et réparties à l’intérieur de bassins postaux.",
+  usefulness: "Elle aide à comprendre d’où convergent les consommations en Gonettes numériques, quels professionnels captent des flux issus de plusieurs bassins d’usage, et comment certains itinéraires de consommation se créent puis se renforcent dans le temps.",
+  reading: [
+    "Chaque faisceau relie un bassin postal d’origine à un professionnel destinataire.",
+    "Les points rouges ne sont pas des domiciles : ce sont des points-source graphiques synthétiques, placés dans le périmètre postal afin de rendre la carte lisible.",
+    "Les nœuds verts correspondent aux professionnels recevant les paiements U→P représentés.",
+    "En mode dynamique, une route se trace de U vers P lorsqu’elle devient visible ; une petite particule lumineuse en marque la tête.",
+    "Une route qui est de plus en plus empruntée gagne progressivement en présence lumineuse : la carte ne montre donc pas seulement la création de liens, mais aussi leur fréquentation."
+  ],
+  crossReading: [
+    "À lire avec les indicateurs de paiements U→P de l’onglet Circulation & multiplicateur.",
+    "À croiser avec les analyses de territoires et de secteurs pour comprendre quels types de professionnels polarisent certains bassins de consommation.",
+    "À rapprocher, plus tard, de l’onglet B2B : ici on observe la consommation des particuliers vers les pros, pas la circulation interprofessionnelle."
+  ],
+  pilotage: [
+    "Un professionnel recevant des flux depuis de nombreux bassins peut jouer un rôle d’attraction au-delà de sa proximité immédiate.",
+    "Des faisceaux denses et répétitifs peuvent signaler des couloirs de consommation stabilisés.",
+    "Des zones postales faiblement reliées ou absentes peuvent inviter à questionner la couverture territoriale du réseau, en gardant à l’esprit que la carte ne représente que les flux cartographiables."
+  ],
+  perimeter: [
+    "Périmètre : transactions U→P cartographiables sur la période sélectionnée dans le filtre latéral.",
+    "Origines : codes postaux de particuliers disponibles via l’enrichissement Odoo, représentés par des points synthétiques.",
+    "Destinations : professionnels dont la géolocalisation Cyclos est confirmée.",
+    "Seuil de confidentialité : un faisceau n’est affiché qu’à partir de 2 particuliers distincts."
+  ],
+  formulas: [
+    "Faisceau visible = code postal d’origine → professionnel destinataire, si au moins 2 particuliers distincts contribuent au lien.",
+    "Carte dynamique = construction cumulative des faisceaux au fil de la période sélectionnée.",
+    "Intensification visuelle = combinaison majoritairement fondée sur la fréquence cumulée des paiements, complétée par le volume cumulé.",
+    "Les points-source synthétiques sont déterministes : ils restent stables d’un affichage à l’autre, sans représenter de localisation individuelle."
+  ],
+  sources: [
+    "/api/professionals/consumption-map",
+    "transactions filtrées sur U→P",
+    "odoo_individual_enrichment.zip",
+    "odoo_professional_enrichment.cyclos_latitude / cyclos_longitude",
+    "server/data/consumption_postal_areas.json"
+  ]
+};
 
 const STATS_CHART_DEFAULT_METRICS = {
   globalDailyCount: "count",
@@ -8494,13 +12987,162 @@ const STATS_CHART_HELP = {
     ]
   },
 
+  pilotageHoldingsMassComposition: {
+    title: "Composition de la masse numérique par catégorie de détenteurs",
+    summary: "Ce graphe montre comment la masse numérique moyenne se répartit entre les particuliers, les professionnels du réseau, les comptes entreprise Gonette et un reste non encore ventilé.",
+    usefulness: "Il donne une lecture structurelle de la détention : non pas combien de Gonettes circulent pendant le mois, mais où la monnaie numérique est, en moyenne, portée dans le circuit.",
+    reading: [
+      "Chaque barre représente 100 % de la masse numérique moyenne du mois.",
+      "Le bleu correspond à la part portée par les particuliers, le rose à celle portée par les professionnels du réseau, l’orange aux comptes entreprise Gonette.",
+      "La part « reste non encore ventilé » correspond à la fraction de masse numérique qui n’est pas expliquée par ces trois agrégats de soldes positifs.",
+      "Une hausse de la part professionnelle indique que les pros portent une fraction plus importante de la masse numérique moyenne ; elle ne dit pas, à elle seule, si cette monnaie est rapidement redépensée."
+    ],
+    crossReading: [
+      "À lire avec le graphe « Stocks numériques moyens par catégorie de détenteurs » : la composition donne les parts relatives, les stocks donnent les volumes absolus.",
+      "À croiser avec les indicateurs de circulation économique : une masse fortement détenue par les professionnels n’est pleinement interprétable qu’en regard du réemploi interne, des paiements P→P et des reconversions.",
+      "À rapprocher de l’onglet « Entrées, sorties & garanties » pour comprendre l’évolution de la masse numérique totale qui sert de dénominateur."
+    ],
+    pilotage: [
+      "Une part professionnelle élevée peut signaler un ancrage de la monnaie dans le cœur économique du réseau, mais mérite d’être confrontée à la capacité de redépense des pros.",
+      "Une hausse durable de la part particulière peut indiquer davantage de monnaie en attente d’usage côté utilisateurs, ou une croissance de la détention active ; la dormance permet de trancher partiellement.",
+      "Le reste non ventilé est méthodologiquement important : s’il varie fortement, il faut surveiller le périmètre d’extraction et les catégories encore non rapprochées."
+    ],
+    perimeter: [
+      "Les parts sont calculées sur les moyennes journalières alignées entre les soldes Cyclos disponibles et la masse numérique quotidienne Odoo.",
+      "Les stocks affichés correspondent à des soldes positifs moyens agrégés par catégorie.",
+      "La masse numérique de référence est issue des indicateurs comptables Odoo."
+    ],
+    formulas: [
+      "Part particuliers = stock positif particulier moyen / masse numérique moyenne.",
+      "Part professionnels du réseau = stock positif professionnel moyen hors P0000 / P9999 / masse numérique moyenne.",
+      "Part comptes entreprise Gonette = stock positif moyen P0000 / P9999 / masse numérique moyenne.",
+      "Reste non ventilé = 100 % − parts particulières − parts professionnelles − parts comptes entreprise Gonette."
+    ],
+    sources: [
+      "pilotage-holdings-timeseries.items[].average_user_stock_share_of_numeric_mass",
+      "pilotage-holdings-timeseries.items[].average_professional_network_stock_share_of_numeric_mass",
+      "pilotage-holdings-timeseries.items[].average_gonette_business_accounts_stock_share_of_numeric_mass",
+      "pilotage-holdings-timeseries.items[].average_numeric_mass"
+    ]
+  },
+
+  pilotageHoldingsStockShare: {
+    title: "Stocks numériques moyens par catégorie de détenteurs",
+    summary: "Ce graphe suit, mois par mois, le volume moyen de Gonettes numériques détenu par les particuliers, les professionnels du réseau et les comptes entreprise Gonette.",
+    usefulness: "Il permet de lire la détention en valeur absolue. Là où le graphe de composition montre des parts relatives, celui-ci montre le poids réel des stocks détenus et leurs déplacements au fil du temps.",
+    reading: [
+      "Chaque point correspond au stock positif moyen détenu pendant le mois par la catégorie concernée.",
+      "La courbe des particuliers renseigne la quantité moyenne de Gonettes numériques stationnant chez les utilisateurs.",
+      "La courbe des professionnels du réseau mesure la détention moyenne dans le tissu économique, hors comptes P0000 / P9999.",
+      "La courbe des comptes entreprise Gonette isole les stocks présents sur les comptes opérateurs P0000 / P9999."
+    ],
+    crossReading: [
+      "À lire avec le graphe de composition : un stock peut augmenter en valeur absolue tout en représentant une part stable ou décroissante de la masse numérique totale.",
+      "À croiser avec les alimentations et les sorties : une hausse du stock détenu peut venir d’une croissance de la masse, d’un ralentissement de la circulation, ou des deux.",
+      "À rapprocher de la masse active / dormante pour distinguer la détention particulière récente d’un stock qui s’éloigne de l’usage."
+    ],
+    pilotage: [
+      "Une hausse du stock professionnel peut être positive si elle accompagne davantage de réemploi interne ; elle peut être plus préoccupante si elle coexiste avec des reconversions croissantes ou un affaiblissement du P→P.",
+      "Une hausse du stock particulier n’est pas automatiquement une bonne ou une mauvaise nouvelle : elle peut refléter une confiance accrue, une accumulation préalable à la dépense, ou une mise en sommeil.",
+      "L’évolution des comptes entreprise Gonette mérite d’être lue comme un signal opérateur spécifique, distinct de la détention du réseau professionnel ordinaire."
+    ],
+    perimeter: [
+      "Stocks positifs moyens calculés sur les jours effectivement alignés avec la masse numérique quotidienne Odoo.",
+      "Les professionnels du réseau excluent les comptes P0000 et P9999.",
+      "Les comptes entreprise Gonette correspondent ici à P0000 / P9999."
+    ],
+    formulas: [
+      "Stock particulier moyen = moyenne journalière des soldes positifs particuliers agrégés.",
+      "Stock professionnel du réseau moyen = moyenne journalière des soldes positifs professionnels, hors P0000 / P9999.",
+      "Stock comptes entreprise Gonette moyen = moyenne journalière des soldes positifs P0000 / P9999."
+    ],
+    sources: [
+      "pilotage-holdings-timeseries.items[].average_positive_user_stock",
+      "pilotage-holdings-timeseries.items[].average_positive_professional_network_stock",
+      "pilotage-holdings-timeseries.items[].average_positive_gonette_business_accounts_stock"
+    ]
+  },
+
+  pilotageHoldingsDormancy: {
+    title: "Masse particulière active / dormante",
+    summary: "Ce graphe répartit le stock positif particulier à la clôture de chaque mois selon l’ancienneté de la dernière activité du compte : actif récent, dormance intermédiaire ou dormance plus longue.",
+    usefulness: "Il permet de dépasser une simple lecture du volume détenu par les particuliers. Deux mois peuvent afficher un stock particulier proche, tout en ayant une qualité d’ancrage très différente selon que ce stock reste vivant ou s’éloigne de l’activité récente.",
+    reading: [
+      "La partie « Actif ≤ 30 j » correspond aux soldes portés par des comptes ayant enregistré une activité récente.",
+      "Les strates « Dormant 31–90 j », « Dormant 91–180 j » et « Dormant > 180 j » isolent des stocks de plus en plus éloignés de l’usage observé.",
+      "Le graphe porte sur le stock particulier positif à la clôture du mois, et non sur une moyenne mensuelle.",
+      "Un stock dormant n’est pas nécessairement perdu : il indique une absence de transaction récente, pas l’impossibilité d’un retour en circulation."
+    ],
+    crossReading: [
+      "À lire avec le bloc « Masse active / dormante à la clôture », qui résume la situation en fin de période.",
+      "À croiser avec la réactivation des stocks dormants : une dormance élevée n’a pas le même sens si une part importante de ces comptes se remet ensuite à transacter.",
+      "À rapprocher de l’intensité de mobilisation du stock particulier : un stock très actif devrait, toutes choses égales par ailleurs, produire davantage de paiements vers les professionnels."
+    ],
+    pilotage: [
+      "Une montée de la dormance longue peut signaler une difficulté à transformer la détention particulière en usage effectif.",
+      "Une masse active forte suggère qu’une part importante du stock reste proche de la circulation, mais ne renseigne pas à elle seule sur la direction des paiements.",
+      "Cet indicateur peut soutenir des stratégies de réactivation, de relance des usagers ou d’analyse de l’expérience d’usage côté particuliers."
+    ],
+    perimeter: [
+      "Le calcul porte sur les comptes particuliers à solde positif à la date de clôture mensuelle retenue.",
+      "La dormance est mesurée à partir de l’absence de transaction impliquant le compte particulier sur une fenêtre d’ancienneté.",
+      "Les catégories sont exclusives : chaque compte est affecté à une seule classe de récence."
+    ],
+    formulas: [
+      "Stock actif ≤ 30 j = somme des soldes positifs des comptes particuliers dont la dernière activité date de 30 jours ou moins.",
+      "Stock dormant 31–90 j = somme des soldes positifs dont la dernière activité est comprise entre 31 et 90 jours.",
+      "Stock dormant 91–180 j = somme des soldes positifs dont la dernière activité est comprise entre 91 et 180 jours.",
+      "Stock dormant > 180 j = somme des soldes positifs dont la dernière activité dépasse 180 jours."
+    ],
+    sources: [
+      "pilotage-holdings-timeseries.items[].dormancy_snapshot.buckets",
+      "pilotage-holdings-summary.holdings_metrics.dormancy"
+    ]
+  },
+
+  pilotageHoldingsMobilization: {
+    title: "Intensité de mobilisation du stock particulier",
+    summary: "Ce graphe mesure, mois par mois, combien de Gonettes sont payées vers les professionnels pour 100 G de stock particulier détenues en moyenne.",
+    usefulness: "Il rapproche la détention particulière de son débouché économique. L’indicateur ne décrit pas la masse immobilisée en elle-même, mais l’intensité avec laquelle ce stock se traduit en paiements U→P.",
+    reading: [
+      "Une valeur de 60 G signifie que, sur le mois, 60 G de paiements vers les professionnels ont été observés pour 100 G de stock particulier moyen.",
+      "Ce n’est pas un pourcentage : l’unité est « G dépensées vers les pros pour 100 G détenues en moyenne ».",
+      "Une valeur supérieure à 100 est possible si le stock particulier tourne plusieurs fois au cours du mois.",
+      "Une baisse de l’indicateur peut venir d’un ralentissement des paiements U→P, d’une hausse plus rapide du stock particulier moyen, ou d’une combinaison des deux."
+    ],
+    crossReading: [
+      "À lire avec le graphe de stock particulier moyen : le dénominateur de l’indicateur peut évoluer fortement.",
+      "À rapprocher de la masse active / dormante : un stock plus actif devrait contribuer davantage à la mobilisation, sans que la relation soit mécanique.",
+      "À croiser avec les volumes U→P et avec la rotation économique globale afin de distinguer l’intensité spécifique de la mobilisation particulière de la vitalité générale du circuit."
+    ],
+    pilotage: [
+      "Cet indicateur aide à savoir si la détention particulière constitue un réservoir effectivement mobilisé vers l’économie locale.",
+      "Un repli durable peut inviter à regarder la disponibilité de débouchés professionnels, les usages de paiement, ou la croissance d’un stock particulier peu dépensé.",
+      "Une hausse doit être interprétée avec le niveau de stock : elle peut traduire une meilleure mobilisation, mais aussi un stock moyen plus faible servant de dénominateur."
+    ],
+    perimeter: [
+      "Numérateur : paiements économiques U→P observés sur le mois.",
+      "Dénominateur : stock positif particulier moyen sur les jours alignés du mois.",
+      "Les mois partiels sont calculés sur les jours effectivement disponibles et doivent être comparés avec prudence."
+    ],
+    formulas: [
+      "Mobilisation = volume mensuel des paiements U→P / stock particulier moyen × 100.",
+      "Unité de lecture = G vers les professionnels pour 100 G détenues en moyenne par les particuliers."
+    ],
+    sources: [
+      "pilotage-holdings-timeseries.items[].economic_up_volume_per_100_g_average_user_stock",
+      "pilotage-holdings-timeseries.items[].average_positive_user_stock",
+      "pilotage-holdings-timeseries.items[].economic_up_volume"
+    ]
+  },
+
   globalDailyCount: {
     title: "Transactions par jour, par nature d’opération",
     summary: "Vue transversale des grands mouvements monétaires sur la période active.",
     perimeter: [
-      "Activité économique : Compte / Compte Pro, hors flux vers Acteur masqué, hors P0000 et P9999.",
+      "Activité économique : Compte / Compte Pro, hors flux vers Compte technique, hors P0000 et P9999.",
       "Alimentation du circuit : group_label = Émission.",
-      "Sorties du circuit : Compte Pro · P→Acteur masqué.",
+      "Sorties du circuit : Compte Pro · P→Compte technique.",
       "Opérations associatives / techniques : autres mouvements hors activité centrale."
     ],
     formulas: [
@@ -8516,7 +13158,7 @@ const STATS_CHART_HELP = {
     perimeter: [
       "Transactions retenues dans le périmètre d’activité économique.",
       "Flux détaillés : U→P, P→P, P→U, U→U.",
-      "Flux atypiques : A→P et A→U inclus dans l’activité retenue."
+      "Flux atypiques : T→P et T→U inclus dans l’activité retenue."
     ],
     formulas: [
       "Nombre hebdomadaire d’un flux = nombre de transactions de ce flux dans la semaine ISO.",
@@ -8579,7 +13221,7 @@ const STATS_CHART_HELP = {
     ],
     perimeter: [
       "Alimentations : transactions classées dans le groupe Émission.",
-      "Sorties : transactions Compte Pro · P→Acteur masqué."
+      "Sorties : transactions Compte Pro · P→Compte technique."
     ],
     formulas: [
       "Nombre mensuel = nombre d’opérations du mois.",
@@ -8592,16 +13234,16 @@ const STATS_CHART_HELP = {
     title: "Quand la monnaie entre : qui la reçoit ?",
     summary: "Ici, on ne regarde que la monnaie qui entre dans le circuit. Le graphe montre vers quels types de comptes elle va.",
     reading: [
-      "La courbe A→U montre les alimentations vers les particuliers.",
-      "La courbe A→P montre les alimentations vers les professionnels.",
+      "La courbe T→U montre les alimentations vers les particuliers.",
+      "La courbe T→P montre les alimentations vers les professionnels.",
       "Si une courbe est très proche de zéro, cela veut dire que ce cas est rare ou porte sur de petits montants.",
       "Les séries complètement vides ne sont pas affichées."
     ],
     perimeter: [
       "Uniquement les transactions d’alimentation du circuit numérique.",
-      "A→U : vers particuliers.",
-      "A→P : vers professionnels.",
-      "A→A : résiduel technique très marginal."
+      "T→U : vers particuliers.",
+      "T→P : vers professionnels.",
+      "T→T : résiduel technique très marginal."
     ],
     formulas: [
       "Nombre mensuel d’un flux = nombre d’alimentations de ce type dans le mois.",
@@ -8642,7 +13284,7 @@ const STATS_CHART_HELP = {
     perimeter: [
       "Calculé uniquement en volume.",
       "Alimentations : groupe Émission.",
-      "Sorties : Compte Pro · P→Acteur masqué."
+      "Sorties : Compte Pro · P→Compte technique."
     ],
     formulas: [
       "Écart net cumulé au mois m = volume cumulé alimenté − volume cumulé sorti."
@@ -8652,17 +13294,17 @@ const STATS_CHART_HELP = {
 
   operationsMonthlyFamilies: {
     title: "Chaque mois : quels types d’opérations hors activité économique ?",
-    summary: "Ce graphe compare les deux grands blocs de l’onglet : les mouvements impliquant les comptes opérateurs et les flux particuliers vers l’acteur masqué.",
+    summary: "Ce graphe compare les deux grands blocs de l’onglet : les mouvements impliquant les comptes opérateurs et les flux particuliers vers l’compte technique.",
     reading: [
       "Chaque point correspond à un mois.",
       "La série « Comptes opérateurs » montre les opérations liées à P0000 ou P9999.",
-      "La série « Particuliers → acteur masqué » montre les flux U→A.",
+      "La série « Particuliers → comptes techniques » montre les flux U→T.",
       "Quand une courbe monte, cela signifie que ce type d’opérations a été plus important ce mois-là.",
       "Le dernier mois peut être incomplet si la période s’arrête en cours de mois."
     ],
     perimeter: [
       "Comptes opérateurs : flux classés dans la famille impliquant P0000 / P9999.",
-      "Particuliers → acteur masqué : flux U→A classés hors activité économique."
+      "Particuliers → comptes techniques : flux U→T classés hors activité économique."
     ],
     formulas: [
       "Nombre mensuel = nombre d’opérations de la famille dans le mois.",
@@ -8703,7 +13345,7 @@ const STATS_CHART_HELP = {
     ],
     perimeter: [
       "Uniquement les opérations associatives / techniques de l’onglet 3.",
-      "Ce périmètre regroupe les flux impliquant P0000 / P9999 et les flux particuliers vers acteur masqué.",
+      "Ce périmètre regroupe les flux impliquant P0000 / P9999 et les flux particuliers vers compte technique.",
       "Les catégories affichées ne décrivent pas l’activité économique générale de la Gonette."
     ],
     formulas: [
@@ -8817,13 +13459,33 @@ function applyStatsChartHiddenDatasets(chartKey, chart) {
   }
 
   const hiddenMap = getStatsChartHiddenDatasetMap(chartKey);
+  const hiddenLabels = Object.keys(hiddenMap || {});
+
+  // Premier chargement : rien n'a encore été masqué par l'utilisateur.
+  // On évite donc un chart.update() inutile juste après new Chart(...).
+  if (!hiddenLabels.length) {
+    return;
+  }
+
+  let visibilityChanged = false;
 
   chart.data.datasets.forEach((dataset, index) => {
-    const isHidden = Boolean(hiddenMap[dataset.label]);
-    chart.setDatasetVisibility(index, !isHidden);
+    if (!Object.prototype.hasOwnProperty.call(hiddenMap, dataset.label)) {
+      return;
+    }
+
+    const shouldBeVisible = !Boolean(hiddenMap[dataset.label]);
+
+    if (chart.isDatasetVisible(index) !== shouldBeVisible) {
+      chart.setDatasetVisibility(index, shouldBeVisible);
+      visibilityChanged = true;
+    }
   });
 
-  chart.update();
+  // En cas de restauration réelle d'état, mise à jour sans animation.
+  if (visibilityChanged) {
+    chart.update("none");
+  }
 }
 
 function buildStatsChartMetricToggle(chartKey, metric) {
@@ -9248,6 +13910,10 @@ function buildStatsChartConfig(chartKey, charts, metric) {
       );
     case "pilotageHoldingsStockShare":
       return buildPilotageHoldingsStockShareChartConfig(
+        charts?.pilotageHoldingsItems || []
+      );
+    case "pilotageHoldingsMassComposition":
+      return buildPilotageHoldingsMassCompositionChartConfig(
         charts?.pilotageHoldingsItems || []
       );
     case "pilotageHoldingsMobilization":
@@ -9985,7 +14651,7 @@ function renderGlobalStatsChartsFromSeries(charts) {
           ${buildStatsChartHeader({
             chartKey: "operationsMonthlyFamilies",
             title: "Chaque mois : quelles familles d’opérations ?",
-            description: "Compare les comptes opérateurs et les flux particuliers vers acteur masqué.",
+            description: "Compare les comptes opérateurs et les flux particuliers vers compte technique.",
             metric: operationsFamiliesMetric
           })}
           <canvas id="operationsMonthlyFamiliesChart" height="105"></canvas>
@@ -10063,7 +14729,8 @@ function drawProsTable() {
     </tr>
   `).join("");
 
-  content.innerHTML = `
+  const professionalsDirectoryTarget = document.getElementById("professionalsDirectoryPanel") || content;
+  professionalsDirectoryTarget.innerHTML = `
     <div class="topbar">
       <input type="text" id="searchPros" placeholder="Recherche rapide..." value="${escapeHtml(appState.prosSearch)}">
       <span>${filtered.length} résultat(s)</span>
@@ -10087,8 +14754,11 @@ function drawProsTable() {
   `;
 
   const searchInput = document.getElementById("searchPros");
-  searchInput.focus();
-  searchInput.setSelectionRange(searchInput.value.length, searchInput.value.length);
+
+  if (appState.professionalsViewTab === "directory") {
+    searchInput.focus();
+    searchInput.setSelectionRange(searchInput.value.length, searchInput.value.length);
+  }
 
   searchInput.addEventListener("input", (e) => {
     const nextValue = e.target.value;
@@ -10181,6 +14851,240 @@ function getDetailModeLabel(mode) {
 
 
 
+
+function normalizeProfessionalReuseRate(value) {
+  const numeric = Number(value || 0);
+
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return 0;
+  }
+
+  // Les statistiques professionnelles expriment déjà les taux en points
+  // de pourcentage : 3.2 signifie 3,2 %, et percent(...) attend cette forme.
+  return numeric;
+}
+
+function formatProfessionalMeetingInteger(value) {
+  return Number(value || 0).toLocaleString("fr-FR");
+}
+
+function buildProfessionalMeetingDiagnostic(filteredStats = {}) {
+  const totalReceived = Number(filteredStats.montant_total_recu || 0);
+  const c2bReceived = Number(filteredStats.montant_recu_particuliers || 0);
+  const b2bReceived = Number(filteredStats.montant_recu_professionnels || 0);
+  const totalReemitted = Number(filteredStats.total_montant_emis_sans_reconversion || 0);
+  const reconverted = Number(filteredStats.montant_reconverti || 0);
+  const individualPayers = Number(filteredStats.nb_particuliers || 0);
+  const professionalPayers = Number(filteredStats.nb_professionnels || 0);
+  const reuseRate = normalizeProfessionalReuseRate(filteredStats.taux_reutilisation);
+
+  const c2bShare = totalReceived > 0 ? (c2bReceived / totalReceived) * 100 : 0;
+  const b2bShare = totalReceived > 0 ? (b2bReceived / totalReceived) * 100 : 0;
+
+  let profileTitle = "Usage à qualifier";
+  let profileText = "Les volumes observés ne permettent pas encore de dégager un profil d’usage très installé sur la période.";
+
+  if (totalReceived <= 0 && totalReemitted <= 0) {
+    profileTitle = "Compte peu activé";
+    profileText = "La période sélectionnée montre peu ou pas d’activité commerciale en Gonette. Le rendez-vous peut commencer par l’activation des usages de base.";
+  } else if (c2bShare >= 75) {
+    profileTitle = "Point de captation C2B";
+    profileText = `Les encaissements proviennent très majoritairement des particuliers : ${percent(c2bShare)} des montants reçus. Le professionnel joue d’abord un rôle de point d’entrée de la Gonette dans la consommation quotidienne.`;
+  } else if (b2bShare >= 45) {
+    profileTitle = "Relais interprofessionnel";
+    profileText = `Une part significative des montants reçus vient d’autres professionnels : ${percent(b2bShare)} des encaissements. Le professionnel est déjà inséré dans une logique de circulation B2B.`;
+  } else if (reuseRate >= 55) {
+    profileTitle = "Acteur de circulation active";
+    profileText = `Le taux de réutilisation atteint ${percent(reuseRate)}. Le professionnel transforme une part importante des Gonettes reçues en nouveaux flux dans le réseau.`;
+  } else {
+    profileTitle = "Réception mixte à structurer";
+    profileText = "Le professionnel reçoit des Gonettes depuis plusieurs types d’acteurs, mais son rôle dans la circulation peut encore être davantage qualifié.";
+  }
+
+  let strengthTitle = "Signal à documenter";
+  let strengthText = "Le rendez-vous permettra de comprendre plus finement les usages réels derrière les transactions.";
+
+  if (individualPayers >= 20) {
+    strengthTitle = "Fond de commerce Gonette déjà visible";
+    strengthText = `${formatProfessionalMeetingInteger(individualPayers)} particuliers distincts ont réglé ce professionnel sur la période. C’est un bon point d’appui pour travailler l’ancrage clientèle.`;
+  } else if (individualPayers >= 5) {
+    strengthTitle = "Première base clientèle Gonette";
+    strengthText = `${formatProfessionalMeetingInteger(individualPayers)} particuliers distincts apparaissent déjà comme payeurs. Le professionnel dispose d’un socle d’usage à consolider.`;
+  } else if (professionalPayers >= 3) {
+    strengthTitle = "Insertion B2B repérable";
+    strengthText = `${formatProfessionalMeetingInteger(professionalPayers)} professionnels distincts alimentent déjà ses encaissements. Cette assise réseau peut servir de levier de réemploi.`;
+  } else if (totalReceived > 0) {
+    strengthTitle = "Activité Gonette déjà amorcée";
+    strengthText = "Des flux sont bien présents. L’enjeu est désormais de les rendre plus réguliers, plus lisibles et plus utiles au professionnel.";
+  }
+
+  let actionTitle = "Préparer un entretien exploratoire";
+  let actionText = "Revenir sur les usages concrets, les freins et les dépenses susceptibles d’être réglées en Gonette.";
+  let actionTone = "neutral";
+
+  if (reconverted > 0 && reconverted >= totalReemitted) {
+    actionTitle = "Comprendre la sortie du circuit";
+    actionText = "La reconversion pèse autant ou davantage que le réemploi. Le rendez-vous doit identifier ce qui empêche les Gonettes d’être redépensées dans le réseau.";
+    actionTone = "attention";
+  } else if (reuseRate > 100) {
+    actionTitle = "Documenter une mobilisation active du stock";
+    actionText = "Le professionnel a réinjecté davantage de Gonettes qu’il n’en a reçu ou converti sur la période. Ce profil suggère l’utilisation d’un stock antérieur disponible et mérite d’être documenté : quels achats, quels fournisseurs, quelles habitudes rendent cette circulation possible ?";
+    actionTone = "positive";
+  } else if (totalReceived > 0 && reuseRate < 15) {
+    actionTitle = "Ouvrir des débouchés de réemploi";
+    actionText = "Les Gonettes sont bien captées mais très peu remises en circulation. Priorité : repérer 2 à 5 fournisseurs, charges ou partenaires compatibles avec un paiement en Gonette.";
+    actionTone = "attention";
+  } else if (totalReceived > 0 && reuseRate < 40) {
+    actionTitle = "Structurer le réemploi";
+    actionText = "Le réemploi existe, mais il reste limité. Le rendez-vous peut viser la transformation de dépenses ponctuelles en habitudes d’achat professionnelles en Gonette.";
+    actionTone = "watch";
+  } else if (reuseRate >= 65) {
+    actionTitle = "Valoriser une pratique exemplaire";
+    actionText = "Le professionnel réinjecte fortement ses Gonettes dans le réseau. L’entretien peut documenter les bonnes pratiques et identifier les maillons qui rendent cette circulation possible.";
+    actionTone = "positive";
+  } else if (c2bShare < 35 && individualPayers < 5) {
+    actionTitle = "Renforcer la visibilité auprès des particuliers";
+    actionText = "Le fond de commerce Gonette côté usagers particuliers semble encore modeste. Une piste consiste à travailler signalétique, communication et mobilisation de la clientèle.";
+    actionTone = "watch";
+  }
+
+  return {
+    profileTitle,
+    profileText,
+    strengthTitle,
+    strengthText,
+    actionTitle,
+    actionText,
+    actionTone,
+  };
+}
+
+function drawProMeetingHeroSection() {
+  const container = document.getElementById("proMeetingHeroSection");
+  if (!container || !appState.detailData || !appState.currentPro) {
+    return;
+  }
+
+  const data = appState.detailData;
+  const numProf = appState.currentPro;
+  const tx = data.transactions || [];
+  const filteredStats = computeStatsFromTransactions(tx, numProf);
+  const enrichment = data.odoo_enrichment || {};
+
+  let professionalName = String(
+    data.fullname || enrichment.odoo_name || numProf
+  ).trim();
+
+  const prefixHyphen = `${numProf} - `;
+  const prefixDash = `${numProf} — `;
+
+  if (professionalName.startsWith(prefixHyphen)) {
+    professionalName = professionalName.slice(prefixHyphen.length).trim();
+  } else if (professionalName.startsWith(prefixDash)) {
+    professionalName = professionalName.slice(prefixDash.length).trim();
+  }
+
+  const detailedActivity = String(enrichment.detailed_activity || "").trim();
+  const industryName = String(enrichment.industry_name || "").trim();
+  const location = formatProfessionalLocation(enrichment);
+  const description = plainTextFromHtml(enrichment.website_description_html);
+
+  const totalReceived = Number(filteredStats.montant_total_recu || 0);
+  const c2bReceived = Number(filteredStats.montant_recu_particuliers || 0);
+  const totalReemitted = Number(filteredStats.total_montant_emis_sans_reconversion || 0);
+  const individualPayers = Number(filteredStats.nb_particuliers || 0);
+  const reuseRate = normalizeProfessionalReuseRate(filteredStats.taux_reutilisation);
+
+  const diagnostic = buildProfessionalMeetingDiagnostic(filteredStats);
+
+  const identityTags = [
+    industryName
+      ? `<span class="pro-meeting-identity-tag">${escapeHtml(industryName)}</span>`
+      : "",
+    location
+      ? `<span class="pro-meeting-identity-tag pro-meeting-identity-tag-muted">${escapeHtml(location)}</span>`
+      : "",
+  ].filter(Boolean).join("");
+
+  container.innerHTML = `
+    <section class="card pro-meeting-hero-card">
+      <div class="pro-meeting-hero-main">
+        <div class="pro-meeting-identity">
+          <div class="stat-label">Dossier d’accompagnement professionnel</div>
+
+          <div class="pro-meeting-title-row">
+            <span class="pro-meeting-professional-ref">${escapeHtml(numProf)}</span>
+            <h2>${escapeHtml(professionalName || numProf)}</h2>
+          </div>
+
+          <p class="pro-meeting-activity">
+            ${escapeHtml(detailedActivity || "Activité professionnelle à préciser")}
+          </p>
+
+          ${identityTags ? `<div class="pro-meeting-identity-tags">${identityTags}</div>` : ""}
+
+          ${description
+            ? `<p class="pro-meeting-description">${escapeHtml(description)}</p>`
+            : ""}
+        </div>
+
+        <div class="pro-meeting-portrait-grid">
+          <article class="pro-meeting-portrait-card">
+            <span>Flux captés</span>
+            <strong>${euro(totalReceived)}</strong>
+            <small>dont ${euro(c2bReceived)} depuis les particuliers</small>
+          </article>
+
+          <article class="pro-meeting-portrait-card">
+            <span>Fond de commerce Gonette</span>
+            <strong>${formatProfessionalMeetingInteger(individualPayers)}</strong>
+            <small>particulier(s) payeur(s) distinct(s)</small>
+          </article>
+
+          <article class="pro-meeting-portrait-card">
+            <span>Réemploi engagé</span>
+            <strong>${euro(totalReemitted)}</strong>
+            <small>émis hors reconversion</small>
+          </article>
+
+          <article class="pro-meeting-portrait-card pro-meeting-portrait-card-highlight">
+            <span>Taux de réutilisation</span>
+            <strong>${percent(reuseRate)}</strong>
+            <small>émis / reçu + converti sur la période</small>
+          </article>
+        </div>
+      </div>
+
+      <div class="pro-meeting-diagnostic-grid">
+        <article class="pro-meeting-diagnostic-card">
+          <span>Profil d’usage</span>
+          <strong>${escapeHtml(diagnostic.profileTitle)}</strong>
+          <p>${escapeHtml(diagnostic.profileText)}</p>
+        </article>
+
+        <article class="pro-meeting-diagnostic-card">
+          <span>Point d’appui</span>
+          <strong>${escapeHtml(diagnostic.strengthTitle)}</strong>
+          <p>${escapeHtml(diagnostic.strengthText)}</p>
+        </article>
+
+        <article class="pro-meeting-diagnostic-card pro-meeting-diagnostic-card-${escapeHtml(diagnostic.actionTone)}">
+          <span>Priorité de rendez-vous</span>
+          <strong>${escapeHtml(diagnostic.actionTitle)}</strong>
+          <p>${escapeHtml(diagnostic.actionText)}</p>
+        </article>
+      </div>
+
+      <div class="pro-meeting-method-note">
+        <strong>Lecture automatique.</strong>
+        Ce diagnostic est généré à partir des transactions de la période sélectionnée :
+        structure des encaissements, base de payeurs particuliers,
+        réémission hors reconversion et taux de réutilisation.
+      </div>
+    </section>
+  `;
+}
+
 function drawProOdooEnrichmentSection() {
   const container = document.getElementById("proOdooEnrichmentSection");
   if (!container || !appState.detailData) return;
@@ -10193,8 +15097,14 @@ function drawProOdooEnrichmentSection() {
 
   const detailedActivity = String(enrichment.detailed_activity || "").trim();
   const industryName = String(enrichment.industry_name || "").trim();
+  const odooName = String(enrichment.odoo_name || "").trim();
+  const displayedName = String(appState.detailData.fullname || "").trim();
+  const shouldShowOdooName = Boolean(
+    odooName
+    && odooName.toLocaleLowerCase("fr-FR") !== displayedName.toLocaleLowerCase("fr-FR")
+  );
+  const naf = String(enrichment.naf || "").trim();
   const location = formatProfessionalLocation(enrichment);
-  const description = plainTextFromHtml(enrichment.website_description_html);
 
   const secondaryIndustries = Array.isArray(enrichment.secondary_industries)
     ? enrichment.secondary_industries
@@ -10205,8 +15115,9 @@ function drawProOdooEnrichmentSection() {
   const hasVisibleContent = Boolean(
     detailedActivity ||
     industryName ||
+    shouldShowOdooName ||
+    naf ||
     location ||
-    description ||
     secondaryIndustries.length
   );
 
@@ -10216,6 +15127,15 @@ function drawProOdooEnrichmentSection() {
   }
 
   const metaItems = [];
+
+  if (shouldShowOdooName) {
+    metaItems.push(`
+      <div class="pro-context-meta-item">
+        <span class="pro-context-meta-label">Nom annuaire</span>
+        <span class="pro-context-meta-value">${escapeHtml(odooName)}</span>
+      </div>
+    `);
+  }
 
   if (industryName) {
     metaItems.push(`
@@ -10231,6 +15151,15 @@ function drawProOdooEnrichmentSection() {
       <div class="pro-context-meta-item">
         <span class="pro-context-meta-label">Localisation</span>
         <span class="pro-context-meta-value">${escapeHtml(location)}</span>
+      </div>
+    `);
+  }
+
+  if (naf) {
+    metaItems.push(`
+      <div class="pro-context-meta-item">
+        <span class="pro-context-meta-label">Code NAF</span>
+        <span class="pro-context-meta-value">${escapeHtml(naf)}</span>
       </div>
     `);
   }
@@ -10252,11 +15181,7 @@ function drawProOdooEnrichmentSection() {
     `
     : "";
 
-  const descriptionHtml = description
-    ? `<p class="pro-context-description">${escapeHtml(description)}</p>`
-    : "";
-
-  container.innerHTML = `
+   container.innerHTML = `
     <section class="card pro-context-card">
       <div class="pro-context-heading">
         <div class="stat-label">Profil professionnel</div>
@@ -10265,11 +15190,133 @@ function drawProOdooEnrichmentSection() {
 
       ${metaGridHtml}
       ${secondaryIndustriesHtml}
-      ${descriptionHtml}
     </section>
   `;
 }
 
+
+function buildProfessionalFlowReading(filteredStats = {}) {
+  const totalReceived = Number(filteredStats.montant_total_recu || 0);
+  const c2bReceived = Number(filteredStats.montant_recu_particuliers || 0);
+  const b2bReceived = Number(filteredStats.montant_recu_professionnels || 0);
+  const converted = Number(filteredStats.montant_converti || 0);
+  const emittedToPros = Number(filteredStats.montant_emis_vers_pro || 0);
+  const emittedToIndividuals = Number(filteredStats.montant_emis_vers_particuliers || 0);
+  const totalReemitted = Number(filteredStats.total_montant_emis_sans_reconversion || 0);
+  const reconverted = Number(filteredStats.montant_reconverti || 0);
+  const reuseRate = normalizeProfessionalReuseRate(filteredStats.taux_reutilisation);
+
+  const availableFlow = totalReceived + converted;
+  const c2bShare = totalReceived > 0 ? (c2bReceived / totalReceived) * 100 : 0;
+  const b2bShare = totalReceived > 0 ? (b2bReceived / totalReceived) * 100 : 0;
+  const professionalReuseShare = totalReemitted > 0
+    ? (emittedToPros / totalReemitted) * 100
+    : 0;
+  const individualReuseShare = totalReemitted > 0
+    ? (emittedToIndividuals / totalReemitted) * 100
+    : 0;
+
+  const outgoingTotal = totalReemitted + reconverted;
+  const reconversionShareOfOutgoing = outgoingTotal > 0
+    ? (reconverted / outgoingTotal) * 100
+    : 0;
+
+  let headline = "Une trajectoire monétaire à documenter";
+  let interpretation = "Les flux de la période permettent d’observer les entrées et sorties de Gonettes, mais leur logique d’usage mérite encore d’être approfondie en rendez-vous.";
+
+  if (availableFlow <= 0 && outgoingTotal <= 0) {
+    headline = "Aucune trajectoire significative sur la période";
+    interpretation = "Le compte ne présente pas de circulation monétaire notable sur l’intervalle sélectionné. L’accompagnement peut d’abord porter sur l’activation des usages.";
+  } else if (reconverted > totalReemitted && reconverted > 0) {
+    headline = "La sortie du circuit domine la trajectoire";
+    interpretation = `Le professionnel reconvertit ${euro(reconverted)}, contre ${euro(totalReemitted)} seulement remis en circulation. Le rendez-vous doit prioritairement chercher ce qui empêche le réemploi local des Gonettes.`;
+  } else if (reuseRate > 100) {
+    headline = "Le professionnel mobilise activement un stock antérieur";
+    interpretation = `Il réémet ${euro(totalReemitted)} alors que les flux reçus ou convertis sur la période représentent ${euro(availableFlow)}. Cette configuration signale l’usage d’un stock déjà disponible et constitue un cas intéressant à documenter.`;
+  } else if (c2bShare >= 75 && reuseRate < 25) {
+    headline = "La captation commerciale existe, le réemploi reste à structurer";
+    interpretation = `Les particuliers représentent ${percent(c2bShare)} des encaissements, mais le taux de réutilisation atteint seulement ${percent(reuseRate)}. Le professionnel constitue un bon point de réception de Gonettes, sans encore les redéployer pleinement dans le réseau.`;
+  } else if (b2bShare >= 45 && reuseRate < 25) {
+    headline = "Un acteur B2B alimenté, mais peu redistributif";
+    interpretation = `Les autres professionnels représentent ${percent(b2bShare)} des montants reçus. Pourtant, le réemploi reste limité à ${percent(reuseRate)} : un potentiel de redéploiement interprofessionnel est à travailler.`;
+  } else if (reuseRate >= 65) {
+    headline = "Une circulation interne déjà bien installée";
+    interpretation = `Le taux de réutilisation atteint ${percent(reuseRate)}. Les Gonettes reçues alimentent donc effectivement de nouveaux paiements, ce qui fait de ce professionnel un maillon utile de la circulation locale.`;
+  } else {
+    headline = "Une circulation partielle, avec des leviers de progression";
+    interpretation = `Le professionnel capte ${euro(totalReceived)} et remet ${euro(totalReemitted)} en circulation. Le profil n’est ni bloqué ni pleinement circulant : c’est un terrain favorable pour identifier des leviers concrets de réemploi.`;
+  }
+
+  return {
+    totalReceived,
+    c2bReceived,
+    b2bReceived,
+    converted,
+    emittedToPros,
+    emittedToIndividuals,
+    totalReemitted,
+    reconverted,
+    reuseRate,
+    availableFlow,
+    c2bShare,
+    b2bShare,
+    professionalReuseShare,
+    individualReuseShare,
+    reconversionShareOfOutgoing,
+    headline,
+    interpretation,
+  };
+}
+
+function buildProfessionalFlowNode({
+  eyebrow,
+  label,
+  value,
+  detail,
+  action = "",
+  active = false,
+  tone = "",
+}) {
+  const className = [
+    "pro-flow-node",
+    active ? "pro-flow-node-active" : "",
+    tone ? `pro-flow-node-${tone}` : "",
+    action ? "pro-flow-node-clickable" : "",
+  ].filter(Boolean).join(" ");
+
+  const openingTag = action
+    ? `<button type="button" class="${className}" onclick="${action}">`
+    : `<article class="${className}">`;
+
+  const closingTag = action ? "</button>" : "</article>";
+
+  return `
+    ${openingTag}
+      ${eyebrow ? `<span>${eyebrow}</span>` : ""}
+      <strong>${label}</strong>
+      <b>${value}</b>
+      ${detail ? `<small>${detail}</small>` : ""}
+    ${closingTag}
+  `;
+}
+
+function buildProfessionalFlowMeter(label, value, detail, tone = "") {
+  const safeValue = Math.max(0, Math.min(100, Number(value || 0)));
+  const toneClass = tone ? ` pro-flow-meter-${tone}` : "";
+
+  return `
+    <div class="pro-flow-meter${toneClass}">
+      <div class="pro-flow-meter-heading">
+        <span>${label}</span>
+        <strong>${percent(value || 0)}</strong>
+      </div>
+      <div class="pro-flow-meter-track">
+        <div class="pro-flow-meter-fill" style="width: ${safeValue}%"></div>
+      </div>
+      <small>${detail}</small>
+    </div>
+  `;
+}
 
 function drawProSummarySection() {
   const summaryContainer = document.getElementById("proSummarySection");
@@ -10280,124 +15327,151 @@ function drawProSummarySection() {
   const detailMode = appState.detailMode;
   const tx = data.transactions || [];
   const filteredStats = computeStatsFromTransactions(tx, numProf);
-  
+  const flow = buildProfessionalFlowReading(filteredStats);
 
   summaryContainer.innerHTML = `
-    <section class="pro-summary-group">
-      <div class="pro-summary-heading">
-        <h3>Ce que le professionnel reçoit</h3>
+    <section class="card pro-flow-reading-card">
+      <div class="pro-flow-reading-heading">
+        <div>
+          <div class="stat-label">Trajectoire économique des Gonettes</div>
+          <h3>${escapeHtml(flow.headline)}</h3>
+          <p>${escapeHtml(flow.interpretation)}</p>
+        </div>
       </div>
 
-      <div class="grid pro-summary-main-grid">
-        ${clickableStatCard(
-          "C2B reçu",
-          euro(filteredStats.montant_recu_particuliers),
-          `renderProDetail('${escapeHtml(numProf)}', 'payeurs_particuliers')`,
-          detailMode === "payeurs_particuliers",
-          "Montant reçu depuis les comptes particuliers."
+      <div class="pro-flow-stage">
+        <section class="pro-flow-column pro-flow-column-in">
+          <div class="pro-flow-column-heading">
+            <span>1</span>
+            <h4>Ce qui entre</h4>
+          </div>
+
+          <div class="pro-flow-node-stack">
+            ${buildProfessionalFlowNode({
+              eyebrow: "Clientèle particulière",
+              label: "C2B reçu",
+              value: euro(flow.c2bReceived),
+              detail: `${formatProfessionalMeetingInteger(filteredStats.nb_particuliers || 0)} particulier(s) payeur(s)`,
+              action: `renderProDetail('${escapeHtml(numProf)}', 'payeurs_particuliers')`,
+              active: detailMode === "payeurs_particuliers",
+              tone: "c2b",
+            })}
+
+            ${buildProfessionalFlowNode({
+              eyebrow: "Réseau professionnel",
+              label: "B2B reçu",
+              value: euro(flow.b2bReceived),
+              detail: `${formatProfessionalMeetingInteger(filteredStats.nb_professionnels || 0)} professionnel(s) payeur(s)`,
+              action: `renderProDetail('${escapeHtml(numProf)}', 'payeurs_professionnels')`,
+              active: detailMode === "payeurs_professionnels",
+              tone: "b2b",
+            })}
+
+            ${buildProfessionalFlowNode({
+              eyebrow: "Alimentation du compte",
+              label: "Converti",
+              value: euro(flow.converted),
+              detail: "gonettes numériques créditées",
+              action: `renderProDetail('${escapeHtml(numProf)}', 'converti')`,
+              active: detailMode === "converti",
+              tone: "conversion",
+            })}
+          </div>
+        </section>
+
+        <section class="pro-flow-column pro-flow-column-center">
+          <div class="pro-flow-column-heading">
+            <span>2</span>
+            <h4>Ce qui est mobilisé</h4>
+          </div>
+
+          <article class="pro-flow-core-card">
+            <span>Gonettes reçues ou converties</span>
+            <strong>${euro(flow.availableFlow)}</strong>
+            <small>
+              ${euro(flow.totalReceived)} reçu · ${euro(flow.converted)} converti
+            </small>
+          </article>
+
+          <div class="pro-flow-core-secondary">
+            ${staticStatCard(
+              "Transactions reçues",
+              formatProfessionalMeetingInteger(filteredStats.nb_transactions_recues ?? 0),
+              false,
+              "Nombre total de transactions reçues sur la période."
+            )}
+          </div>
+        </section>
+
+        <section class="pro-flow-column pro-flow-column-out">
+          <div class="pro-flow-column-heading">
+            <span>3</span>
+            <h4>Ce qui repart</h4>
+          </div>
+
+          <div class="pro-flow-node-stack">
+            ${buildProfessionalFlowNode({
+              eyebrow: "Réemploi B2B",
+              label: "Émis vers pros",
+              value: euro(flow.emittedToPros),
+              detail: "achats ou paiements dans le réseau",
+              action: `renderProDetail('${escapeHtml(numProf)}', 'emis_pro')`,
+              active: detailMode === "emis_pro",
+              tone: "reemission",
+            })}
+
+            ${buildProfessionalFlowNode({
+              eyebrow: "Versements vers U",
+              label: "Émis vers particuliers",
+              value: euro(flow.emittedToIndividuals),
+              detail: "défraiements, rémunérations ou assimilés",
+              action: `renderProDetail('${escapeHtml(numProf)}', 'emis_particuliers')`,
+              active: detailMode === "emis_particuliers",
+              tone: "reemission",
+            })}
+
+            ${buildProfessionalFlowNode({
+              eyebrow: "Sortie du circuit",
+              label: "Reconverti",
+              value: euro(flow.reconverted),
+              detail: "gonettes retirées de la circulation numérique",
+              action: `renderProDetail('${escapeHtml(numProf)}', 'reconverti')`,
+              active: detailMode === "reconverti",
+              tone: "reconversion",
+            })}
+          </div>
+        </section>
+      </div>
+
+      <div class="pro-flow-insight-grid">
+        ${buildProfessionalFlowMeter(
+          "Part des encaissements depuis les particuliers",
+          flow.c2bShare,
+          "C2B reçu / total reçu",
+          "c2b"
         )}
 
-        ${clickableStatCard(
-          "B2B reçu",
-          euro(filteredStats.montant_recu_professionnels),
-          `renderProDetail('${escapeHtml(numProf)}', 'payeurs_professionnels')`,
-          detailMode === "payeurs_professionnels",
-          "Montant reçu depuis les autres professionnels du réseau."
+        ${buildProfessionalFlowMeter(
+          "Part des encaissements depuis les professionnels",
+          flow.b2bShare,
+          "B2B reçu / total reçu",
+          "b2b"
         )}
 
-        ${clickableStatCard(
-          "Total reçu",
-          euro(filteredStats.montant_total_recu),
-          `renderProDetail('${escapeHtml(numProf)}', 'somme_recue')`,
-          detailMode === "somme_recue",
-          "Total reçu depuis les particuliers et les professionnels, hors conversions reçues."
+        ${buildProfessionalFlowMeter(
+          "Part des sorties dédiées à la reconversion",
+          flow.reconversionShareOfOutgoing,
+          "reconverti / (réemploi + reconversion)",
+          "reconversion"
         )}
       </div>
 
-      <div class="grid pro-summary-mini-grid">
-        ${clickableMiniStatCard(
-          "Particuliers payeurs",
-          filteredStats.nb_particuliers ?? 0,
-          `renderProDetail('${escapeHtml(numProf)}', 'payeurs_particuliers')`,
-          detailMode === "payeurs_particuliers"
-        )}
-
-        ${clickableMiniStatCard(
-          "Professionnels payeurs",
-          filteredStats.nb_professionnels ?? 0,
-          `renderProDetail('${escapeHtml(numProf)}', 'payeurs_professionnels')`,
-          detailMode === "payeurs_professionnels"
-        )}
-
-        ${clickableMiniStatCard(
-          "Transactions reçues",
-          filteredStats.nb_transactions_recues ?? 0,
-          `renderProDetail('${escapeHtml(numProf)}', 'recues')`,
-          detailMode === "recues"
-        )}
-      </div>
-    </section>
-
-    <section class="pro-summary-group">
-      <div class="pro-summary-heading">
-        <h3>Ce qu’il remet en circulation</h3>
-      </div>
-
-      <div class="grid pro-summary-main-grid">
-        ${clickableStatCard(
-          "Émis vers pro",
-          euro(filteredStats.montant_emis_vers_pro),
-          `renderProDetail('${escapeHtml(numProf)}', 'emis_pro')`,
-          detailMode === "emis_pro",
-          "Achats ou paiements réalisés auprès d’autres professionnels du réseau."
-        )}
-
-        ${clickableStatCard(
-          "Émis vers particuliers",
-          euro(filteredStats.montant_emis_vers_particuliers),
-          `renderProDetail('${escapeHtml(numProf)}', 'emis_particuliers')`,
-          detailMode === "emis_particuliers",
-          "Rémunérations, défraiements ou autres versements vers des comptes particuliers."
-        )}
-
-        ${clickableStatCard(
-          "Total émis hors reconversion",
-          euro(filteredStats.total_montant_emis_sans_reconversion),
-          `renderProDetail('${escapeHtml(numProf)}', 'emis_total')`,
-          detailMode === "emis_total",
-          "Somme des montants émis vers les professionnels et les particuliers, hors reconversion."
-        )}
-      </div>
-    </section>
-
-    <section class="pro-summary-group">
-      <div class="pro-summary-heading">
-        <h3>Conversion et réutilisation</h3>
-      </div>
-
-      <div class="grid pro-summary-main-grid">
-        ${clickableStatCard(
-          "Converti",
-          euro(filteredStats.montant_converti),
-          `renderProDetail('${escapeHtml(numProf)}', 'converti')`,
-          detailMode === "converti",
-          "Montant crédité par conversion en gonettes numériques."
-        )}
-
-        ${clickableStatCard(
-          "Reconverti",
-          euro(filteredStats.montant_reconverti),
-          `renderProDetail('${escapeHtml(numProf)}', 'reconverti')`,
-          detailMode === "reconverti",
-          "Montant sorti du circuit via une reconversion."
-        )}
-
-        ${staticStatCard(
-          "Taux de réutilisation",
-          percent(filteredStats.taux_reutilisation),
-          false,
-          "Total émis hors reconversion / (total reçu + total converti)."
-        )}
+      <div class="pro-flow-legend-note">
+        <strong>Comment lire cette section ?</strong>
+        Elle distingue les <em>flux entrants</em> — clientèle particulière, encaissements B2B et conversions —
+        des <em>flux sortants</em> — paiements réinjectés dans le réseau, versements vers particuliers et reconversions.
+        Cette structure aide à préparer le rendez-vous : où les Gonettes arrivent-elles, où repartent-elles,
+        et à quel endroit la circulation se bloque-t-elle ou se démultiplie-t-elle ?
       </div>
     </section>
   `;
@@ -10492,10 +15566,35 @@ function destroyProCharts() {
     appState.charts.activity.destroy();
     appState.charts.activity = null;
   }
+
   if (appState.charts.balance) {
     appState.charts.balance.destroy();
     appState.charts.balance = null;
   }
+
+  if (
+    appState.proDetailNetworkCy
+    && typeof appState.proDetailNetworkCy.destroy === "function"
+  ) {
+    appState.proDetailNetworkCy.destroy();
+  }
+
+  if (appState.charts.proDetailBalanceHistory) {
+    appState.charts.proDetailBalanceHistory.destroy();
+    appState.charts.proDetailBalanceHistory = null;
+  }
+
+  if (appState.charts.proDetailCustomerConcentration) {
+    appState.charts.proDetailCustomerConcentration.destroy();
+    appState.charts.proDetailCustomerConcentration = null;
+  }
+
+  if (appState.proDetailPaymentBasinAnimationFrame) {
+    window.cancelAnimationFrame(appState.proDetailPaymentBasinAnimationFrame);
+  }
+
+  appState.proDetailPaymentBasinAnimationFrame = null;
+  appState.proDetailNetworkCy = null;
 }
 
 function destroyGlobalCharts() {
@@ -10886,143 +15985,2717 @@ function buildBalanceData(transactions, numProf) {
   return { recu, emis };
 }
 
-function renderProCharts() {
-  const chartsSection = document.getElementById("proChartsSection");
-  if (!chartsSection || !appState.detailData || !appState.currentPro) return;
+function formatProfessionalNetworkCount(value) {
+  return Number(value || 0).toLocaleString("fr-FR");
+}
 
-  const numProf = appState.currentPro;
-  const tx = appState.detailData.transactions || [];
-  const activity = buildDailyActivitySeries(tx, numProf);
-  const balance = buildBalanceData(tx, numProf);
+function formatProfessionalNetworkLocation(node = {}) {
+  const zip = String(node?.zip || "").trim();
+  const city = String(node?.city || "").trim();
 
-  chartsSection.innerHTML = `
-    <div class="card">
-      <h3>Activité dans le temps</h3>
-      <canvas id="activityChart" height="110"></canvas>
-    </div>
+  if (zip && city) {
+    return `${zip} ${city}`;
+  }
 
-    <div class="card">
-      <h3>Balance reçu / émis hors reconversion</h3>
-      <canvas id="balanceChart" height="90"></canvas>
+  return city || zip || "Localisation non renseignée";
+}
+
+function buildProfessionalDetailNetworkPositions(nodes = []) {
+  const centerNode = nodes.find(node => node.role === "center");
+  const inboundOnly = nodes.filter(node =>
+    node.role !== "center"
+    && Array.isArray(node.directions)
+    && node.directions.includes("inbound")
+    && !node.directions.includes("outbound")
+  );
+  const outboundOnly = nodes.filter(node =>
+    node.role !== "center"
+    && Array.isArray(node.directions)
+    && node.directions.includes("outbound")
+    && !node.directions.includes("inbound")
+  );
+  const reciprocal = nodes.filter(node =>
+    node.role !== "center"
+    && Array.isArray(node.directions)
+    && node.directions.includes("inbound")
+    && node.directions.includes("outbound")
+  );
+
+  const individualPayersNode = nodes.find(
+    node => node.role === "individual_payers"
+  );
+
+  const positions = {};
+
+  if (centerNode) {
+    positions[centerNode.id] = { x: 0, y: 0 };
+  }
+
+  const distribute = (items, x, gap = 108, yOffset = 0) => {
+    const count = items.length;
+    const start = -((count - 1) * gap) / 2;
+
+    items.forEach((item, index) => {
+      positions[item.id] = {
+        x,
+        y: start + index * gap + yOffset
+      };
+    });
+  };
+
+  distribute(inboundOnly, -430, 104, 0);
+  distribute(outboundOnly, 430, 104, 0);
+  distribute(reciprocal, 0, 106, -240);
+
+  if (individualPayersNode) {
+    const inboundHeight = inboundOnly.length > 0
+      ? ((inboundOnly.length - 1) * 104) / 2
+      : 0;
+
+    positions[individualPayersNode.id] = {
+      x: -430,
+      y: inboundOnly.length > 0 ? -inboundHeight - 150 : 0
+    };
+  }
+
+  return positions;
+}
+
+function getProfessionalDetailNetworkNodeRelation(nodeId, dynamics) {
+  const network = dynamics?.b2b_network || {};
+  const links = Array.isArray(network.links) ? network.links : [];
+  const centerRef = network.center?.professional_ref || "";
+
+  const inboundLinks = links.filter(link =>
+    link.source === nodeId && link.target === centerRef
+  );
+
+  const outboundLinks = links.filter(link =>
+    link.source === centerRef && link.target === nodeId
+  );
+
+  const inboundVolume = inboundLinks.reduce(
+    (sum, link) => sum + Number(link.volume || 0),
+    0
+  );
+
+  const outboundVolume = outboundLinks.reduce(
+    (sum, link) => sum + Number(link.volume || 0),
+    0
+  );
+
+  const inboundTxCount = inboundLinks.reduce(
+    (sum, link) => sum + Number(link.tx_count || 0),
+    0
+  );
+
+  const outboundTxCount = outboundLinks.reduce(
+    (sum, link) => sum + Number(link.tx_count || 0),
+    0
+  );
+
+  return {
+    inboundVolume,
+    outboundVolume,
+    inboundTxCount,
+    outboundTxCount,
+  };
+}
+
+function renderProfessionalDetailNetworkPanel(nodeId = null) {
+  const panel = document.getElementById("proDetailB2BNetworkPanel");
+  const dynamics = appState.proDetailDynamics;
+  const network = dynamics?.b2b_network;
+
+  if (!panel || !network) {
+    return;
+  }
+
+  const center = network.center || {};
+  const summary = network.summary || {};
+  const node = (network.nodes || []).find(item => item.id === nodeId);
+
+  if (node && node.role === "individual_payers") {
+    panel.innerHTML = `
+      <div class="pro-detail-network-panel-card">
+        <div class="stat-label">Fond de commerce Gonette</div>
+        <h4>Particuliers payeurs</h4>
+
+        <div class="pro-detail-network-panel-ref">
+          Agrégat U
+        </div>
+
+        <div class="pro-detail-network-panel-metrics pro-detail-network-panel-metrics-single">
+          <div>
+            <strong>${formatProfessionalNetworkCount(node.distinct_payer_count || 0)}</strong>
+            <span>particulier(s) distinct(s)</span>
+          </div>
+        </div>
+
+        <div class="pro-detail-network-relation-list">
+          <div class="pro-detail-network-relation pro-detail-network-relation-individual">
+            <span>Volume C2B reçu</span>
+            <strong>${euro(node.volume || 0)}</strong>
+            <small>${formatProfessionalNetworkCount(node.tx_count || 0)} transaction(s)</small>
+          </div>
+
+          <div class="pro-detail-network-relation pro-detail-network-relation-individual">
+            <span>Ticket moyen C2B</span>
+            <strong>${euro(node.average_transaction_amount || 0)}</strong>
+            <small>volume / nombre de paiements</small>
+          </div>
+
+          <div class="pro-detail-network-relation pro-detail-network-relation-individual">
+            <span>Volume moyen par payeur</span>
+            <strong>${euro(node.average_volume_per_payer || 0)}</strong>
+            <small>volume / particuliers distincts</small>
+          </div>
+        </div>
+
+        <p class="pro-detail-network-individual-note">
+          Ce nœud agrège l’ensemble des utilisateurs particuliers ayant payé
+          le professionnel sur la période. Il ne représente jamais une localisation
+          ni une identité individuelle.
+        </p>
+      </div>
+    `;
+    return;
+  }
+
+  if (!node || node.role === "center") {
+    panel.innerHTML = `
+      <div class="pro-detail-network-panel-card">
+        <div class="stat-label">Lecture du graphe</div>
+        <h4>${escapeHtml(center.name || center.professional_ref || "Professionnel")}</h4>
+
+        <div class="pro-detail-network-panel-metrics">
+          <div>
+            <strong>${formatProfessionalNetworkCount(summary.inbound_counterparty_count || 0)}</strong>
+            <span>pros acheteurs</span>
+          </div>
+          <div>
+            <strong>${formatProfessionalNetworkCount(summary.outbound_counterparty_count || 0)}</strong>
+            <span>pros payés</span>
+          </div>
+        </div>
+
+        <p>
+          Le graphe montre les relations B2B commerciales immédiates :
+          à gauche les professionnels qui paient ce compte,
+          à droite ceux auxquels il redépense ses Gonettes.
+        </p>
+      </div>
+    `;
+    return;
+  }
+
+  const relation = getProfessionalDetailNetworkNodeRelation(node.id, dynamics);
+  const inboundVisible = relation.inboundVolume > 0 || relation.inboundTxCount > 0;
+  const outboundVisible = relation.outboundVolume > 0 || relation.outboundTxCount > 0;
+
+  panel.innerHTML = `
+    <div class="pro-detail-network-panel-card">
+      <div class="stat-label">Contrepartie B2B</div>
+      <h4>${escapeHtml(node.name || node.professional_ref || node.id)}</h4>
+
+      <div class="pro-detail-network-panel-ref">
+        ${escapeHtml(node.professional_ref || node.id)}
+      </div>
+
+      ${
+        node.industry_name
+          ? `<p><strong>Secteur :</strong> ${escapeHtml(node.industry_name)}</p>`
+          : ""
+      }
+
+      <p>
+        <strong>Localisation :</strong>
+        ${escapeHtml(formatProfessionalNetworkLocation(node))}
+      </p>
+
+      <div class="pro-detail-network-relation-list">
+        ${
+          inboundVisible
+            ? `
+              <div class="pro-detail-network-relation pro-detail-network-relation-inbound">
+                <span>Verse vers le pro étudié</span>
+                <strong>${euro(relation.inboundVolume)}</strong>
+                <small>${formatProfessionalNetworkCount(relation.inboundTxCount)} transaction(s)</small>
+              </div>
+            `
+            : ""
+        }
+
+        ${
+          outboundVisible
+            ? `
+              <div class="pro-detail-network-relation pro-detail-network-relation-outbound">
+                <span>Reçoit depuis le pro étudié</span>
+                <strong>${euro(relation.outboundVolume)}</strong>
+                <small>${formatProfessionalNetworkCount(relation.outboundTxCount)} transaction(s)</small>
+              </div>
+            `
+            : ""
+        }
+      </div>
+
+      <div class="pro-detail-network-panel-actions">
+        <button
+          type="button"
+          class="primary-btn"
+          onclick="renderProDetail('${escapeHtml(node.professional_ref || node.id)}')"
+        >
+          Ouvrir la fiche
+        </button>
+      </div>
     </div>
   `;
+}
 
-  destroyProCharts();
+function bindProfessionalDetailNetworkControls(cy) {
+  const fitBtn = document.getElementById("proDetailNetworkFitBtn");
+  const zoomInBtn = document.getElementById("proDetailNetworkZoomInBtn");
+  const zoomOutBtn = document.getElementById("proDetailNetworkZoomOutBtn");
 
-  const activityCtx = document.getElementById("activityChart");
-  const balanceCtx = document.getElementById("balanceChart");
+  if (fitBtn) {
+    fitBtn.addEventListener("click", () => {
+      cy.fit(undefined, 56);
+    });
+  }
 
-  if (!activityCtx || !balanceCtx) return;
+  if (zoomInBtn) {
+    zoomInBtn.addEventListener("click", () => {
+      cy.zoom({
+        level: cy.zoom() * 1.14,
+        renderedPosition: {
+          x: cy.width() / 2,
+          y: cy.height() / 2
+        }
+      });
+    });
+  }
 
-  appState.charts.activity = new Chart(activityCtx, {
-    type: "bar",
+  if (zoomOutBtn) {
+    zoomOutBtn.addEventListener("click", () => {
+      cy.zoom({
+        level: cy.zoom() * 0.86,
+        renderedPosition: {
+          x: cy.width() / 2,
+          y: cy.height() / 2
+        }
+      });
+    });
+  }
+}
+
+function renderProfessionalDetailB2BNetworkGraph(dynamics) {
+  const container = document.getElementById("proDetailB2BNetworkGraph");
+  const network = dynamics?.b2b_network;
+
+  if (!container || !network || !window.cytoscape) {
+    return;
+  }
+
+  const nodes = Array.isArray(network.nodes) ? network.nodes : [];
+  const links = Array.isArray(network.links) ? network.links : [];
+
+  if (!nodes.length || !links.length) {
+    container.innerHTML = `
+      <div class="pro-detail-network-empty">
+        Aucun lien B2B commercial visible sur cette période.
+      </div>
+    `;
+    renderProfessionalDetailNetworkPanel(null);
+    return;
+  }
+
+  if (
+    appState.proDetailNetworkCy
+    && typeof appState.proDetailNetworkCy.destroy === "function"
+  ) {
+    appState.proDetailNetworkCy.destroy();
+    appState.proDetailNetworkCy = null;
+  }
+
+  const positions = buildProfessionalDetailNetworkPositions(nodes);
+  const maxVolume = Math.max(
+    1,
+    ...links.map(link => Number(link.volume || 0))
+  );
+
+  const elements = [
+    ...nodes.map(node => {
+      const directions = Array.isArray(node.directions) ? node.directions : [];
+      const role = node.role || "counterparty";
+
+      let relationClass = "counterparty-node";
+      if (role === "center") {
+        relationClass = "center-node";
+      } else if (role === "individual_payers") {
+        relationClass = "individual-payers-node";
+      } else if (directions.includes("inbound") && directions.includes("outbound")) {
+        relationClass = "reciprocal-node";
+      } else if (directions.includes("outbound")) {
+        relationClass = "outbound-node";
+      } else {
+        relationClass = "inbound-node";
+      }
+
+      return {
+        group: "nodes",
+        classes: relationClass,
+        data: {
+          id: node.id,
+          professional_ref: node.professional_ref || node.id,
+          label: node.role === "individual_payers"
+            ? "U"
+            : (node.professional_ref || node.id),
+          name: node.name || node.professional_ref || node.id,
+          role,
+        },
+        position: positions[node.id] || { x: 0, y: 0 }
+      };
+    }),
+
+    ...links.map((link, index) => {
+      const volume = Number(link.volume || 0);
+      const displayWidth = 2.2 + (volume / maxVolume) * 6.2;
+
+      return {
+        group: "edges",
+        classes: link.direction === "outbound"
+          ? "outbound-edge"
+          : (
+              link.direction === "individual_inbound"
+                ? "individual-edge"
+                : "inbound-edge"
+            ),
+        data: {
+          id: `pro-detail-network-edge-${index}`,
+          source: link.source,
+          target: link.target,
+          volume,
+          tx_count: Number(link.tx_count || 0),
+          displayWidth,
+          reciprocal: Boolean(link.reciprocal)
+        }
+      };
+    })
+  ];
+
+  const cy = window.cytoscape({
+    container,
+    elements,
+    layout: {
+      name: "preset",
+      fit: true,
+      padding: 64
+    },
+    minZoom: 0.38,
+    maxZoom: 2.6,
+    style: [
+      {
+        selector: "node",
+        style: {
+          "label": "data(label)",
+          "font-size": "11px",
+          "font-weight": 800,
+          "text-valign": "center",
+          "text-halign": "center",
+          "color": "#0f172a",
+          "text-outline-width": 0,
+          "width": 48,
+          "height": 48,
+          "border-width": 2,
+          "border-color": "#ffffff",
+          "background-color": "#cbd5e1",
+          "overlay-opacity": 0
+        }
+      },
+      {
+        selector: "node.center-node",
+        style: {
+          "width": 82,
+          "height": 82,
+          "font-size": "12px",
+          "color": "#ffffff",
+          "background-color": "#0f172a",
+          "border-color": "#334155",
+          "border-width": 3
+        }
+      },
+      {
+        selector: "node.inbound-node",
+        style: {
+          "background-color": "#60a5fa",
+          "border-color": "#2563eb"
+        }
+      },
+      {
+        selector: "node.outbound-node",
+        style: {
+          "background-color": "#fdba74",
+          "border-color": "#ea580c"
+        }
+      },
+      {
+        selector: "node.reciprocal-node",
+        style: {
+          "background-color": "#c084fc",
+          "border-color": "#7e22ce"
+        }
+      },
+      {
+        selector: "node.individual-payers-node",
+        style: {
+          "width": 60,
+          "height": 60,
+          "font-size": "13px",
+          "color": "#064e3b",
+          "background-color": "#6ee7b7",
+          "border-color": "#059669",
+          "border-width": 3
+        }
+      },
+      {
+        selector: "edge",
+        style: {
+          "width": "data(displayWidth)",
+          "curve-style": "bezier",
+          "target-arrow-shape": "triangle",
+          "arrow-scale": 1.18,
+          "opacity": 0.88,
+          "line-cap": "round"
+        }
+      },
+      {
+        selector: "edge.inbound-edge",
+        style: {
+          "line-color": "#2563eb",
+          "target-arrow-color": "#2563eb"
+        }
+      },
+      {
+        selector: "edge.outbound-edge",
+        style: {
+          "line-color": "#f97316",
+          "target-arrow-color": "#f97316"
+        }
+      },
+      {
+        selector: "edge.individual-edge",
+        style: {
+          "line-color": "#10b981",
+          "target-arrow-color": "#10b981"
+        }
+      },
+      {
+        selector: "node.selected-node",
+        style: {
+          "border-width": 4,
+          "border-color": "#ef4444",
+          "z-index": 99
+        }
+      },
+      {
+        selector: "edge.highlighted",
+        style: {
+          "opacity": 1,
+          "z-index": 98
+        }
+      },
+      {
+        selector: "node.faded",
+        style: {
+          "opacity": 0.20
+        }
+      },
+      {
+        selector: "edge.faded",
+        style: {
+          "opacity": 0.10
+        }
+      }
+    ]
+  });
+
+  cy.on("tap", "node", event => {
+    const node = event.target;
+
+    cy.elements().addClass("faded");
+    cy.edges().removeClass("highlighted");
+    cy.nodes().removeClass("selected-node");
+
+    node.removeClass("faded");
+    node.addClass("selected-node");
+
+    const neighborhood = node.closedNeighborhood();
+    neighborhood.removeClass("faded");
+    node.connectedEdges().addClass("highlighted");
+
+    renderProfessionalDetailNetworkPanel(node.id());
+  });
+
+  cy.on("tap", event => {
+    if (event.target !== cy) {
+      return;
+    }
+
+    cy.elements().removeClass("faded highlighted");
+    cy.nodes().removeClass("selected-node");
+    cy.getElementById(network.center?.professional_ref || "").addClass("selected-node");
+    renderProfessionalDetailNetworkPanel(network.center?.professional_ref || null);
+  });
+
+  const centerId = network.center?.professional_ref || "";
+  if (centerId) {
+    cy.getElementById(centerId).addClass("selected-node");
+  }
+
+  appState.proDetailNetworkCy = cy;
+
+  bindProfessionalDetailNetworkControls(cy);
+  renderProfessionalDetailNetworkPanel(centerId);
+
+  window.setTimeout(() => {
+    if (!appState.proDetailNetworkCy) return;
+    appState.proDetailNetworkCy.resize();
+    appState.proDetailNetworkCy.fit(undefined, 56);
+  }, 80);
+}
+
+
+function buildProfessionalBalanceTrajectoryReading(balanceTimeseries = {}) {
+  const summary = balanceTimeseries?.summary || {};
+  const openingBalance = summary.opening_balance;
+  const closingBalance = summary.closing_balance;
+  const minBalance = summary.min_balance;
+  const maxBalance = summary.max_balance;
+  const balanceChange = summary.balance_change;
+  const pointCount = Number(summary.point_count || 0);
+
+  if (
+    pointCount <= 0
+    || openingBalance === null
+    || openingBalance === undefined
+    || closingBalance === null
+    || closingBalance === undefined
+  ) {
+    return {
+      tone: "neutral",
+      title: "Aucune série de solde exploitable sur cette période",
+      text: "Les soldes historiques disponibles ne permettent pas encore de décrire une trajectoire de détention pour ce professionnel.",
+      changeText: "—",
+      relativeChange: null,
+    };
+  }
+
+  const opening = Number(openingBalance || 0);
+  const closing = Number(closingBalance || 0);
+  const change = Number(balanceChange || 0);
+  const relativeChange = opening !== 0
+    ? (change / Math.abs(opening)) * 100
+    : null;
+
+  const amplitude = (
+    minBalance !== null
+    && minBalance !== undefined
+    && maxBalance !== null
+    && maxBalance !== undefined
+  )
+    ? Number(maxBalance || 0) - Number(minBalance || 0)
+    : 0;
+
+  const amplitudeRatio = Math.max(Math.abs(opening), Math.abs(closing), 1) > 0
+    ? (amplitude / Math.max(Math.abs(opening), Math.abs(closing), 1)) * 100
+    : 0;
+
+  let tone = "neutral";
+  let title = "Un niveau de détention relativement stable";
+  let text = "Le solde varie au cours de la période sans dessiner de rupture marquée. Cette trajectoire peut être lue avec les flux d’encaissement, de réemploi et de reconversion.";
+  let changeText = change >= 0
+    ? `+${euro(change)}`
+    : `−${euro(Math.abs(change))}`;
+
+  if (opening === 0 && closing > 0) {
+    tone = "watch";
+    title = "Le professionnel constitue un stock de Gonettes";
+    text = `Le solde part de zéro et atteint ${euro(closing)} en fin de période. Cette montée signale une accumulation nette à mettre en regard des débouchés de réemploi disponibles.`;
+  } else if (closing > opening && relativeChange !== null && relativeChange >= 25) {
+    tone = "watch";
+    title = "Le stock de Gonettes progresse sensiblement";
+    text = `Le solde passe de ${euro(opening)} à ${euro(closing)}. Cette hausse peut traduire une captation plus rapide que le réemploi et mérite d’être croisée avec les flux sortants.`;
+  } else if (closing < opening && relativeChange !== null && relativeChange <= -25) {
+    tone = "active";
+    title = "Le solde disponible se réduit nettement";
+    text = `Le solde passe de ${euro(opening)} à ${euro(closing)}. La courbe indique une mobilisation importante du stock, à interpréter avec les sorties vers le réseau ou les reconversions.`;
+  } else if (amplitudeRatio >= 80) {
+    tone = "watch";
+    title = "Une détention très mobile au cours de la période";
+    text = `Le solde oscille entre ${euro(minBalance || 0)} et ${euro(maxBalance || 0)}. Cette forte amplitude signale une circulation par à-coups ou des opérations ponctuelles d’ampleur.`;
+  }
+
+  return {
+    tone,
+    title,
+    text,
+    changeText,
+    relativeChange,
+  };
+}
+
+function renderProfessionalBalanceHistoryChart(balanceTimeseries = {}) {
+  const canvas = document.getElementById("proDetailBalanceHistoryChart");
+  const items = Array.isArray(balanceTimeseries?.items)
+    ? balanceTimeseries.items
+    : [];
+
+  if (!canvas || !items.length) {
+    return;
+  }
+
+  if (appState.charts.proDetailBalanceHistory) {
+    appState.charts.proDetailBalanceHistory.destroy();
+    appState.charts.proDetailBalanceHistory = null;
+  }
+
+  const labels = items.map(item => item.date);
+  const balances = items.map(item => Number(item.balance || 0));
+
+  appState.charts.proDetailBalanceHistory = new Chart(canvas, {
+    type: "line",
     data: {
-      labels: activity.labels,
+      labels,
       datasets: [
         {
-          type: "bar",
-          label: "Reçu",
-          data: activity.recu
-        },
-        {
-          type: "bar",
-          label: "Émis",
-          data: activity.emis
-        },
-        {
-          type: "line",
-          label: "Conversions",
-          data: activity.conversion,
-          tension: 0.25
+          label: "Solde professionnel",
+          data: balances,
+          tension: 0.22,
+          fill: true,
+          pointRadius: labels.length > 180 ? 0 : 1.6,
+          pointHoverRadius: 4,
         }
       ]
     },
     options: {
       responsive: true,
-      maintainAspectRatio: true,
+      maintainAspectRatio: false,
       interaction: {
         mode: "index",
         intersect: false
       },
       plugins: {
         legend: {
-          position: "top"
-        }
-      },
-      scales: {
-        x: {
-          ticks: {
-            maxRotation: 45,
-            minRotation: 0
-          }
-        },
-        y: {
-          beginAtZero: true
-        }
-      }
-    }
-  });
-
-  appState.charts.balance = new Chart(balanceCtx, {
-    type: "bar",
-    data: {
-      labels: ["Balance"],
-      datasets: [
-        {
-          label: "Reçu",
-          data: [balance.recu],
-          stack: "balance"
-        },
-        {
-          label: "Émis",
-          data: [balance.emis],
-          stack: "balance"
-        }
-      ]
-    },
-    options: {
-      indexAxis: "y",
-      responsive: true,
-      maintainAspectRatio: true,
-      plugins: {
-        legend: {
-          position: "top"
+          display: false
         },
         tooltip: {
           callbacks: {
-            label: function(context) {
-              return `${context.dataset.label}: ${euro(context.raw)}`;
+            title(items) {
+              return items?.[0]?.label || "";
+            },
+            label(context) {
+              return `Solde : ${euro(context.raw || 0)}`;
             }
           }
         }
       },
       scales: {
         x: {
-          beginAtZero: true,
-          stacked: true
+          ticks: {
+            maxTicksLimit: 12,
+            maxRotation: 0,
+            autoSkip: true
+          }
         },
         y: {
-          stacked: true
+          ticks: {
+            callback(value) {
+              return euro(value);
+            }
+          }
         }
       }
     }
   });
 }
 
+function buildProfessionalBalanceSectionHtml(balanceTimeseries = {}) {
+  const summary = balanceTimeseries?.summary || {};
+  const reading = buildProfessionalBalanceTrajectoryReading(balanceTimeseries);
+  const hasItems = Array.isArray(balanceTimeseries?.items)
+    && balanceTimeseries.items.length > 0;
+
+  const pointCount = Number(summary.point_count || 0);
+
+  return `
+    <section class="card pro-detail-balance-card">
+      <div class="pro-detail-balance-heading">
+        <div>
+          <div class="stat-label">Trajectoire de détention</div>
+          <h3>${escapeHtml(reading.title)}</h3>
+          <p>${escapeHtml(reading.text)}</p>
+        </div>
+
+        <div class="pro-detail-balance-change pro-detail-balance-change-${escapeHtml(reading.tone)}">
+          <span>Variation nette du solde</span>
+          <strong>${escapeHtml(reading.changeText)}</strong>
+          <small>
+            ${summary.opening_date || "—"} → ${summary.closing_date || "—"}
+          </small>
+        </div>
+      </div>
+
+      <div class="pro-detail-balance-kpis">
+        <div>
+          <span>Ouverture</span>
+          <strong>${summary.opening_balance === null || summary.opening_balance === undefined ? "—" : euro(summary.opening_balance)}</strong>
+        </div>
+        <div>
+          <span>Clôture</span>
+          <strong>${summary.closing_balance === null || summary.closing_balance === undefined ? "—" : euro(summary.closing_balance)}</strong>
+        </div>
+        <div>
+          <span>Minimum observé</span>
+          <strong>${summary.min_balance === null || summary.min_balance === undefined ? "—" : euro(summary.min_balance)}</strong>
+        </div>
+        <div>
+          <span>Maximum observé</span>
+          <strong>${summary.max_balance === null || summary.max_balance === undefined ? "—" : euro(summary.max_balance)}</strong>
+        </div>
+      </div>
+
+      ${
+        hasItems
+          ? `
+            <div class="pro-detail-balance-chart-frame">
+              <canvas id="proDetailBalanceHistoryChart"></canvas>
+            </div>
+          `
+          : `
+            <div class="pro-detail-balance-empty">
+              Aucun point de solde disponible pour cette période.
+            </div>
+          `
+      }
+
+      <div class="pro-detail-balance-method-note">
+        <strong>Lecture.</strong>
+        ${formatProfessionalNetworkCount(pointCount)} point(s) quotidien(s) de solde sont utilisés ici.
+        La courbe mesure un <em>stock détenu</em> à chaque date ; elle ne dit pas seule si une baisse résulte
+        d’un réemploi dans le réseau ou d’une reconversion, d’où l’intérêt de la lire avec la trajectoire de flux.
+      </div>
+    </section>
+  `;
+}
+
+
+function formatProfessionalHourWindow(hour) {
+  const safeHour = Number(hour || 0);
+  const nextHour = (safeHour + 1) % 24;
+  return `${safeHour}h–${nextHour}h`;
+}
+
+function getProfessionalPaymentHeatLevel(txCount, maxTxCount) {
+  const count = Number(txCount || 0);
+  const max = Number(maxTxCount || 0);
+
+  if (count <= 0 || max <= 0) {
+    return 0;
+  }
+
+  const ratio = count / max;
+
+  if (ratio >= 0.80) return 5;
+  if (ratio >= 0.60) return 4;
+  if (ratio >= 0.40) return 3;
+  if (ratio >= 0.20) return 2;
+  return 1;
+}
+
+function buildProfessionalPaymentRhythmReading(paymentRhythm = {}) {
+  const summary = paymentRhythm?.summary || {};
+  const txCount = Number(summary.tx_count || 0);
+  const volume = Number(summary.volume || 0);
+  const activeWeekdayCount = Number(summary.active_weekday_count || 0);
+  const peakCell = summary.peak_cell || null;
+  const peakWeekday = summary.peak_weekday || null;
+
+  if (txCount <= 0) {
+    return {
+      title: "Aucun paiement particulier visible sur cette période",
+      text: "La période sélectionnée ne montre pas de transaction U→P reçue par ce professionnel.",
+    };
+  }
+
+  const peakWeekdayCount = Number(peakWeekday?.tx_count || 0);
+  const peakWeekdayShare = txCount > 0
+    ? (peakWeekdayCount / txCount) * 100
+    : 0;
+
+  let title = "Une clientèle Gonette répartie dans le temps";
+  let text = `${formatProfessionalNetworkCount(txCount)} paiement(s) particulier(s) sont observés pour ${euro(volume)}.`;
+
+  if (peakWeekday && peakWeekdayShare >= 35) {
+    title = `Un rythme d’usage particulièrement marqué le ${String(peakWeekday.label || "").toLocaleLowerCase("fr-FR")}`;
+    text = `${formatProfessionalNetworkCount(txCount)} paiement(s) particulier(s) sont observés pour ${euro(volume)}. Le ${String(peakWeekday.label || "").toLocaleLowerCase("fr-FR")} concentre ${percent(peakWeekdayShare)} des paiements reçus.`;
+  } else if (activeWeekdayCount >= 5) {
+    title = "Des paiements particuliers répartis sur l’ensemble de la semaine";
+    text = `${formatProfessionalNetworkCount(txCount)} paiement(s) particulier(s) sont observés pour ${euro(volume)}. L’activité apparaît sur ${formatProfessionalNetworkCount(activeWeekdayCount)} jours de semaine distincts.`;
+  } else if (activeWeekdayCount > 0) {
+    title = "Un rythme de paiement concentré sur quelques jours";
+    text = `${formatProfessionalNetworkCount(txCount)} paiement(s) particulier(s) sont observés pour ${euro(volume)}. Les usages sont concentrés sur ${formatProfessionalNetworkCount(activeWeekdayCount)} jour(s) de semaine.`;
+  }
+
+  if (peakCell && Number(peakCell.tx_count || 0) > 0) {
+    text += ` Le créneau le plus dense est ${String(peakCell.weekday_label || "").toLocaleLowerCase("fr-FR")} ${formatProfessionalHourWindow(peakCell.hour)}, avec ${formatProfessionalNetworkCount(peakCell.tx_count || 0)} paiement(s).`;
+  }
+
+  return {
+    title,
+    text,
+  };
+}
+
+function buildProfessionalPaymentHeatmapHtml(paymentRhythm = {}) {
+  const heatmap = paymentRhythm?.heatmap || {};
+  const summary = paymentRhythm?.summary || {};
+  const weekdays = Array.isArray(heatmap.weekdays) ? heatmap.weekdays : [];
+  const hours = Array.isArray(heatmap.hours) ? heatmap.hours : [];
+  const cells = Array.isArray(heatmap.cells) ? heatmap.cells : [];
+  const maxCellTxCount = Number(summary.max_cell_tx_count || 0);
+
+  if (!weekdays.length || !hours.length || !cells.length) {
+    return `
+      <div class="pro-detail-payment-heatmap-empty">
+        La matrice horaire ne contient pas de données exploitables.
+      </div>
+    `;
+  }
+
+  const cellMap = new Map(
+    cells.map(cell => [
+      `${cell.weekday_index}:${cell.hour}`,
+      cell
+    ])
+  );
+
+  return `
+    <div class="pro-detail-payment-heatmap-wrap">
+      <div class="pro-detail-payment-heatmap">
+        <div class="pro-detail-payment-heatmap-corner"></div>
+
+        ${hours.map(hour => `
+          <div class="pro-detail-payment-heatmap-hour">
+            ${hour}h
+          </div>
+        `).join("")}
+
+        ${weekdays.map(weekday => {
+          const weekdayIndex = Number(weekday.weekday_index || 0);
+          const weekdayLabel = String(weekday.label || "");
+
+          return `
+            <div class="pro-detail-payment-heatmap-day">
+              ${escapeHtml(weekdayLabel)}
+            </div>
+
+            ${hours.map(hour => {
+              const cell = cellMap.get(`${weekdayIndex}:${hour}`) || {
+                tx_count: 0,
+                volume: 0,
+                hour,
+                weekday_label: weekdayLabel,
+              };
+
+              const level = getProfessionalPaymentHeatLevel(
+                cell.tx_count,
+                maxCellTxCount
+              );
+
+              const title = `${weekdayLabel} ${formatProfessionalHourWindow(hour)} · ${formatProfessionalNetworkCount(cell.tx_count || 0)} paiement(s) · ${euro(cell.volume || 0)}`;
+
+              return `
+                <div
+                  class="pro-detail-payment-heatmap-cell pro-detail-payment-heatmap-level-${level}"
+                  title="${escapeHtml(title)}"
+                  aria-label="${escapeHtml(title)}"
+                >
+                  ${Number(cell.tx_count || 0) > 0 ? formatProfessionalNetworkCount(cell.tx_count || 0) : ""}
+                </div>
+              `;
+            }).join("")}
+          `;
+        }).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function buildProfessionalPaymentRhythmSectionHtml(paymentRhythm = {}) {
+  const summary = paymentRhythm?.summary || {};
+  const reading = buildProfessionalPaymentRhythmReading(paymentRhythm);
+
+  const txCount = Number(summary.tx_count || 0);
+  const volume = Number(summary.volume || 0);
+  const activeDayCount = Number(summary.active_day_count || 0);
+  const activeSlotCount = Number(summary.active_slot_count || 0);
+  const unplacedTxCount = Number(summary.unplaced_tx_count || 0);
+
+  return `
+    <section class="card pro-detail-payment-rhythm-card">
+      <div class="pro-detail-payment-rhythm-heading">
+        <div>
+          <div class="stat-label">Rythme des paiements particuliers</div>
+          <h3>${escapeHtml(reading.title)}</h3>
+          <p>${escapeHtml(reading.text)}</p>
+        </div>
+      </div>
+
+      <div class="pro-detail-payment-rhythm-kpis">
+        <div>
+          <span>Paiements U→P</span>
+          <strong>${formatProfessionalNetworkCount(txCount)}</strong>
+        </div>
+        <div>
+          <span>Volume C2B</span>
+          <strong>${euro(volume)}</strong>
+        </div>
+        <div>
+          <span>Jours actifs</span>
+          <strong>${formatProfessionalNetworkCount(activeDayCount)}</strong>
+        </div>
+        <div>
+          <span>Créneaux actifs</span>
+          <strong>${formatProfessionalNetworkCount(activeSlotCount)}</strong>
+        </div>
+      </div>
+
+      ${buildProfessionalPaymentHeatmapHtml(paymentRhythm)}
+
+      <div class="pro-detail-payment-rhythm-note">
+        <strong>Lecture.</strong>
+        Chaque case représente un couple <em>jour de semaine × heure</em>.
+        L’intensité visuelle est pondérée par le <strong>nombre de paiements</strong>,
+        afin de faire ressortir les rythmes d’usage du fond de commerce Gonette.
+        ${
+          unplacedTxCount > 0
+            ? ` ${formatProfessionalNetworkCount(unplacedTxCount)} transaction(s) n’ont pas pu être placées dans la matrice horaire.`
+            : ""
+        }
+      </div>
+    </section>
+  `;
+}
+
+
+function buildProfessionalCustomerConcentrationReading(concentration = {}) {
+  const summary = concentration?.summary || {};
+  const payerCount = Number(summary.payer_count || 0);
+  const top5Share = Number(summary.top_5_share_pct || 0);
+  const top3Share = Number(summary.top_3_share_pct || 0);
+  const effectivePayerCount = Number(summary.effective_payer_count || 0);
+  const concentrationRatio = Number(summary.concentration_ratio_effective_to_observed || 0);
+
+  if (payerCount <= 0) {
+    return {
+      tone: "neutral",
+      title: "Aucun fond de commerce particulier visible sur cette période",
+      text: "Aucun payeur particulier distinct n’est détecté dans les transactions U→P de la période sélectionnée.",
+    };
+  }
+
+  if (top5Share >= 60 || concentrationRatio < 0.35) {
+    return {
+      tone: "attention",
+      title: "Une activité C2B très concentrée autour de quelques payeurs",
+      text: `Les 5 principaux payeurs représentent ${percent(top5Share)} du volume reçu depuis les particuliers. Le volume observé équivaut à une base d’environ ${formatProfessionalCustomerEffectiveCount(effectivePayerCount)} payeur(s) pleinement équilibré(s), pour ${formatProfessionalNetworkCount(payerCount)} payeur(s) distinct(s) réellement observé(s).`,
+    };
+  }
+
+  if (top5Share <= 35 && concentrationRatio >= 0.60) {
+    return {
+      tone: "positive",
+      title: "Un fond de commerce Gonette plutôt diffus",
+      text: `Les 5 principaux payeurs concentrent ${percent(top5Share)} du volume C2B, ce qui signale une clientèle Gonette relativement répartie. Le top 3 pèse ${percent(top3Share)} seulement.`,
+    };
+  }
+
+  return {
+    tone: "watch",
+    title: "Un fond de commerce Gonette modérément concentré",
+    text: `Les 5 principaux payeurs représentent ${percent(top5Share)} du volume C2B. La dépendance à quelques usagers existe, sans dominer totalement la structure du fond de commerce.`,
+  };
+}
+
+function formatProfessionalCustomerEffectiveCount(value) {
+  const numeric = Number(value || 0);
+  return numeric.toLocaleString("fr-FR", {
+    minimumFractionDigits: numeric < 10 ? 1 : 0,
+    maximumFractionDigits: 1,
+  });
+}
+
+function renderProfessionalCustomerConcentrationChart(concentration = {}) {
+  const canvas = document.getElementById("proDetailCustomerConcentrationChart");
+  const points = Array.isArray(concentration?.lorenz_points)
+    ? concentration.lorenz_points
+    : [];
+
+  if (!canvas || points.length === 0) {
+    return;
+  }
+
+  if (appState.charts.proDetailCustomerConcentration) {
+    appState.charts.proDetailCustomerConcentration.destroy();
+    appState.charts.proDetailCustomerConcentration = null;
+  }
+
+  const actualPoints = points.map(point => ({
+    x: Number(point.payer_share_pct || 0),
+    y: Number(point.volume_share_pct || 0),
+  }));
+
+  const equalityPoints = points.map(point => {
+    const share = Number(point.payer_share_pct || 0);
+    return { x: share, y: share };
+  });
+
+  appState.charts.proDetailCustomerConcentration = new Chart(canvas, {
+    type: "line",
+    data: {
+      datasets: [
+        {
+          label: "Répartition observée",
+          data: actualPoints,
+          tension: 0.18,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          fill: false,
+        },
+        {
+          label: "Répartition parfaitement équilibrée",
+          data: equalityPoints,
+          tension: 0,
+          pointRadius: 0,
+          pointHoverRadius: 0,
+          borderDash: [6, 6],
+          fill: false,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      parsing: false,
+      interaction: {
+        mode: "nearest",
+        intersect: false
+      },
+      plugins: {
+        legend: {
+          position: "top"
+        },
+        tooltip: {
+          callbacks: {
+            title(items) {
+              const point = items?.[0]?.raw;
+              if (!point) return "";
+              return `${Number(point.x || 0).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} % des payeurs`;
+            },
+            label(context) {
+              const value = Number(context.raw?.y || 0);
+              return `${context.dataset.label} : ${percent(value)} du volume C2B`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          type: "linear",
+          min: 0,
+          max: 100,
+          title: {
+            display: true,
+            text: "Part cumulée des payeurs particuliers"
+          },
+          ticks: {
+            callback(value) {
+              return `${value} %`;
+            },
+            maxTicksLimit: 6
+          }
+        },
+        y: {
+          min: 0,
+          max: 100,
+          title: {
+            display: true,
+            text: "Part cumulée du volume C2B"
+          },
+          ticks: {
+            callback(value) {
+              return `${value} %`;
+            },
+            maxTicksLimit: 6
+          }
+        }
+      }
+    }
+  });
+}
+
+function buildProfessionalCustomerConcentrationSectionHtml(concentration = {}) {
+  const summary = concentration?.summary || {};
+  const reading = buildProfessionalCustomerConcentrationReading(concentration);
+
+  const payerCount = Number(summary.payer_count || 0);
+  const top5Share = Number(summary.top_5_share_pct || 0);
+  const averageVolume = Number(summary.average_volume_per_payer || 0);
+  const effectivePayerCount = Number(summary.effective_payer_count || 0);
+
+  const hasCurve = Array.isArray(concentration?.lorenz_points)
+    && concentration.lorenz_points.length > 0
+    && payerCount > 0;
+
+  return `
+    <section class="card pro-detail-customer-concentration-card">
+      <div class="pro-detail-customer-concentration-heading">
+        <div>
+          <div class="stat-label">Structure du fond de commerce Gonette</div>
+          <h3>${escapeHtml(reading.title)}</h3>
+          <p>${escapeHtml(reading.text)}</p>
+        </div>
+      </div>
+
+      <div class="pro-detail-customer-concentration-kpis">
+        <div>
+          <span>Particuliers payeurs</span>
+          <strong>${formatProfessionalNetworkCount(payerCount)}</strong>
+        </div>
+        <div>
+          <span>Part du top 5</span>
+          <strong>${percent(top5Share)}</strong>
+        </div>
+        <div>
+          <span>Volume moyen / payeur</span>
+          <strong>${euro(averageVolume)}</strong>
+        </div>
+        <div>
+          <span>Payeurs effectifs</span>
+          <strong>${formatProfessionalCustomerEffectiveCount(effectivePayerCount)}</strong>
+        </div>
+      </div>
+
+      ${
+        hasCurve
+          ? `
+            <div class="pro-detail-customer-concentration-chart-frame">
+              <canvas id="proDetailCustomerConcentrationChart"></canvas>
+            </div>
+          `
+          : `
+            <div class="pro-detail-customer-concentration-empty">
+              Aucune courbe de concentration exploitable pour cette période.
+            </div>
+          `
+      }
+
+      <div class="pro-detail-customer-concentration-note">
+        <strong>Lecture.</strong>
+        La courbe classe les payeurs particuliers du plus petit au plus gros volume cumulé.
+        Plus la courbe observée s’éloigne vers le bas de la diagonale,
+        plus le chiffre d’affaires Gonette dépend d’un petit nombre de payeurs.
+        Le nombre de <strong>payeurs effectifs</strong> résume cette concentration :
+        il correspond au nombre théorique de payeurs de poids égal produisant le même niveau de concentration.
+      </div>
+    </section>
+  `;
+}
+
+
+function getProfessionalDetailDynamicsRequest(numProf) {
+  const periodQuery = getPeriodQueryParam();
+  const dynamicsQuery = periodQuery
+    ? `${periodQuery}&network_limit=18`
+    : "?network_limit=18";
+
+  return {
+    url: `/api/pro/${encodeURIComponent(numProf)}/dynamics${dynamicsQuery}`,
+    cacheKey: `${numProf}::${dynamicsQuery}`,
+  };
+}
+
+async function loadProfessionalDetailDynamics(numProf) {
+  const request = getProfessionalDetailDynamicsRequest(numProf);
+
+  if (
+    appState.proDetailDynamics
+    && appState.proDetailDynamicsKey === request.cacheKey
+  ) {
+    return appState.proDetailDynamics;
+  }
+
+  const dynamics = await apiGet(request.url);
+
+  if (appState.currentPro === numProf) {
+    appState.proDetailDynamics = dynamics;
+    appState.proDetailDynamicsKey = request.cacheKey;
+  }
+
+  return dynamics;
+}
+
+
+
+function buildProfessionalCustomerLoyaltyReading(loyalty = {}) {
+  const summary = loyalty?.summary || {};
+  const payerCount = Number(summary.payer_count || 0);
+  const newShare = Number(summary.new_payer_share_pct || 0);
+  const returningShare = Number(summary.returning_payer_share_pct || 0);
+  const recurrentShare = Number(summary.recurrent_payer_share_pct || 0);
+  const recurrentVolumeShare = Number(summary.recurrent_payer_volume_share_pct || 0);
+
+  if (payerCount <= 0) {
+    return {
+      tone: "neutral",
+      title: "Aucune récurrence particulière observable sur la période",
+      text: "La période sélectionnée ne montre pas de payeurs particuliers pour ce professionnel.",
+    };
+  }
+
+  if (returningShare >= 45 && recurrentVolumeShare >= 55) {
+    return {
+      tone: "positive",
+      title: "Une clientèle Gonette déjà installée",
+      text: `${percent(returningShare)} des payeurs étaient déjà connus avant la période, et les payeurs récurrents portent ${percent(recurrentVolumeShare)} du volume C2B. Le professionnel dispose d’un noyau d’usage qui semble s’inscrire dans le temps.`,
+    };
+  }
+
+  if (newShare >= 70 && recurrentShare < 25) {
+    return {
+      tone: "watch",
+      title: "Une phase d’acquisition à transformer en fidélité",
+      text: `${percent(newShare)} des payeurs sont nouveaux pour ce professionnel sur la période, mais seuls ${percent(recurrentShare)} ont payé au moins deux fois. L’enjeu peut être de transformer une première activation en habitude.`,
+    };
+  }
+
+  if (recurrentVolumeShare >= 70 && recurrentShare < 40) {
+    return {
+      tone: "attention",
+      title: "Un noyau fidèle porte une grande part de l’activité C2B",
+      text: `Les payeurs récurrents ne représentent que ${percent(recurrentShare)} des payeurs, mais ils concentrent ${percent(recurrentVolumeShare)} du volume reçu depuis les particuliers. Cette fidélité est précieuse, tout en rendant l’activité dépendante d’un cœur d’usagers.`,
+    };
+  }
+
+  return {
+    tone: "neutral",
+    title: "Un fond de commerce partagé entre nouveaux usages et retours",
+    text: `${percent(newShare)} des payeurs sont nouveaux pour ce professionnel sur la période ; ${percent(recurrentShare)} ont réalisé au moins deux paiements. La clientèle Gonette montre à la fois de l’acquisition et un début de répétition des usages.`,
+  };
+}
+
+function buildProfessionalLoyaltySegmentBar(segments = [], valueKey = "payer_share_pct") {
+  const safeSegments = Array.isArray(segments) ? segments : [];
+
+  return `
+    <div class="pro-detail-loyalty-segment-track">
+      ${safeSegments.map(segment => {
+        const width = Math.max(0, Math.min(100, Number(segment?.[valueKey] || 0)));
+        const key = String(segment?.key || "segment");
+
+        return `
+          <div
+            class="pro-detail-loyalty-segment pro-detail-loyalty-segment-${escapeHtml(key)}"
+            style="width: ${width}%"
+            title="${escapeHtml(`${segment.label || ""} · ${percent(width)}`)}"
+          ></div>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function buildProfessionalLoyaltyLegend(segments = [], shareKey = "payer_share_pct") {
+  const safeSegments = Array.isArray(segments) ? segments : [];
+
+  return `
+    <div class="pro-detail-loyalty-legend">
+      ${safeSegments.map(segment => `
+        <div class="pro-detail-loyalty-legend-item">
+          <i class="pro-detail-loyalty-legend-swatch pro-detail-loyalty-legend-swatch-${escapeHtml(segment.key || "segment")}"></i>
+          <span>${escapeHtml(segment.label || "—")}</span>
+          <strong>${formatProfessionalNetworkCount(segment.payer_count || 0)} · ${percent(segment[shareKey] || 0)}</strong>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function buildProfessionalCustomerLoyaltySectionHtml(loyalty = {}) {
+  const summary = loyalty?.summary || {};
+  const reading = buildProfessionalCustomerLoyaltyReading(loyalty);
+  const historySegments = Array.isArray(loyalty?.history_segments)
+    ? loyalty.history_segments
+    : [];
+  const frequencySegments = Array.isArray(loyalty?.frequency_segments)
+    ? loyalty.frequency_segments
+    : [];
+
+  const payerCount = Number(summary.payer_count || 0);
+  const newPayers = Number(summary.new_payer_count || 0);
+  const returningPayers = Number(summary.returning_payer_count || 0);
+  const recurrentPayers = Number(summary.recurrent_payer_count || 0);
+  const recurrentVolumeShare = Number(summary.recurrent_payer_volume_share_pct || 0);
+
+  return `
+    <section class="card pro-detail-loyalty-card">
+      <div class="pro-detail-loyalty-heading">
+        <div>
+          <div class="stat-label">Fidélité & récurrence</div>
+          <h3>${escapeHtml(reading.title)}</h3>
+          <p>${escapeHtml(reading.text)}</p>
+        </div>
+      </div>
+
+      <div class="pro-detail-loyalty-kpis">
+        <div>
+          <span>Nouveaux payeurs</span>
+          <strong>${formatProfessionalNetworkCount(newPayers)}</strong>
+        </div>
+        <div>
+          <span>Déjà vus avant</span>
+          <strong>${formatProfessionalNetworkCount(returningPayers)}</strong>
+        </div>
+        <div>
+          <span>Payeurs récurrents</span>
+          <strong>${formatProfessionalNetworkCount(recurrentPayers)}</strong>
+        </div>
+        <div>
+          <span>Volume des récurrents</span>
+          <strong>${percent(recurrentVolumeShare)}</strong>
+        </div>
+      </div>
+
+      ${
+        payerCount > 0
+          ? `
+            <div class="pro-detail-loyalty-axes">
+              <section class="pro-detail-loyalty-axis-card">
+                <h4>Acquisition ou retour ?</h4>
+                <p>
+                  Les payeurs sont séparés entre ceux jamais vus auparavant chez ce professionnel
+                  et ceux déjà présents avant le début de la période.
+                </p>
+                ${buildProfessionalLoyaltySegmentBar(historySegments)}
+                ${buildProfessionalLoyaltyLegend(historySegments)}
+              </section>
+
+              <section class="pro-detail-loyalty-axis-card">
+                <h4>À quelle fréquence reviennent-ils ?</h4>
+                <p>
+                  Les payeurs sont regroupés selon le nombre de paiements réalisés pendant la période sélectionnée.
+                </p>
+                ${buildProfessionalLoyaltySegmentBar(frequencySegments)}
+                ${buildProfessionalLoyaltyLegend(frequencySegments)}
+              </section>
+            </div>
+          `
+          : `
+            <div class="pro-detail-loyalty-empty">
+              Aucun payeur particulier à analyser sur cette période.
+            </div>
+          `
+      }
+
+      <div class="pro-detail-loyalty-note">
+        <strong>Lecture.</strong>
+        Un payeur est dit <em>nouveau</em> s’il n’avait jamais payé ce professionnel avant le début de la période sélectionnée.
+        Un payeur est dit <em>récurrent</em> s’il effectue au moins deux paiements pendant la période.
+        Cette lecture permet de distinguer une simple activation ponctuelle d’un usage réellement réitéré.
+      </div>
+    </section>
+  `;
+}
+
+
+function getProfessionalPaymentBasinMapRequest(numProf) {
+  const periodQuery = getPeriodQueryParam();
+  const basinQuery = periodQuery
+    ? `${periodQuery}&min_users=5`
+    : "?min_users=5";
+
+  return {
+    url: `/api/pro/${encodeURIComponent(numProf)}/payment-basin-map${basinQuery}`,
+    cacheKey: `${numProf}::${basinQuery}`,
+  };
+}
+
+async function loadProfessionalPaymentBasinMap(numProf) {
+  const request = getProfessionalPaymentBasinMapRequest(numProf);
+
+  if (
+    appState.proDetailPaymentBasinMap
+    && appState.proDetailPaymentBasinMapKey === request.cacheKey
+  ) {
+    return appState.proDetailPaymentBasinMap;
+  }
+
+  const payload = await apiGet(request.url);
+
+  if (appState.currentPro === numProf) {
+    appState.proDetailPaymentBasinMap = payload;
+    appState.proDetailPaymentBasinMapKey = request.cacheKey;
+  }
+
+  return payload;
+}
+
+function professionalPaymentBasinHash(value) {
+  const text = String(value || "");
+  let hash = 0;
+
+  for (let index = 0; index < text.length; index += 1) {
+    hash = ((hash << 5) - hash) + text.charCodeAt(index);
+    hash |= 0;
+  }
+
+  return Math.abs(hash);
+}
+
+function collectProfessionalPaymentBasinCoordinates(payload = {}) {
+  const points = [];
+  const center = payload?.center || {};
+
+  if (
+    Number.isFinite(Number(center.longitude))
+    && Number.isFinite(Number(center.latitude))
+  ) {
+    points.push([Number(center.longitude), Number(center.latitude)]);
+  }
+
+  (payload?.routes || []).forEach(route => {
+    const source = route?.source || {};
+    if (
+      Number.isFinite(Number(source.longitude))
+      && Number.isFinite(Number(source.latitude))
+    ) {
+      points.push([Number(source.longitude), Number(source.latitude)]);
+    }
+  });
+
+  const pushGeoJsonCoordinates = coords => {
+    if (!Array.isArray(coords)) return;
+
+    if (
+      coords.length >= 2
+      && Number.isFinite(Number(coords[0]))
+      && Number.isFinite(Number(coords[1]))
+    ) {
+      points.push([Number(coords[0]), Number(coords[1])]);
+      return;
+    }
+
+    coords.forEach(pushGeoJsonCoordinates);
+  };
+
+  Object.values(payload?.geometry?.visible_source_area_geojson || {}).forEach(featureCollection => {
+    (featureCollection?.features || []).forEach(feature => {
+      pushGeoJsonCoordinates(feature?.geometry?.coordinates || []);
+    });
+  });
+
+  return points;
+}
+
+function buildProfessionalPaymentBasinProjection(payload, width, height) {
+  const coords = collectProfessionalPaymentBasinCoordinates(payload);
+
+  if (!coords.length) {
+    return null;
+  }
+
+  const lons = coords.map(point => point[0]);
+  const lats = coords.map(point => point[1]);
+
+  let minLon = Math.min(...lons);
+  let maxLon = Math.max(...lons);
+  let minLat = Math.min(...lats);
+  let maxLat = Math.max(...lats);
+
+  const lonSpan = Math.max(maxLon - minLon, 0.01);
+  const latSpan = Math.max(maxLat - minLat, 0.01);
+
+  minLon -= lonSpan * 0.08;
+  maxLon += lonSpan * 0.08;
+  minLat -= latSpan * 0.08;
+  maxLat += latSpan * 0.08;
+
+  const margin = {
+    top: 34,
+    right: 34,
+    bottom: 34,
+    left: 34
+  };
+
+  const innerWidth = Math.max(1, width - margin.left - margin.right);
+  const innerHeight = Math.max(1, height - margin.top - margin.bottom);
+
+  const scaleX = innerWidth / Math.max(maxLon - minLon, 0.00001);
+  const scaleY = innerHeight / Math.max(maxLat - minLat, 0.00001);
+  const scale = Math.min(scaleX, scaleY);
+
+  const projectedWidth = (maxLon - minLon) * scale;
+  const projectedHeight = (maxLat - minLat) * scale;
+
+  const offsetX = margin.left + Math.max(0, (innerWidth - projectedWidth) / 2);
+  const offsetY = margin.top + Math.max(0, (innerHeight - projectedHeight) / 2);
+
+  return {
+    width,
+    height,
+    pixelsPerLongitudeDegree: scale,
+    project(longitude, latitude) {
+      return {
+        x: offsetX + (Number(longitude) - minLon) * scale,
+        y: offsetY + (maxLat - Number(latitude)) * scale
+      };
+    }
+  };
+}
+
+
+function drawProfessionalPaymentBasinPostalLabel(ctx, point, route, radius = 8) {
+  const postalCode = String(route?.source?.postal_code || "").trim();
+  if (!postalCode) {
+    return;
+  }
+
+  const isDark = document.body.classList.contains("dark-mode");
+  const labelY = point.y - radius - 9;
+
+  ctx.save();
+  ctx.font = "700 11px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.lineJoin = "round";
+  ctx.lineWidth = 3.4;
+  ctx.strokeStyle = isDark
+    ? "rgba(15, 23, 42, 0.92)"
+    : "rgba(255, 255, 255, 0.94)";
+  ctx.fillStyle = isDark
+    ? "rgba(226, 232, 240, 0.92)"
+    : "rgba(30, 41, 59, 0.90)";
+
+  ctx.strokeText(postalCode, point.x, labelY);
+  ctx.fillText(postalCode, point.x, labelY);
+  ctx.restore();
+}
+
+function formatProfessionalPaymentBasinDistance(kilometers) {
+  const km = Number(kilometers || 0);
+
+  if (km >= 1) {
+    return `${km.toLocaleString("fr-FR", {
+      maximumFractionDigits: km < 10 ? 1 : 0
+    })} km`;
+  }
+
+  return `${Math.round(km * 1000)} m`;
+}
+
+function updateProfessionalPaymentBasinScale(projection, payload = {}) {
+  const scaleNode = document.getElementById("proDetailPaymentBasinScale");
+
+  if (!scaleNode || !projection) {
+    return;
+  }
+
+  const centerLatitude = Number(payload?.center?.latitude);
+  const pixelsPerLongitudeDegree = Number(projection?.pixelsPerLongitudeDegree || 0);
+
+  if (
+    !Number.isFinite(centerLatitude)
+    || !Number.isFinite(pixelsPerLongitudeDegree)
+    || pixelsPerLongitudeDegree <= 0
+  ) {
+    scaleNode.hidden = true;
+    return;
+  }
+
+  const kilometersPerLongitudeDegree =
+    111.32 * Math.cos(centerLatitude * Math.PI / 180);
+
+  const kilometersPerPixel =
+    kilometersPerLongitudeDegree / pixelsPerLongitudeDegree;
+
+  if (
+    !Number.isFinite(kilometersPerPixel)
+    || kilometersPerPixel <= 0
+  ) {
+    scaleNode.hidden = true;
+    return;
+  }
+
+  const targetPixelWidth = Math.min(
+    150,
+    Math.max(88, Number(projection.width || 960) * 0.15)
+  );
+
+  const targetKilometers = targetPixelWidth * kilometersPerPixel;
+  const candidates = [
+    0.1,
+    0.2,
+    0.5,
+    1,
+    2,
+    5,
+    10,
+    20,
+    50,
+    100,
+    200
+  ];
+
+  let selectedKilometers = candidates[0];
+
+  candidates.forEach(candidate => {
+    if (candidate <= targetKilometers) {
+      selectedKilometers = candidate;
+    }
+  });
+
+  const selectedPixelWidth = selectedKilometers / kilometersPerPixel;
+
+  scaleNode.hidden = false;
+  scaleNode.innerHTML = `
+    <div class="pro-detail-payment-basin-scale-line" style="width: ${selectedPixelWidth.toFixed(1)}px;"></div>
+    <span>${formatProfessionalPaymentBasinDistance(selectedKilometers)}</span>
+  `;
+}
+
+function getProfessionalPaymentBasinThemePalette() {
+  const isDark = document.body.classList.contains("dark-mode");
+
+  return {
+    isDark,
+    backdrop: isDark ? "rgba(15, 23, 42, 0.12)" : "rgba(255, 255, 255, 0.18)",
+    guide: isDark ? "rgba(148, 163, 184, 0.07)" : "rgba(100, 116, 139, 0.06)",
+    areaFill: isDark ? "rgba(148, 163, 184, 0.13)" : "rgba(15, 23, 42, 0.05)",
+    areaStroke: isDark ? "rgba(226, 232, 240, 0.20)" : "rgba(71, 85, 105, 0.16)",
+    individualRoute: isDark ? "rgba(52, 211, 153, 0.86)" : "rgba(5, 150, 105, 0.78)",
+    individualGlow: isDark ? "rgba(52, 211, 153, 0.24)" : "rgba(16, 185, 129, 0.18)",
+    professionalRoute: isDark ? "rgba(96, 165, 250, 0.88)" : "rgba(37, 99, 235, 0.80)",
+    professionalGlow: isDark ? "rgba(96, 165, 250, 0.24)" : "rgba(37, 99, 235, 0.16)",
+    centerCore: isDark ? "#f8fafc" : "#0f172a",
+    centerGlow: isDark ? "rgba(251, 191, 36, 0.34)" : "rgba(217, 119, 6, 0.26)",
+  };
+}
+
+function drawProfessionalPaymentBasinGeoJson(ctx, projection, featureCollection) {
+  const drawRing = ring => {
+    if (!Array.isArray(ring) || !ring.length) return;
+
+    ring.forEach((coords, index) => {
+      const point = projection.project(coords[0], coords[1]);
+
+      if (index === 0) {
+        ctx.moveTo(point.x, point.y);
+      } else {
+        ctx.lineTo(point.x, point.y);
+      }
+    });
+
+    ctx.closePath();
+  };
+
+  const drawGeometry = geometry => {
+    if (!geometry) return;
+
+    if (geometry.type === "Polygon") {
+      (geometry.coordinates || []).forEach(drawRing);
+    }
+
+    if (geometry.type === "MultiPolygon") {
+      (geometry.coordinates || []).forEach(polygon => {
+        (polygon || []).forEach(drawRing);
+      });
+    }
+  };
+
+  ctx.beginPath();
+
+  (featureCollection?.features || []).forEach(feature => {
+    drawGeometry(feature?.geometry);
+  });
+
+  ctx.fill("evenodd");
+  ctx.stroke();
+}
+
+function getProfessionalPaymentBasinQuadraticControl(source, destination, routeId) {
+  const dx = destination.x - source.x;
+  const dy = destination.y - source.y;
+  const length = Math.max(1, Math.hypot(dx, dy));
+  const nx = -dy / length;
+  const ny = dx / length;
+  const hash = professionalPaymentBasinHash(routeId);
+  const direction = hash % 2 === 0 ? 1 : -1;
+  const bend = Math.min(72, 24 + length * 0.14) * direction;
+
+  return {
+    x: (source.x + destination.x) / 2 + nx * bend,
+    y: (source.y + destination.y) / 2 + ny * bend,
+  };
+}
+
+function getProfessionalPaymentBasinQuadraticPoint(source, control, destination, ratio) {
+  const t = Math.max(0, Math.min(1, Number(ratio || 0)));
+  const mt = 1 - t;
+
+  return {
+    x: (mt * mt * source.x) + (2 * mt * t * control.x) + (t * t * destination.x),
+    y: (mt * mt * source.y) + (2 * mt * t * control.y) + (t * t * destination.y),
+  };
+}
+
+function drawProfessionalPaymentBasinBackdrop(ctx, projection, payload) {
+  const palette = getProfessionalPaymentBasinThemePalette();
+  const width = projection.width;
+  const height = projection.height;
+  const center = payload?.center || {};
+
+  ctx.clearRect(0, 0, width, height);
+
+  const centerPoint = projection.project(center.longitude, center.latitude);
+
+  const glow = ctx.createRadialGradient(
+    centerPoint.x,
+    centerPoint.y,
+    0,
+    centerPoint.x,
+    centerPoint.y,
+    Math.max(width, height) * 0.62
+  );
+
+  glow.addColorStop(0, palette.backdrop);
+  glow.addColorStop(1, "rgba(0,0,0,0)");
+
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.save();
+  ctx.strokeStyle = palette.guide;
+  ctx.lineWidth = 1;
+
+  [0.24, 0.48, 0.72].forEach(ratio => {
+    ctx.beginPath();
+    ctx.arc(
+      centerPoint.x,
+      centerPoint.y,
+      Math.max(width, height) * ratio,
+      0,
+      Math.PI * 2
+    );
+    ctx.stroke();
+  });
+
+  ctx.restore();
+}
+
+function drawProfessionalPaymentBasinAreas(ctx, projection, payload) {
+  const palette = getProfessionalPaymentBasinThemePalette();
+
+  ctx.save();
+  ctx.fillStyle = palette.areaFill;
+  ctx.strokeStyle = palette.areaStroke;
+  ctx.lineWidth = 1.1;
+
+  Object.values(payload?.geometry?.visible_source_area_geojson || {}).forEach(featureCollection => {
+    drawProfessionalPaymentBasinGeoJson(ctx, projection, featureCollection);
+  });
+
+  ctx.restore();
+}
+
+function drawProfessionalPaymentBasinRoutes(ctx, projection, payload, timestamp) {
+  const palette = getProfessionalPaymentBasinThemePalette();
+  const routes = Array.isArray(payload?.routes) ? payload.routes : [];
+
+  const maxVolume = Math.max(1, ...routes.map(route => Number(route.volume || 0)));
+  const center = payload?.center || {};
+  const destination = projection.project(center.longitude, center.latitude);
+
+  routes.forEach(route => {
+    const sourceData = route?.source || {};
+    const source = projection.project(sourceData.longitude, sourceData.latitude);
+    const control = getProfessionalPaymentBasinQuadraticControl(
+      source,
+      destination,
+      route.id
+    );
+
+    const volumeRatio = Math.sqrt(Number(route.volume || 0) / maxVolume);
+    const width = 1.5 + volumeRatio * 4.6;
+    const isIndividual = route.kind === "individual_postal";
+    const lineColor = isIndividual ? palette.individualRoute : palette.professionalRoute;
+    const glowColor = isIndividual ? palette.individualGlow : palette.professionalGlow;
+
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.strokeStyle = glowColor;
+    ctx.lineWidth = width * 2.8;
+    ctx.beginPath();
+    ctx.moveTo(source.x, source.y);
+    ctx.quadraticCurveTo(control.x, control.y, destination.x, destination.y);
+    ctx.stroke();
+
+    ctx.strokeStyle = lineColor;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(source.x, source.y);
+    ctx.quadraticCurveTo(control.x, control.y, destination.x, destination.y);
+    ctx.stroke();
+    ctx.restore();
+
+    const hash = professionalPaymentBasinHash(route.id);
+    const phase = (hash % 1000) / 1000;
+    const speed = isIndividual ? 0.000075 : 0.000095;
+    const progress = ((timestamp * speed) + phase) % 1;
+    const particle = getProfessionalPaymentBasinQuadraticPoint(
+      source,
+      control,
+      destination,
+      progress
+    );
+
+    ctx.save();
+    const particleGlow = ctx.createRadialGradient(
+      particle.x,
+      particle.y,
+      0,
+      particle.x,
+      particle.y,
+      12 + volumeRatio * 8
+    );
+    particleGlow.addColorStop(0, lineColor);
+    particleGlow.addColorStop(1, "rgba(0,0,0,0)");
+
+    ctx.fillStyle = particleGlow;
+    ctx.beginPath();
+    ctx.arc(particle.x, particle.y, 12 + volumeRatio * 8, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = lineColor;
+    ctx.beginPath();
+    ctx.arc(particle.x, particle.y, 2.2 + volumeRatio * 2.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  });
+}
+
+function drawProfessionalPaymentBasinSources(ctx, projection, payload) {
+  const palette = getProfessionalPaymentBasinThemePalette();
+  const routes = Array.isArray(payload?.routes) ? payload.routes : [];
+
+  routes.forEach(route => {
+    const sourceData = route?.source || {};
+    const point = projection.project(sourceData.longitude, sourceData.latitude);
+    const isIndividual = route.kind === "individual_postal";
+    const magnitude = isIndividual
+      ? Math.sqrt(Number(route.payer_count || 0))
+      : Math.sqrt(Number(route.volume || 0) / 100);
+
+    const radius = isIndividual
+      ? 5 + Math.min(12, magnitude * 1.5)
+      : 5 + Math.min(11, magnitude);
+
+    const core = isIndividual ? palette.individualRoute : palette.professionalRoute;
+    const glow = isIndividual ? palette.individualGlow : palette.professionalGlow;
+
+    ctx.save();
+
+    const radial = ctx.createRadialGradient(
+      point.x,
+      point.y,
+      0,
+      point.x,
+      point.y,
+      radius * 2.4
+    );
+    radial.addColorStop(0, glow);
+    radial.addColorStop(1, "rgba(0,0,0,0)");
+
+    ctx.fillStyle = radial;
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, radius * 2.4, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = core;
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+
+    if (isIndividual) {
+      drawProfessionalPaymentBasinPostalLabel(ctx, point, route, radius);
+    }
+  });
+}
+
+function drawProfessionalPaymentBasinCenter(ctx, projection, payload) {
+  const palette = getProfessionalPaymentBasinThemePalette();
+  const center = payload?.center || {};
+  const point = projection.project(center.longitude, center.latitude);
+
+  ctx.save();
+
+  const halo = ctx.createRadialGradient(
+    point.x,
+    point.y,
+    0,
+    point.x,
+    point.y,
+    42
+  );
+
+  halo.addColorStop(0, palette.centerGlow);
+  halo.addColorStop(1, "rgba(0,0,0,0)");
+
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(point.x, point.y, 42, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = palette.centerCore;
+  ctx.beginPath();
+  ctx.arc(point.x, point.y, 10, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = palette.centerGlow;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(point.x, point.y, 17, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function renderProfessionalPaymentBasinMapCanvas(payload = {}) {
+  const canvas = document.getElementById("proDetailPaymentBasinCanvas");
+  const frame = canvas?.closest(".pro-detail-payment-basin-map-frame");
+
+  if (!canvas || !frame) {
+    return;
+  }
+
+  if (appState.proDetailPaymentBasinAnimationFrame) {
+    window.cancelAnimationFrame(appState.proDetailPaymentBasinAnimationFrame);
+    appState.proDetailPaymentBasinAnimationFrame = null;
+  }
+
+  const width = Math.max(420, frame.clientWidth || 960);
+  const height = Math.max(360, frame.clientHeight || 560);
+  const dpr = window.devicePixelRatio || 1;
+
+  canvas.width = Math.round(width * dpr);
+  canvas.height = Math.round(height * dpr);
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
+
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const projection = buildProfessionalPaymentBasinProjection(payload, width, height);
+  updateProfessionalPaymentBasinScale(projection, payload);
+
+  if (!projection || !payload?.center?.has_coordinates || !(payload?.routes || []).length) {
+    ctx.clearRect(0, 0, width, height);
+    return;
+  }
+
+  const draw = timestamp => {
+    if (
+      appState.proTab !== "commerce"
+      || document.getElementById("proDetailPaymentBasinCanvas") !== canvas
+    ) {
+      appState.proDetailPaymentBasinAnimationFrame = null;
+      return;
+    }
+
+    drawProfessionalPaymentBasinBackdrop(ctx, projection, payload);
+    drawProfessionalPaymentBasinAreas(ctx, projection, payload);
+    drawProfessionalPaymentBasinRoutes(ctx, projection, payload, timestamp);
+    drawProfessionalPaymentBasinSources(ctx, projection, payload);
+    drawProfessionalPaymentBasinCenter(ctx, projection, payload);
+
+    appState.proDetailPaymentBasinAnimationFrame = window.requestAnimationFrame(draw);
+  };
+
+  appState.proDetailPaymentBasinAnimationFrame = window.requestAnimationFrame(draw);
+}
+
+
+function buildProfessionalPaymentBasinPostalBreakdownHtml(payload = {}) {
+  const sources = Array.isArray(payload?.individual_sources)
+    ? [...payload.individual_sources]
+    : [];
+
+  if (!sources.length) {
+    return "";
+  }
+
+  sources.sort((a, b) => {
+    const payerDiff = Number(b?.payer_count || 0) - Number(a?.payer_count || 0);
+    if (payerDiff !== 0) return payerDiff;
+
+    const volumeDiff = Number(b?.volume || 0) - Number(a?.volume || 0);
+    if (volumeDiff !== 0) return volumeDiff;
+
+    return String(a?.postal_code || "").localeCompare(String(b?.postal_code || ""), "fr");
+  });
+
+  return `
+    <div class="pro-detail-payment-basin-postal-breakdown">
+      <div class="pro-detail-payment-basin-postal-breakdown-heading">
+        <span>Répartition des payeurs U représentés</span>
+        <small>par code postal franchissant le seuil d’affichage</small>
+      </div>
+
+      <div class="pro-detail-payment-basin-postal-chips">
+        ${sources.map(source => `
+          <div class="pro-detail-payment-basin-postal-chip">
+            <strong>${escapeHtml(source.postal_code || "—")}</strong>
+            <span>${formatProfessionalNetworkCount(source.payer_count || 0)} payeur(s)</span>
+            <small>${euro(source.volume || 0)}</small>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function buildProfessionalPaymentBasinSectionHtml(payload = {}) {
+  const coverage = payload?.coverage || {};
+  const center = payload?.center || {};
+  const hasCenter = Boolean(center?.has_coordinates);
+  const hasRoutes = Array.isArray(payload?.routes) && payload.routes.length > 0;
+
+  const visibleUShare = coverage.individual_visible_volume_share;
+  const visibleUPayerCount = Number(
+    coverage.individual_visible_payer_count || 0
+  );
+  const visiblePCount = Number(coverage.professional_visible_source_count || 0);
+  const hiddenU = coverage.individual_hidden_below_threshold || {};
+  const missingPros = Number(coverage.professional_missing_geometry_source_count || 0);
+
+  return `
+    <section class="card pro-detail-payment-basin-card">
+      <div class="pro-detail-payment-basin-heading">
+        <div>
+          <div class="stat-label">Bassin de paiement Gonette</div>
+          <h3>D’où viennent les Gonettes reçues par ce professionnel ?</h3>
+          <p>
+            Cette carte met en scène les flux entrants :
+            les foyers de particuliers <strong>U→P</strong> sont agrégés par code postal,
+            tandis que les professionnels payeurs <strong>P→P</strong> apparaissent
+            individuellement lorsqu’ils sont géolocalisables.
+          </p>
+        </div>
+      </div>
+
+      <div class="pro-detail-payment-basin-kpis">
+        <div>
+          <span>Foyers U visibles</span>
+          <strong>${formatProfessionalNetworkCount(coverage.individual_visible_postal_source_count || 0)}</strong>
+        </div>
+        <div>
+          <span>Payeurs U représentés</span>
+          <strong>${formatProfessionalNetworkCount(visibleUPayerCount)}</strong>
+        </div>
+        <div>
+          <span>Pros payeurs géolocalisés</span>
+          <strong>${formatProfessionalNetworkCount(visiblePCount)}</strong>
+        </div>
+        <div>
+          <span>Volume U représenté</span>
+          <strong>${visibleUShare === null || visibleUShare === undefined ? "—" : percent(Number(visibleUShare || 0) * 100)}</strong>
+        </div>
+      </div>
+
+      ${buildProfessionalPaymentBasinPostalBreakdownHtml(payload)}
+
+      ${
+        hasCenter && hasRoutes
+          ? `
+            <div class="pro-detail-payment-basin-map-frame">
+              <canvas id="proDetailPaymentBasinCanvas"></canvas>
+
+              <div
+                id="proDetailPaymentBasinScale"
+                class="pro-detail-payment-basin-scale"
+                hidden
+              ></div>
+
+              <div class="pro-detail-payment-basin-legend">
+                <span><i class="pro-detail-payment-basin-dot pro-detail-payment-basin-dot-u"></i> Foyers particuliers U→P</span>
+                <span><i class="pro-detail-payment-basin-dot pro-detail-payment-basin-dot-p"></i> Professionnels payeurs P→P</span>
+                <span><i class="pro-detail-payment-basin-dot pro-detail-payment-basin-dot-center"></i> Professionnel étudié</span>
+              </div>
+            </div>
+          `
+          : `
+            <div class="pro-detail-payment-basin-empty">
+              ${
+                !hasCenter
+                  ? "La localisation du professionnel étudié n’est pas suffisamment confirmée pour construire cette carte."
+                  : "Aucun flux entrant cartographiable ne franchit les seuils de représentation sur cette période."
+              }
+            </div>
+          `
+      }
+
+      <div class="pro-detail-payment-basin-note">
+        <strong>Lecture.</strong>
+        Les foyers particuliers ne représentent jamais des adresses individuelles :
+        ils sont agrégés par code postal et ne sont affichés qu’à partir de
+        <strong>${formatProfessionalNetworkCount(coverage.min_users || 5)} payeurs distincts</strong>.
+        ${
+          Number(hiddenU.payer_count || 0) > 0
+            ? ` ${formatProfessionalNetworkCount(hiddenU.payer_count || 0)} payeur(s) U restent hors carte car leur code postal ne franchit pas ce seuil.`
+            : ""
+        }
+        ${
+          missingPros > 0
+            ? ` ${formatProfessionalNetworkCount(missingPros)} professionnel(s) payeur(s) ne sont pas représentés faute de géolocalisation confirmée.`
+            : ""
+        }
+      </div>
+    </section>
+  `;
+}
+
+async function renderProCustomerProfile() {
+  const section = document.getElementById("proCustomerProfileSection");
+  if (!section || !appState.detailData || !appState.currentPro) return;
+
+  const numProf = appState.currentPro;
+
+  section.innerHTML = `
+    <section class="card pro-customer-profile-loading-card">
+      Chargement du fond de commerce Gonette…
+    </section>
+  `;
+
+  try {
+    const [dynamics, paymentBasinMap] = await Promise.all([
+      loadProfessionalDetailDynamics(numProf),
+      loadProfessionalPaymentBasinMap(numProf),
+    ]);
+
+    if (
+      appState.proTab !== "commerce"
+      || appState.currentPro !== numProf
+    ) {
+      return;
+    }
+
+    section.innerHTML = `
+      <section class="card pro-customer-profile-intro-card">
+        <div class="stat-label">Fond de commerce Gonette</div>
+        <h3>Comprendre la clientèle particulière qui active ce professionnel</h3>
+        <p>
+          Cet onglet observe les paiements U→P :
+          leur rythme dans la semaine, leur fidélité dans le temps
+          et la concentration du volume entre payeurs.
+        </p>
+      </section>
+
+      ${buildProfessionalPaymentBasinSectionHtml(paymentBasinMap || {})}
+
+      ${buildProfessionalPaymentRhythmSectionHtml(dynamics?.individual_payment_rhythm || {})}
+
+      ${buildProfessionalCustomerLoyaltySectionHtml(dynamics?.individual_customer_loyalty || {})}
+
+      ${buildProfessionalCustomerConcentrationSectionHtml(dynamics?.individual_customer_concentration || {})}
+    `;
+
+    window.requestAnimationFrame(() => {
+      renderProfessionalPaymentBasinMapCanvas(paymentBasinMap || {});
+    });
+
+    renderProfessionalCustomerConcentrationChart(
+      dynamics?.individual_customer_concentration || {}
+    );
+  } catch (error) {
+    console.error("Erreur chargement fond de commerce professionnel :", error);
+    section.innerHTML = `
+      <section class="card">
+        Impossible de charger l’analyse du fond de commerce Gonette.
+      </section>
+    `;
+  }
+}
+
+
+function getProfessionalReuseProspectsRequest(numProf) {
+  const periodQuery = getPeriodQueryParam();
+  const prospectsQuery = periodQuery
+    ? `${periodQuery}&limit=12`
+    : "?limit=12";
+
+  return {
+    url: `/api/pro/${encodeURIComponent(numProf)}/reuse-prospects${prospectsQuery}`,
+    cacheKey: `${numProf}::${prospectsQuery}`,
+  };
+}
+
+async function loadProfessionalReuseProspects(numProf) {
+  const request = getProfessionalReuseProspectsRequest(numProf);
+
+  if (
+    appState.proDetailReuseProspects
+    && appState.proDetailReuseProspectsKey === request.cacheKey
+  ) {
+    return appState.proDetailReuseProspects;
+  }
+
+  const prospects = await apiGet(request.url);
+
+  if (appState.currentPro === numProf) {
+    appState.proDetailReuseProspects = prospects;
+    appState.proDetailReuseProspectsKey = request.cacheKey;
+  }
+
+  return prospects;
+}
+
+function formatProfessionalProspectLocation(item = {}) {
+  const zip = String(item?.zip || "").trim();
+  const city = String(item?.city || "").trim();
+
+  if (zip && city) {
+    return `${zip} ${city}`;
+  }
+
+  return city || zip || "";
+}
+
+function getProfessionalProspectSignalLabel(signalLevel) {
+  if (signalLevel === "strong") {
+    return "Signal fort";
+  }
+
+  if (signalLevel === "medium") {
+    return "Signal convergent";
+  }
+
+  return "Piste exploratoire";
+}
+
+function buildProfessionalProspectsReading(data = {}) {
+  const summary = data?.summary || {};
+  const candidateCount = Number(summary.candidate_count_displayed || 0);
+  const activePeerCount = Number(summary.active_peer_count || 0);
+  const sector = String(summary.target_industry_name || "").trim();
+
+  if (!sector) {
+    return {
+      title: "Secteur de comparaison indisponible",
+      text: "Le secteur principal Odoo de ce professionnel n’est pas renseigné, ce qui empêche de construire une comparaison robuste avec des pairs.",
+    };
+  }
+
+  if (activePeerCount <= 0) {
+    return {
+      title: `Aucun pair actif du secteur « ${sector} » sur la période`,
+      text: "La période sélectionnée ne fournit pas encore de base empirique suffisante pour suggérer des débouchés issus des pratiques du secteur.",
+    };
+  }
+
+  if (candidateCount <= 0) {
+    return {
+      title: "Aucun débouché nouveau clairement repéré chez les pairs",
+      text: `Les professionnels comparables du secteur « ${sector} » n’offrent pas, sur cette période, de piste supplémentaire suffisamment distincte des fournisseurs déjà activés.`,
+    };
+  }
+
+  return {
+    title: `${formatProfessionalNetworkCount(candidateCount)} piste(s) de réemploi observée(s) chez les pairs`,
+    text: `Ces débouchés sont construits à partir des paiements B2B réalisés par ${formatProfessionalNetworkCount(activePeerCount)} professionnel(s) actif(s) du même secteur « ${sector} ». Ils servent à préparer des questions et hypothèses de rendez-vous, pas à produire une recommandation automatique.`,
+  };
+}
+
+function buildProfessionalProspectPeerExamplesHtml(peerExamples = []) {
+  const examples = Array.isArray(peerExamples) ? peerExamples : [];
+
+  if (!examples.length) {
+    return "";
+  }
+
+  return `
+    <div class="pro-prospect-peers">
+      <span>Observé chez :</span>
+      <div class="pro-prospect-peer-chips">
+        ${examples.map(peer => `
+          <button
+            type="button"
+            class="pro-prospect-peer-chip"
+            onclick="renderProDetail('${escapeHtml(peer.professional_ref || "")}')"
+          >
+            ${escapeHtml(peer.name || peer.professional_ref || "—")}
+          </button>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function buildProfessionalProspectsSectionHtml(data = {}) {
+  const summary = data?.summary || {};
+  const items = Array.isArray(data?.items) ? data.items : [];
+  const reading = buildProfessionalProspectsReading(data);
+  const sector = String(summary.target_industry_name || "").trim();
+  const activePeers = Number(summary.active_peer_count || 0);
+  const totalCandidates = Number(summary.candidate_count_total || 0);
+  const displayedCandidates = Number(summary.candidate_count_displayed || 0);
+
+  return `
+    <section class="card pro-prospects-overview-card">
+      <div class="pro-prospects-overview-heading">
+        <div>
+          <div class="stat-label">Perspectives & débouchés</div>
+          <h3>${escapeHtml(reading.title)}</h3>
+          <p>${escapeHtml(reading.text)}</p>
+        </div>
+      </div>
+
+      <div class="pro-prospects-summary-kpis">
+        <div>
+          <span>Secteur comparé</span>
+          <strong>${escapeHtml(sector || "—")}</strong>
+        </div>
+        <div>
+          <span>Pairs actifs</span>
+          <strong>${formatProfessionalNetworkCount(activePeers)}</strong>
+        </div>
+        <div>
+          <span>Pistes détectées</span>
+          <strong>${formatProfessionalNetworkCount(totalCandidates)}</strong>
+        </div>
+        <div>
+          <span>Pistes affichées</span>
+          <strong>${formatProfessionalNetworkCount(displayedCandidates)}</strong>
+        </div>
+      </div>
+    </section>
+
+    ${
+      items.length
+        ? `
+          <section class="pro-prospects-grid">
+            ${items.map(item => {
+              const location = formatProfessionalProspectLocation(item);
+              const signalLabel = getProfessionalProspectSignalLabel(item.signal_level);
+
+              return `
+                <article class="card pro-prospect-card pro-prospect-card-${escapeHtml(item.signal_level || "exploratory")}">
+                  <div class="pro-prospect-card-heading">
+                    <div>
+                      <div class="stat-label">${escapeHtml(item.professional_ref || "—")}</div>
+                      <h4>${escapeHtml(item.name || item.professional_ref || "—")}</h4>
+                    </div>
+
+                    <span class="pro-prospect-signal pro-prospect-signal-${escapeHtml(item.signal_level || "exploratory")}">
+                      ${escapeHtml(signalLabel)}
+                    </span>
+                  </div>
+
+                  <div class="pro-prospect-meta">
+                    ${
+                      item.industry_name
+                        ? `<span>${escapeHtml(item.industry_name)}</span>`
+                        : ""
+                    }
+                    ${
+                      location
+                        ? `<span>${escapeHtml(location)}</span>`
+                        : ""
+                    }
+                  </div>
+
+                  <div class="pro-prospect-metrics">
+                    <div>
+                      <span>Pairs payeurs</span>
+                      <strong>${formatProfessionalNetworkCount(item.peer_count || 0)}</strong>
+                      <small>${percent(item.peer_share_pct || 0)} des pairs actifs</small>
+                    </div>
+                    <div>
+                      <span>Volume observé</span>
+                      <strong>${euro(item.volume || 0)}</strong>
+                      <small>${formatProfessionalNetworkCount(item.tx_count || 0)} transaction(s)</small>
+                    </div>
+                  </div>
+
+                  ${
+                    item.already_buys_from_target_in_period
+                      ? `
+                        <div class="pro-prospect-flag pro-prospect-flag-reciprocal">
+                          Ce professionnel paie déjà le pro étudié : une relation à rendre potentiellement réciproque.
+                        </div>
+                      `
+                      : ""
+                  }
+
+                  ${
+                    item.paid_before_period
+                      ? `
+                        <div class="pro-prospect-flag pro-prospect-flag-reactivation">
+                          Ce débouché avait déjà été activé avant la période : piste de réactivation.
+                        </div>
+                      `
+                      : ""
+                  }
+
+                  ${buildProfessionalProspectPeerExamplesHtml(item.peer_examples || [])}
+
+                  <div class="pro-prospect-actions">
+                    <button
+                      type="button"
+                      class="primary-btn"
+                      onclick="renderProDetail('${escapeHtml(item.professional_ref || "")}')"
+                    >
+                      Ouvrir la fiche
+                    </button>
+                  </div>
+                </article>
+              `;
+            }).join("")}
+          </section>
+        `
+        : `
+          <section class="card pro-prospects-empty-card">
+            Aucune piste de débouché n’est proposée pour cette combinaison de secteur et de période.
+          </section>
+        `
+    }
+
+    <section class="card pro-prospects-method-card">
+      <strong>Lecture méthodologique.</strong>
+      Les pistes sont déduites des paiements B2B réalisés par des professionnels du même secteur principal Odoo.
+      Les comptes opérateurs P0000 / P9999 sont exclus, ainsi que les fournisseurs déjà payés par le professionnel
+      étudié pendant la période. Une piste peut donc signaler soit un débouché inédit, soit une relation ancienne à réactiver.
+    </section>
+  `;
+}
+
+async function renderProProspectsTab() {
+  const section = document.getElementById("proProspectsSection");
+  if (!section || !appState.currentPro) return;
+
+  const numProf = appState.currentPro;
+
+  section.innerHTML = `
+    <section class="card pro-prospects-loading-card">
+      Chargement des perspectives de réemploi…
+    </section>
+  `;
+
+  try {
+    const data = await loadProfessionalReuseProspects(numProf);
+
+    if (
+      appState.proTab !== "prospects"
+      || appState.currentPro !== numProf
+    ) {
+      return;
+    }
+
+    section.innerHTML = buildProfessionalProspectsSectionHtml(data);
+  } catch (error) {
+    console.error("Erreur chargement perspectives de réemploi :", error);
+    section.innerHTML = `
+      <section class="card">
+        Impossible de charger les perspectives de réemploi.
+      </section>
+    `;
+  }
+}
+
+async function renderProCharts() {
+  const chartsSection = document.getElementById("proChartsSection");
+  if (!chartsSection || !appState.detailData || !appState.currentPro) return;
+
+  const numProf = appState.currentPro;
+   chartsSection.innerHTML = `
+    <section class="card pro-detail-network-loading-card">
+      Chargement des dynamiques réseau du professionnel…
+    </section>
+  `;
+
+  destroyProCharts();
+
+  try {
+    const dynamics = await loadProfessionalDetailDynamics(numProf);
+
+    if (
+      appState.proTab !== "dynamics"
+      || appState.currentPro !== numProf
+    ) {
+      return;
+    }
+
+    appState.proDetailDynamics = dynamics;
+
+    const network = dynamics?.b2b_network || {};
+    const summary = network.summary || {};
+    const excludedOperators = network.excluded_operator_accounts || {};
+    const excludedOutbound = excludedOperators.outbound || {};
+    const excludedInbound = excludedOperators.inbound || {};
+
+    const hasCommercialRelations = (
+      Number(summary.inbound_counterparty_count || 0) > 0
+      || Number(summary.outbound_counterparty_count || 0) > 0
+    );
+
+    const hasIndividualPayers = (
+      Number(summary.individual_payer_count || 0) > 0
+    );
+
+    const hasVisibleNetworkRelations = (
+      hasCommercialRelations || hasIndividualPayers
+    );
+
+    const operatorNoteVisible = (
+      Number(excludedOutbound.volume || 0) > 0
+      || Number(excludedInbound.volume || 0) > 0
+    );
+
+    chartsSection.innerHTML = `
+      <section class="card pro-detail-network-card">
+        <div class="pro-detail-network-heading">
+          <div>
+            <div class="stat-label">Réseau immédiat des flux</div>
+            <h3>Qui alimente ce professionnel, et vers qui redépense-t-il ses Gonettes ?</h3>
+            <p>
+              Cette lecture distingue les relations commerciales professionnelles directes
+              et agrège les particuliers payeurs dans un nœud unique, afin de lire ensemble
+              fond de commerce Gonette et débouchés de réemploi.
+            </p>
+          </div>
+
+          <div class="pro-detail-network-kpis">
+            <div>
+              <strong>${formatProfessionalNetworkCount(summary.inbound_counterparty_count || 0)}</strong>
+              <span>pros acheteurs</span>
+            </div>
+            <div>
+              <strong>${formatProfessionalNetworkCount(summary.outbound_counterparty_count || 0)}</strong>
+              <span>pros payés</span>
+            </div>
+            <div>
+              <strong>${formatProfessionalNetworkCount(summary.reciprocal_counterparty_count || 0)}</strong>
+              <span>liens réciproques</span>
+            </div>
+          </div>
+        </div>
+
+        ${
+          operatorNoteVisible
+            ? `
+              <div class="pro-detail-network-operator-note">
+                <strong>Comptes opérateurs exclus.</strong>
+                Les flux vers P0000 / P9999 ne sont pas traités comme des débouchés B2B commerciaux.
+                ${
+                  Number(excludedOutbound.volume || 0) > 0
+                    ? ` Sorties opérateurs : <strong>${euro(excludedOutbound.volume || 0)}</strong>.`
+                    : ""
+                }
+                ${
+                  Number(excludedInbound.volume || 0) > 0
+                    ? ` Entrées opérateurs : <strong>${euro(excludedInbound.volume || 0)}</strong>.`
+                    : ""
+                }
+              </div>
+            `
+            : ""
+        }
+
+        ${
+          hasVisibleNetworkRelations
+            ? `
+              <div class="pro-detail-network-toolbar">
+                <div class="pro-detail-network-legend">
+                  <span><i class="pro-detail-network-dot pro-detail-network-dot-individual"></i> Particuliers payeurs agrégés</span>
+                  <span><i class="pro-detail-network-dot pro-detail-network-dot-inbound"></i> Paie le professionnel étudié</span>
+                  <span><i class="pro-detail-network-dot pro-detail-network-dot-outbound"></i> Reçoit ses Gonettes</span>
+                  <span><i class="pro-detail-network-dot pro-detail-network-dot-reciprocal"></i> Relation réciproque</span>
+                </div>
+
+                <div class="pro-detail-network-actions">
+                  <button id="proDetailNetworkFitBtn" class="secondary-btn" type="button">Recentrer</button>
+                  <button id="proDetailNetworkZoomInBtn" class="secondary-btn" type="button">Zoom +</button>
+                  <button id="proDetailNetworkZoomOutBtn" class="secondary-btn" type="button">Zoom -</button>
+                </div>
+              </div>
+
+              <div class="pro-detail-network-layout">
+                <div class="pro-detail-network-main">
+                  <div id="proDetailB2BNetworkGraph" class="pro-detail-network-graph"></div>
+                </div>
+
+                <aside id="proDetailB2BNetworkPanel" class="pro-detail-network-panel"></aside>
+              </div>
+            `
+            : `
+              <div class="pro-detail-network-empty-shell">
+                Aucun lien B2B commercial direct n’est visible sur cette période.
+              </div>
+            `
+        }
+      </section>
+
+      ${buildProfessionalBalanceSectionHtml(dynamics?.balance_timeseries || {})}
+    `;
+
+    if (hasVisibleNetworkRelations) {
+      renderProfessionalDetailB2BNetworkGraph(dynamics);
+    }
+
+    renderProfessionalBalanceHistoryChart(dynamics?.balance_timeseries || {});
+  } catch (error) {
+    console.error("Erreur chargement dynamiques fiche pro :", error);
+    chartsSection.innerHTML = `
+      <section class="card">
+        Impossible de charger les dynamiques réseau de cette fiche professionnelle.
+      </section>
+    `;
+  }
+}
+
 function drawProTabContent() {
   const dataSection = document.getElementById("proDataSection");
+  const commerceSection = document.getElementById("proCustomerProfileSection");
   const chartsSection = document.getElementById("proChartsSection");
+  const prospectsSection = document.getElementById("proProspectsSection");
 
-  if (!dataSection || !chartsSection) return;
+  if (!dataSection || !commerceSection || !chartsSection || !prospectsSection) return;
 
-  if (appState.proTab === "graphs") {
-    dataSection.classList.add("hidden");
-    chartsSection.classList.remove("hidden");
-    renderProCharts();
-  } else {
-    chartsSection.classList.add("hidden");
+  dataSection.classList.toggle("hidden", appState.proTab !== "data");
+  commerceSection.classList.toggle("hidden", appState.proTab !== "commerce");
+  chartsSection.classList.toggle("hidden", appState.proTab !== "dynamics");
+  prospectsSection.classList.toggle("hidden", appState.proTab !== "prospects");
+
+  if (appState.proTab === "commerce") {
     destroyProCharts();
-    dataSection.classList.remove("hidden");
+    void renderProCustomerProfile();
+  } else if (appState.proTab === "dynamics") {
+    void renderProCharts();
+  } else if (appState.proTab === "prospects") {
+    destroyProCharts();
+    void renderProProspectsTab();
+  } else {
+    destroyProCharts();
   }
 
   updateProTabButtons();
@@ -11030,15 +18703,43 @@ function drawProTabContent() {
 
 function updateProTabButtons() {
   const btnData = document.getElementById("proTabData");
-  const btnGraphs = document.getElementById("proTabGraphs");
+  const btnCommerce = document.getElementById("proTabCommerce");
+  const btnDynamics = document.getElementById("proTabDynamics");
+  const btnProspects = document.getElementById("proTabProspects");
 
-  if (!btnData || !btnGraphs) return;
+  if (btnData) {
+    btnData.classList.toggle("tab-btn-active", appState.proTab === "data");
+  }
 
-  btnData.classList.toggle("tab-btn-active", appState.proTab === "data");
-  btnGraphs.classList.toggle("tab-btn-active", appState.proTab === "graphs");
+  if (btnCommerce) {
+    btnCommerce.classList.toggle("tab-btn-active", appState.proTab === "commerce");
+  }
+
+  if (btnDynamics) {
+    btnDynamics.classList.toggle("tab-btn-active", appState.proTab === "dynamics");
+  }
+
+  if (btnProspects) {
+    btnProspects.classList.toggle("tab-btn-active", appState.proTab === "prospects");
+  }
 }
 
+function normalizeProfessionalDetailRef(value) {
+  const raw = String(value || "").trim();
+  const match = raw.match(/^(P\d{4})\b/);
+  return match ? match[1] : raw;
+}
+
+
 async function renderProDetail(numProf, detailMode = "all") {
+  numProf = normalizeProfessionalDetailRef(numProf);
+
+  const preserveVisibleView = Boolean(
+    appState.periodRefreshInProgress
+    && appState.currentView === "pro-detail"
+    && content?.childElementCount > 0
+  );
+
   destroyCartographyMap();
   const isSameProfessional = appState.currentPro === numProf;
   const needReload = !isSameProfessional || !appState.detailData;
@@ -11057,7 +18758,9 @@ async function renderProDetail(numProf, detailMode = "all") {
   appState.detailMode = detailMode;
 
   if (needReload) {
-    content.innerHTML = `<div class="card">Chargement...</div>`;
+    if (!preserveVisibleView) {
+      content.innerHTML = `<div class="card">Chargement...</div>`;
+    }
     const data = await apiGet(`/api/pro/${encodeURIComponent(numProf)}${getPeriodQueryParam()}`);
     appState.detailData = data;
 
@@ -11085,20 +18788,25 @@ async function renderProDetail(numProf, detailMode = "all") {
       <button class="secondary-btn" onclick="renderProsView()">← Retour au classement</button>
     </div>
 
-    <div class="pro-tabs">
+    <div id="proMeetingHeroSection"></div>
+
+    <div class="pro-tabs pro-detail-tabs">
       <button id="proTabData" class="tab-btn" onclick="setProTab('data')">Données</button>
-      <button id="proTabGraphs" class="tab-btn" onclick="setProTab('graphs')">Graphes</button>
+      <button id="proTabCommerce" class="tab-btn" onclick="setProTab('commerce')">Fond de commerce</button>
+      <button id="proTabDynamics" class="tab-btn" onclick="setProTab('dynamics')">Dynamiques & réseau</button>
+      <button id="proTabProspects" class="tab-btn" onclick="setProTab('prospects')">Perspectives & débouchés</button>
     </div>
 
     <div id="proDataSection">
-      <div id="proOdooEnrichmentSection"></div>
       <div id="proSummarySection"></div>
       <div id="detailSection"></div>
     </div>
 
+    <div id="proCustomerProfileSection" class="hidden"></div>
     <div id="proChartsSection" class="hidden"></div>
+    <div id="proProspectsSection" class="hidden"></div>
   `;
-  drawProOdooEnrichmentSection();
+  drawProMeetingHeroSection();
   drawProSummarySection();
   drawDetailSection();
   drawProTabContent();
@@ -11112,7 +18820,7 @@ function syncSidebarView(view) {
     cartography: "cartography",
     territories: "territories",
     sectors: "sectors",
-    network: "network",
+    network: "pros",
     tickets: "tickets",
     info: "info",
     "pro-detail": "pros"
@@ -11125,7 +18833,7 @@ function syncSidebarView(view) {
   });
 }
 
-function applyTheme(theme) {
+function applyTheme(theme, persist = true) {
   const isDark = theme === "dark";
   document.body.classList.toggle("dark-mode", isDark);
 
@@ -11134,7 +18842,11 @@ function applyTheme(theme) {
     btn.textContent = isDark ? "☀️ Mode clair" : "🌙 Mode sombre";
   }
 
-  localStorage.setItem("mlcflux_theme", isDark ? "dark" : "light");
+  if (persist) {
+    localStorage.setItem("mlcflux_theme", isDark ? "dark" : "light");
+  }
+
+  refreshProfessionalConsumptionMapThemeRendering();
 }
 
 function initThemeToggle() {
@@ -11145,7 +18857,19 @@ function initThemeToggle() {
   if (!btn || btn.dataset.bound === "true") return;
 
   btn.addEventListener("click", () => {
-    const nextTheme = document.body.classList.contains("dark-mode") ? "light" : "dark";
+    const nextTheme = document.body.classList.contains("dark-mode")
+      ? "light"
+      : "dark";
+
+    if (appState.professionalConsumptionMapThemeOverrideActive) {
+      // L'utilisateur exprime son choix de thème pour l'après-mode dynamique,
+      // mais l'expérience dynamique reste volontairement en dark mode.
+      appState.professionalConsumptionMapThemeBeforeDynamic = nextTheme;
+      localStorage.setItem("mlcflux_theme", nextTheme);
+      applyTheme("dark", false);
+      return;
+    }
+
     applyTheme(nextTheme);
   });
 
@@ -11182,34 +18906,22 @@ document.querySelectorAll('input[name="dataView"]').forEach(input => {
   input.addEventListener("change", (e) => {
     const view = e.target.value;
 
-    if (view === "stats") {
-      renderStatsView();
-    } else if (view === "monetary-pilotage") {
-      renderMonetaryPilotageView();
-    } else if (view === "pros") {
-      renderProsView();
-    } else if (view === "cartography") {
-      renderCartographyView();
-    } else if (view === "territories") {
-      renderTerritoriesView();
-    } else if (view === "sectors") {
-      renderSectorsView();
-    } else if (view === "network") {
-      renderNetworkView();
-    } else if (view === "tickets") {
-      renderTicketsView();
-    } else if (view === "info") {
-      renderInfoView();
-    }
+    void openViewProgressively(view);
   });
 });
 
 bindNetworkSearchOutsideClick();
 initThemeToggle();
 initSidebarCollapse();
-initPeriodFilter().then(() => {
-  renderStatsView();
-});
+renderProgressiveViewShell("stats");
+
+waitForNextBrowserPaint()
+  .then(() => initPeriodFilter())
+  .then(() => runProgressiveViewHydration({
+    viewKey: "stats",
+    hydrate: () => renderStatsView(false),
+    message: "Chargement des statistiques de l’année en cours…"
+  }));
 
 window.renderProDetail = renderProDetail;
 window.renderProsView = renderProsView;

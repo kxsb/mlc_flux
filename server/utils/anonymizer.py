@@ -7,6 +7,8 @@ from pathlib import Path
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 PRENOMS_FILE = DATA_DIR / "prenoms.csv"
 MAPPING_FILE = DATA_DIR / "user_mapping.json"
+DEVICE_PRIVATE_ACTOR_REGISTRY_FILE = DATA_DIR / "device_private_actor_registry.json"
+_DEVICE_PRIVATE_ACTOR_IDS_CACHE = None
 
 # Le dictionnaire de prénoms est volumineux et stable.
 # On le charge une seule fois par processus, afin d'éviter
@@ -107,7 +109,17 @@ def extract_private_actor_key(actor):
     return ""
 
 
-def get_or_create_private_pseudo(private_actor_key):
+def get_or_create_private_pseudo(private_actor_key, *, prefix="U"):
+    """
+    Retourne un pseudonyme stable pour un acteur particulier.
+
+    prefix="U"  : particulier ordinaire
+    prefix="UD" : compte particulier de dispositif / temporaire
+
+    Le mapping reste fondé sur la clé stable actor:* déjà utilisée par MLCFlux.
+    """
+    prefix = str(prefix or "U").strip() or "U"
+
     prenoms = load_prenoms()
     mapping = load_mapping()
 
@@ -115,18 +127,22 @@ def get_or_create_private_pseudo(private_actor_key):
         return mapping[private_actor_key]
 
     used_pseudos = set(mapping.values())
-    available = [f"U_{p}" for p in prenoms if f"U_{p}" not in used_pseudos]
+
+    available = [
+        f"{prefix}_{prenom}"
+        for prenom in prenoms
+        if f"{prefix}_{prenom}" not in used_pseudos
+    ]
 
     if available:
         pseudo = secrets.choice(available)
     else:
-        pseudo = f"U_user_{len(mapping) + 1}"
+        pseudo = f"{prefix}_user_{len(mapping) + 1}"
 
     mapping[private_actor_key] = pseudo
     save_mapping(mapping)
 
     return pseudo
-
 
 def is_conversion_label(display):
     lowered = display.lower()
@@ -142,7 +158,7 @@ def is_private_label(display):
     - u8247 - ...
 
     L'ancien test strict startswith("U") envoyait les comptes `u...`
-    vers "Acteur masqué", ce qui déformait notamment les flux d'émission.
+    vers un libellé indifférencié, ce qui déformait notamment les flux d'émission.
     """
     display = normalize_spaces(display)
     return display[:1].upper() == "U"
@@ -213,29 +229,128 @@ def clean_professional_label(display):
     return code
 
 
+def _actor_type_internal_name(actor):
+    if not actor:
+        return ""
+
+    actor_type = actor.get("type", {})
+    if not isinstance(actor_type, dict):
+        return ""
+
+    return normalize_spaces(actor_type.get("internalName", ""))
+
+
+def _actor_kind(actor):
+    if not actor:
+        return ""
+
+    return normalize_spaces(actor.get("kind", ""))
+
+
+def load_device_private_actor_ids():
+    """
+    Charge les actor.id des comptes particuliers de dispositif identifiés
+    par l'audit UMASK001-FIX1.
+
+    Le registre ne contient que des identifiants techniques nécessaires
+    à la reproductibilité de la catégorisation historique.
+    """
+    global _DEVICE_PRIVATE_ACTOR_IDS_CACHE
+
+    if _DEVICE_PRIVATE_ACTOR_IDS_CACHE is not None:
+        return _DEVICE_PRIVATE_ACTOR_IDS_CACHE
+
+    if not DEVICE_PRIVATE_ACTOR_REGISTRY_FILE.exists():
+        _DEVICE_PRIVATE_ACTOR_IDS_CACHE = set()
+        return _DEVICE_PRIVATE_ACTOR_IDS_CACHE
+
+    with open(DEVICE_PRIVATE_ACTOR_REGISTRY_FILE, "r", encoding="utf-8") as f:
+        payload = json.load(f)
+
+    actor_ids = payload.get("actor_ids") or []
+    _DEVICE_PRIVATE_ACTOR_IDS_CACHE = {
+        str(actor_id).strip()
+        for actor_id in actor_ids
+        if str(actor_id).strip()
+    }
+
+    return _DEVICE_PRIVATE_ACTOR_IDS_CACHE
+
+
+def is_device_private_actor(actor):
+    if not actor:
+        return False
+
+    actor_id = str(actor.get("id", "")).strip()
+    if not actor_id:
+        return False
+
+    return actor_id in load_device_private_actor_ids()
+
+
+def _technical_actor_label(actor):
+    internal_name = _actor_type_internal_name(actor)
+
+    if internal_name == "emission":
+        return "T_Émission"
+
+    if internal_name == "Conversion":
+        return "T_Conversion"
+
+    return "T_Technique"
+
+
 def anonymize_actor_label(actor):
+    """
+    Produit le libellé anonymisé / analytique exposé par MLCFlux.
+
+    Ordre de décision :
+    1. compte technique Cyclos -> T_*
+    2. compte particulier -> U_* ou UD_* selon le registre de dispositif
+    3. compte professionnel -> Pxxxx si identifiable
+    4. compatibilités historiques sur le display
+    5. résiduel explicite « Acteur non catégorisé »
+    """
+    actor = actor or {}
     display = extract_user_display(actor)
     private_actor_key = extract_private_actor_key(actor)
+    actor_type = _actor_type_internal_name(actor)
+    actor_kind = _actor_kind(actor)
 
-    if not display:
-        return "Acteur masqué"
+    # 1. Comptes techniques Cyclos
+    if actor_kind == "system":
+        return _technical_actor_label(actor)
 
-    if is_conversion_label(display):
-        return "Conversion"
-
-    # Les professionnels sont testés avant les particuliers :
-    # certains libellés pros ne commencent pas par P mais contiennent
-    # un code Pxxxx plus loin dans la chaîne.
-    if is_professional_label(display):
-        return clean_professional_label(display)
-
-    if is_private_label(display):
+    # 2. Comptes particuliers, y compris les formes atypiques
+    #    qui ne commencent pas par Uxxxx.
+    if actor_type == "compteparticulier":
         if not private_actor_key:
             return "U_inconnu"
-        return get_or_create_private_pseudo(private_actor_key)
 
-    return "Acteur masqué"
+        prefix = "UD" if is_device_private_actor(actor) else "U"
+        return get_or_create_private_pseudo(private_actor_key, prefix=prefix)
 
+    # 3. Comptes professionnels
+    if actor_type == "comptepro":
+        if display and is_professional_label(display):
+            return clean_professional_label(display)
+        return "P_non_référencé"
+
+    # 4. Compatibilités de repli si la structure brute est atypique
+    if display:
+        if is_conversion_label(display):
+            return "T_Conversion"
+
+        if is_professional_label(display):
+            return clean_professional_label(display)
+
+        if is_private_label(display):
+            if not private_actor_key:
+                return "U_inconnu"
+            return get_or_create_private_pseudo(private_actor_key, prefix="U")
+
+    # 5. Résiduel explicitement nommé, non fusionné
+    return "Acteur non catégorisé"
 
 def extract_group_label(actor):
     if not actor:

@@ -1809,6 +1809,98 @@ body.dark-mode .network-sidepanel-card {
   border-color: rgba(22, 163, 74, 0.36);
 }
 
+.info-toc-card {
+  margin: 0 0 1.2rem;
+  border: 1px solid var(--border-color, rgba(148, 163, 184, 0.22));
+  border-radius: 18px;
+  background: var(--card-soft-bg, rgba(148, 163, 184, 0.08));
+  overflow: hidden;
+}
+
+.info-toc-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  cursor: pointer;
+  list-style: none;
+  padding: 0.95rem 1rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.info-toc-summary::-webkit-details-marker {
+  display: none;
+}
+
+.info-toc-summary::after {
+  content: "▾";
+  opacity: 0.72;
+  transition: transform 0.18s ease;
+}
+
+.info-toc-card:not([open]) .info-toc-summary::after {
+  transform: rotate(-90deg);
+}
+
+.info-toc-nav {
+  padding: 0 1rem 1rem;
+}
+
+.info-toc-list {
+  display: grid;
+  gap: 0.28rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.info-toc-item a {
+  display: block;
+  padding: 0.42rem 0.58rem;
+  border-radius: 11px;
+  color: inherit;
+  line-height: 1.35;
+  text-decoration: none;
+  transition:
+    background-color 0.16s ease,
+    transform 0.16s ease;
+}
+
+.info-toc-item a:hover,
+.info-toc-item a:focus-visible {
+  background: rgba(148, 163, 184, 0.15);
+  transform: translateX(2px);
+}
+
+.info-toc-level-1 a {
+  font-weight: 700;
+}
+
+.info-toc-level-2 a {
+  padding-left: 1.25rem;
+  font-size: 0.96rem;
+}
+
+.info-toc-level-3 a {
+  padding-left: 2rem;
+  font-size: 0.92rem;
+  opacity: 0.92;
+}
+
+.info-toc-empty {
+  margin: 0;
+  padding: 0.15rem 0 0.1rem;
+  opacity: 0.78;
+}
+
+.info-markdown-reader h1,
+.info-markdown-reader h2,
+.info-markdown-reader h3,
+.info-markdown-reader h4 {
+  scroll-margin-top: 1.5rem;
+}
+
 .info-feedback.is-error {
   border-color: rgba(220, 38, 38, 0.45);
 }
@@ -3051,7 +3143,7 @@ body.dark-mode .network-sidepanel-card {
   margin-bottom: 0;
 }
 
-.operations-masked-flow-grid {
+.operations-technical-flow-grid {
   grid-template-columns: minmax(280px, 1fr);
 }
 
@@ -4200,4 +4292,5488 @@ body.sidebar-collapsed .sidebar-content {
 
 .period-autorefresh-note {
   margin-top: 10px;
+}
+
+/* HOLDINGS-LAYOUT001A — Parcours d'ouverture de Détention & ancrage */
+
+.pilotage-holdings-monetary-reference {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 1rem;
+  padding: 0.95rem 1rem;
+  border-radius: 14px;
+  border: 1px solid var(--card-border);
+  background: linear-gradient(
+    135deg,
+    rgba(37, 99, 235, 0.06),
+    rgba(148, 163, 184, 0.06)
+  );
+}
+
+.pilotage-holdings-reference-label {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pilotage-holdings-reference-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.55rem;
+  line-height: 1.55;
+}
+
+.pilotage-holdings-reference-body strong {
+  font-size: 1.35rem;
+  line-height: 1.2;
+  color: var(--text-strong);
+}
+
+.pilotage-holdings-reference-body span {
+  color: var(--muted);
+}
+
+.pilotage-holdings-reading-heading,
+.pilotage-holdings-secondary-heading {
+  margin-top: 1.15rem;
+}
+
+.pilotage-holdings-reading-heading span,
+.pilotage-holdings-secondary-heading span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--text-strong);
+}
+
+.pilotage-holdings-reading-heading p {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.pilotage-holdings-category-grid {
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
+}
+
+.pilotage-holdings-secondary-kpi-grid {
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
+}
+
+.pilotage-holdings-category-card {
+  position: relative;
+  overflow: hidden;
+  min-height: 142px;
+}
+
+.pilotage-holdings-category-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 4px;
+  opacity: 0.95;
+}
+
+.pilotage-holdings-category-users {
+  background: linear-gradient(
+    180deg,
+    rgba(59, 130, 246, 0.09),
+    var(--table-head-bg) 44%
+  );
+}
+
+.pilotage-holdings-category-users::before {
+  background: rgba(59, 130, 246, 0.9);
+}
+
+.pilotage-holdings-category-professionals {
+  background: linear-gradient(
+    180deg,
+    rgba(244, 63, 94, 0.09),
+    var(--table-head-bg) 44%
+  );
+}
+
+.pilotage-holdings-category-professionals::before {
+  background: rgba(244, 63, 94, 0.9);
+}
+
+.pilotage-holdings-category-gonette {
+  background: linear-gradient(
+    180deg,
+    rgba(249, 115, 22, 0.09),
+    var(--table-head-bg) 44%
+  );
+}
+
+.pilotage-holdings-category-gonette::before {
+  background: rgba(249, 115, 22, 0.9);
+}
+
+@media (max-width: 1080px) {
+  .pilotage-holdings-category-grid,
+  .pilotage-holdings-secondary-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* HOLDINGS-LAYOUT001B-HEADERS — Porte d'entrée narrative du pilotage */
+
+.pilotage-reading-path {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  gap: 0.8rem;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+
+.pilotage-reading-path-step {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 0.7rem;
+  row-gap: 0.15rem;
+  align-items: center;
+  padding: 0.85rem 0.95rem;
+  border-radius: 14px;
+  border: 1px solid var(--card-border);
+  background: linear-gradient(
+    180deg,
+    rgba(37, 99, 235, 0.05),
+    var(--table-head-bg)
+  );
+}
+
+.pilotage-reading-path-step span {
+  grid-row: span 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.12);
+  color: var(--text-strong);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.pilotage-reading-path-step strong {
+  font-size: 0.95rem;
+  line-height: 1.25;
+  color: var(--text-strong);
+}
+
+.pilotage-reading-path-step small {
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.pilotage-holdings-overview-card .pilotage-section-heading p {
+  max-width: 1120px;
+}
+
+@media (max-width: 1080px) {
+  .pilotage-reading-path {
+    grid-template-columns: repeat(2, minmax(220px, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .pilotage-reading-path {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* HOLDINGS-LAYOUT001B-STRUCTURE — Marches narratives de Détention & ancrage */
+
+.pilotage-holdings-story-step {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 0.9rem;
+  margin-top: 0.35rem;
+  padding: 1rem 1.05rem;
+  border-radius: 16px;
+  border: 1px solid var(--card-border);
+  background: linear-gradient(
+    135deg,
+    rgba(37, 99, 235, 0.06),
+    rgba(148, 163, 184, 0.04)
+  );
+}
+
+.pilotage-holdings-story-step > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.13);
+  color: var(--text-strong);
+  font-weight: 900;
+  line-height: 1;
+}
+
+.pilotage-holdings-story-step h3 {
+  margin: 0 0 0.3rem;
+  font-size: 1.08rem;
+  line-height: 1.35;
+}
+
+.pilotage-holdings-story-step p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+@media (max-width: 720px) {
+  .pilotage-holdings-story-step {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* HOLDINGS-LAYOUT001C-A — Repère comptable compact et étape 1 harmonisée */
+
+.pilotage-holdings-monetary-reference-pill {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem 0.75rem;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  padding: 0.72rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  background: rgba(148, 163, 184, 0.10);
+  line-height: 1.4;
+}
+
+.pilotage-holdings-monetary-reference-pill span {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.28rem 0.58rem;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.10);
+  color: var(--text-strong);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.pilotage-holdings-monetary-reference-pill strong {
+  font-size: 1.08rem;
+  line-height: 1.2;
+  color: var(--text-strong);
+  white-space: nowrap;
+}
+
+.pilotage-holdings-monetary-reference-pill small {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.pilotage-holdings-story-step-opening {
+  margin-top: 0.35rem;
+  margin-bottom: 1rem;
+}
+
+@media (max-width: 720px) {
+  .pilotage-holdings-monetary-reference-pill {
+    border-radius: 16px;
+  }
+}
+
+
+/* HOLDINGS-LAYOUT001C-A-FIX — Capsule comptable vraiment compacte */
+
+.pilotage-holdings-monetary-reference-pill {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  gap: 0.45rem 0.65rem;
+  margin-top: 0.9rem;
+  margin-bottom: 1.05rem;
+  padding: 0.58rem 0.78rem;
+  border-radius: 999px;
+  border: 1px solid rgba(16, 185, 129, 0.34);
+  background: rgba(16, 185, 129, 0.10);
+  box-shadow: 0 1px 0 rgba(16, 185, 129, 0.08);
+  line-height: 1.35;
+}
+
+.pilotage-holdings-monetary-reference-pill span {
+  background: rgba(16, 185, 129, 0.16);
+  color: var(--text-strong);
+}
+
+.pilotage-holdings-monetary-reference-pill strong {
+  font-size: 1.02rem;
+}
+
+.pilotage-holdings-monetary-reference-pill small {
+  font-size: 0.88rem;
+}
+
+@media (max-width: 720px) {
+  .pilotage-holdings-monetary-reference-pill {
+    display: flex;
+    width: 100%;
+    border-radius: 16px;
+  }
+}
+
+
+/* HOLDINGS-LAYOUT001C-B1 — Repère compact de détention à la clôture */
+
+.pilotage-holdings-ownership-context {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.65rem;
+  margin-top: 0.95rem;
+  padding: 0.58rem 0.78rem;
+  border-radius: 999px;
+  border: 1px solid rgba(59, 130, 246, 0.28);
+  background: rgba(59, 130, 246, 0.08);
+  line-height: 1.35;
+}
+
+.pilotage-holdings-ownership-context span {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.24rem 0.52rem;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.14);
+  color: var(--text-strong);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.pilotage-holdings-ownership-context strong {
+  font-size: 0.98rem;
+  line-height: 1.25;
+}
+
+.pilotage-holdings-ownership-context small {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+@media (max-width: 720px) {
+  .pilotage-holdings-ownership-context {
+    display: flex;
+    width: 100%;
+    border-radius: 16px;
+  }
+}
+
+
+/* ==========================================================================
+   PROVIEW001 — Vue "Activité des professionnels" à onglets analytiques
+   ========================================================================== */
+
+.professional-analysis-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.85fr);
+  gap: 28px;
+  align-items: stretch;
+  padding: 28px;
+  margin-bottom: 20px;
+  background:
+    radial-gradient(circle at top right, rgba(217, 119, 6, 0.12), transparent 40%),
+    linear-gradient(135deg, rgba(255, 247, 237, 0.98), rgba(255, 255, 255, 0.98));
+  border: 1px solid rgba(217, 119, 6, 0.16);
+}
+
+.professional-analysis-hero-main h2 {
+  margin: 10px 0 12px;
+  max-width: 980px;
+  font-size: clamp(1.7rem, 2.4vw, 2.45rem);
+  line-height: 1.16;
+  letter-spacing: -0.02em;
+}
+
+.professional-analysis-hero-main p {
+  max-width: 980px;
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.7;
+  color: var(--muted-text, #475569);
+}
+
+.professional-analysis-hero-aside {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.professional-analysis-hero-kpi,
+.professional-analysis-hero-note {
+  padding: 18px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.06);
+}
+
+.professional-analysis-hero-kpi {
+  display: grid;
+  gap: 6px;
+}
+
+.professional-analysis-hero-kpi strong {
+  font-size: clamp(2rem, 3vw, 2.8rem);
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+.professional-analysis-hero-kpi span,
+.professional-analysis-hero-note {
+  color: var(--muted-text, #475569);
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+.professional-analysis-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 20px;
+  padding: 10px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.05);
+}
+
+.professional-analysis-tab-btn {
+  appearance: none;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(248, 250, 252, 0.96);
+  color: #334155;
+  padding: 11px 15px;
+  border-radius: 999px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    transform 0.16s ease,
+    border-color 0.16s ease,
+    background 0.16s ease,
+    color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.professional-analysis-tab-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(217, 119, 6, 0.34);
+  background: rgba(255, 247, 237, 0.98);
+}
+
+.professional-analysis-tab-btn-active {
+  color: #7c2d12;
+  border-color: rgba(217, 119, 6, 0.42);
+  background: linear-gradient(135deg, rgba(254, 215, 170, 0.92), rgba(255, 237, 213, 0.98));
+  box-shadow: 0 12px 24px rgba(217, 119, 6, 0.16);
+}
+
+.professional-analysis-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.professional-analysis-roadmap-card,
+.professional-analysis-directory-intro {
+  padding: 24px;
+}
+
+.professional-analysis-section-heading h3 {
+  margin: 10px 0 10px;
+  font-size: clamp(1.35rem, 1.8vw, 1.75rem);
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+}
+
+.professional-analysis-section-heading p {
+  max-width: 980px;
+  margin: 0;
+  color: var(--muted-text, #475569);
+  line-height: 1.65;
+}
+
+.professional-analysis-scope-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 22px;
+}
+
+.professional-analysis-scope-card {
+  display: grid;
+  gap: 8px;
+  min-height: 112px;
+  padding: 18px;
+  border-radius: 20px;
+  background: rgba(248, 250, 252, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.20);
+}
+
+.professional-analysis-scope-card strong {
+  font-size: 1.06rem;
+  color: #0f172a;
+}
+
+.professional-analysis-scope-card span {
+  color: var(--muted-text, #475569);
+  line-height: 1.5;
+}
+
+#professionalsDirectoryPanel {
+  display: grid;
+  gap: 18px;
+}
+
+@media (max-width: 1100px) {
+  .professional-analysis-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .professional-analysis-scope-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .professional-analysis-hero,
+  .professional-analysis-roadmap-card,
+  .professional-analysis-directory-intro {
+    padding: 18px;
+  }
+
+  .professional-analysis-tabs {
+    display: grid;
+    grid-template-columns: 1fr;
+    border-radius: 18px;
+  }
+
+  .professional-analysis-tab-btn {
+    width: 100%;
+    text-align: left;
+    border-radius: 16px;
+  }
+
+  .professional-analysis-scope-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* ==========================================================================
+   PROVIEW002 — Synthèse analytique de la vue professionnels
+   ========================================================================== */
+
+.professional-summary-shell {
+  display: grid;
+  gap: 18px;
+}
+
+.professional-summary-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.professional-summary-kpi-card {
+  min-height: 164px;
+  padding: 22px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.07);
+}
+
+.professional-summary-kpi-value {
+  margin: 14px 0 12px;
+  font-size: clamp(1.75rem, 2.3vw, 2.55rem);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: #111827;
+}
+
+.professional-summary-kpi-card p {
+  margin: 0;
+  color: var(--muted-text, #475569);
+  line-height: 1.55;
+  font-size: 0.95rem;
+}
+
+.professional-summary-reading-card,
+.professional-summary-reference-block {
+  padding: 24px;
+}
+
+.professional-summary-reading-card {
+  border-left: 4px solid rgba(217, 119, 6, 0.60);
+}
+
+.professional-summary-reading-card p {
+  margin: 14px 0 0;
+  color: #334155;
+  line-height: 1.72;
+}
+
+.professional-summary-reference-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.professional-summary-reference-card {
+  display: grid;
+  gap: 8px;
+  min-height: 128px;
+  padding: 18px;
+  border-radius: 20px;
+  background: rgba(248, 250, 252, 0.94);
+  border: 1px solid rgba(148, 163, 184, 0.20);
+}
+
+.professional-summary-reference-card strong {
+  font-size: 1.28rem;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: #0f172a;
+}
+
+.professional-summary-reference-card span {
+  color: var(--muted-text, #475569);
+  line-height: 1.5;
+  font-size: 0.93rem;
+}
+
+.professional-summary-method-note {
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(255, 251, 235, 0.80);
+  border: 1px solid rgba(217, 119, 6, 0.20);
+  color: #475569;
+  line-height: 1.6;
+}
+
+.professional-summary-method-note strong {
+  color: #111827;
+}
+
+@media (max-width: 1180px) {
+  .professional-summary-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .professional-summary-reference-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .professional-summary-kpi-grid,
+  .professional-summary-reference-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .professional-summary-reading-card,
+  .professional-summary-reference-block {
+    padding: 18px;
+  }
+}
+
+
+/* ==========================================================================
+   PROVIEW003 — Qualité de circulation professionnelle dans la Synthèse
+   ========================================================================== */
+
+.professional-summary-reuse-card {
+  padding: 24px;
+  border-left: 4px solid rgba(180, 83, 9, 0.64);
+}
+
+.professional-summary-reuse-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.professional-summary-reuse-grid .professional-summary-kpi-card {
+  min-height: 182px;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(255, 251, 235, 0.92),
+      rgba(255, 255, 255, 0.98)
+    );
+}
+
+.professional-summary-reuse-note {
+  margin-top: 18px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(255, 247, 237, 0.86);
+  border: 1px solid rgba(217, 119, 6, 0.22);
+  color: #475569;
+  line-height: 1.65;
+}
+
+.professional-summary-reuse-note strong {
+  color: #111827;
+}
+
+@media (max-width: 980px) {
+  .professional-summary-reuse-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .professional-summary-reuse-card {
+    padding: 18px;
+  }
+}
+
+
+/* ==========================================================================
+   PROVIEW004 — Onglet Circulation & multiplicateur
+   ========================================================================== */
+
+.professional-circulation-shell {
+  display: grid;
+  gap: 18px;
+}
+
+.professional-circulation-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.professional-circulation-chart-card {
+  padding: 24px;
+}
+
+.professional-circulation-chart-frame {
+  height: 420px;
+  margin-top: 20px;
+}
+
+.professional-circulation-empty {
+  margin-top: 20px;
+  padding: 18px;
+  border-radius: 18px;
+  background: rgba(248, 250, 252, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.20);
+  color: var(--muted-text, #475569);
+}
+
+@media (max-width: 1180px) {
+  .professional-circulation-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .professional-circulation-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .professional-circulation-chart-card {
+    padding: 18px;
+  }
+
+  .professional-circulation-chart-frame {
+    height: 340px;
+  }
+}
+
+
+
+/* REFONTE001C2-FIX4 — Focus comptes particuliers de dispositif */
+.device-private-accounts-overview {
+  margin-top: 2.5rem;
+  padding: 1.35rem 1.35rem 1.45rem;
+  border: 1px solid rgba(37, 99, 235, 0.22);
+  background:
+    linear-gradient(135deg, rgba(37, 99, 235, 0.055), rgba(14, 165, 233, 0.025)),
+    var(--card-bg, #ffffff);
+}
+
+.device-private-accounts-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.device-private-accounts-kicker {
+  margin: 0 0 0.35rem;
+  color: #2563eb;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.device-private-accounts-header h3 {
+  margin: 0 0 0.55rem;
+  font-size: 1.18rem;
+  line-height: 1.3;
+}
+
+.device-private-accounts-intro {
+  margin: 0;
+  max-width: 78rem;
+  color: #475569;
+  line-height: 1.55;
+}
+
+.device-private-accounts-helper {
+  margin: 1rem 0 1.15rem;
+  border: 1px solid rgba(37, 99, 235, 0.16);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.68);
+  overflow: hidden;
+}
+
+.device-private-accounts-helper summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 0.9rem 1rem;
+  font-weight: 750;
+  color: var(--text-strong, #0f172a);
+}
+
+.device-private-accounts-helper summary::-webkit-details-marker {
+  display: none;
+}
+
+.device-private-accounts-helper summary::before {
+  content: "?";
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-right: 0.55rem;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.device-private-accounts-helper[open] summary {
+  border-bottom: 1px solid rgba(37, 99, 235, 0.14);
+}
+
+.device-private-accounts-helper-content {
+  padding: 0.95rem 1rem 1rem;
+  color: #475569;
+  line-height: 1.55;
+}
+
+.device-private-accounts-helper-content p {
+  margin: 0 0 0.75rem;
+}
+
+.device-private-accounts-helper-content p:last-child {
+  margin-bottom: 0;
+}
+
+.device-private-accounts-grid {
+  margin-top: 0;
+}
+
+.device-private-accounts-card {
+  background: rgba(255, 255, 255, 0.84);
+}
+
+@media (max-width: 720px) {
+  .device-private-accounts-overview {
+    padding: 1.1rem;
+  }
+
+  .device-private-accounts-header h3 {
+    font-size: 1.08rem;
+  }
+}
+
+
+
+/* REFONTE001C2-FIX5 — Dépliant du focus dispositif */
+.device-private-accounts-disclosure {
+  margin-top: 2.5rem;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(37, 99, 235, 0.22);
+  background:
+    linear-gradient(135deg, rgba(37, 99, 235, 0.055), rgba(14, 165, 233, 0.025)),
+    var(--card-bg, #ffffff);
+}
+
+.device-private-accounts-disclosure-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  cursor: pointer;
+  list-style: none;
+  padding: 1rem 1.2rem;
+  color: var(--text-strong, #0f172a);
+}
+
+.device-private-accounts-disclosure-summary::-webkit-details-marker {
+  display: none;
+}
+
+.device-private-accounts-disclosure-summary::after {
+  content: "⌄";
+  margin-left: auto;
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: #2563eb;
+  transition: transform 0.18s ease;
+}
+
+.device-private-accounts-disclosure[open] .device-private-accounts-disclosure-summary::after {
+  transform: rotate(180deg);
+}
+
+.device-private-accounts-disclosure-kicker {
+  color: #2563eb;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.device-private-accounts-disclosure-hint {
+  color: #64748b;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.device-private-accounts-disclosure[open] .device-private-accounts-disclosure-hint {
+  display: none;
+}
+
+.device-private-accounts-disclosure-body {
+  padding: 0 1.2rem 1.35rem;
+}
+
+.device-private-accounts-disclosure .device-private-accounts-overview {
+  margin-top: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.device-private-accounts-disclosure .device-private-accounts-header {
+  margin-top: 0.35rem;
+}
+
+@media (max-width: 720px) {
+  .device-private-accounts-disclosure-summary {
+    align-items: flex-start;
+    gap: 0.45rem;
+    flex-direction: column;
+  }
+
+  .device-private-accounts-disclosure-summary::after {
+    position: absolute;
+    right: 1.1rem;
+  }
+
+  .device-private-accounts-disclosure-body {
+    padding: 0 1rem 1.1rem;
+  }
+}
+
+
+/* ==========================================================================
+   PROVIEW004-FIX1 — Masquage effectif des onglets professionnels
+   ========================================================================== */
+
+.professional-analysis-panel.hidden {
+  display: none;
+}
+
+
+/* ==========================================================================
+   PROVIEW005 — Historique annuel du réemploi professionnel
+   ========================================================================== */
+
+.professional-reuse-history-frame {
+  height: 430px;
+}
+
+.professional-circulation-footnote {
+  margin: 16px 0 0;
+  color: var(--muted-text, #475569);
+  line-height: 1.6;
+  font-size: 0.95rem;
+}
+
+@media (max-width: 720px) {
+  .professional-reuse-history-frame {
+    height: 360px;
+  }
+}
+
+
+/* ==========================================================================
+   PROVIEW006 — Sorties professionnelles & tension de réemploi
+   ========================================================================== */
+
+.professional-circulation-pressure-card {
+  padding: 24px;
+}
+
+.professional-circulation-pressure-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.professional-outflows-comparison-frame {
+  height: 410px;
+  margin-top: 20px;
+}
+
+@media (max-width: 1180px) {
+  .professional-circulation-pressure-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .professional-circulation-pressure-card {
+    padding: 18px;
+  }
+
+  .professional-circulation-pressure-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .professional-outflows-comparison-frame {
+    height: 350px;
+  }
+}
+
+
+/* ==========================================================================
+   PROVIEW006B — Destin des Gonettes encaissées par les professionnels
+   ========================================================================== */
+
+.professional-chain-fate-card {
+  padding: 24px;
+}
+
+.professional-chain-fate-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.professional-chain-fate-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 22px;
+}
+
+.professional-chain-fate-chart-block {
+  padding: 18px;
+  border-radius: 20px;
+  background: rgba(248, 250, 252, 0.94);
+  border: 1px solid rgba(148, 163, 184, 0.20);
+}
+
+.professional-chain-fate-chart-block h4 {
+  margin: 0 0 16px;
+  font-size: 1.02rem;
+  color: #0f172a;
+}
+
+.professional-chain-fate-chart-frame {
+  height: 360px;
+}
+
+.professional-chain-fate-method-note {
+  margin-top: 18px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(248, 250, 252, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.20);
+  color: #475569;
+  line-height: 1.65;
+}
+
+.professional-chain-fate-method-note strong {
+  color: #111827;
+}
+
+@media (max-width: 1180px) {
+  .professional-chain-fate-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .professional-chain-fate-chart-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .professional-chain-fate-card {
+    padding: 18px;
+  }
+
+  .professional-chain-fate-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .professional-chain-fate-chart-frame {
+    height: 320px;
+  }
+}
+
+
+/* ==========================================================================
+   MAPUP004B — Bassins de consommation Gonette
+   ========================================================================== */
+
+.professional-consumption-map-card {
+  padding: 24px;
+  overflow: hidden;
+}
+
+.professional-consumption-map-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.professional-consumption-map-frame {
+  position: relative;
+  min-height: 680px;
+  height: 680px;
+  margin-top: 22px;
+  overflow: hidden;
+  border-radius: 28px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background:
+    radial-gradient(circle at 50% 42%, rgba(15, 23, 42, 0.98), rgba(2, 6, 23, 1));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -30px 80px rgba(2, 6, 23, 0.28),
+    0 26px 84px rgba(15, 23, 42, 0.18);
+}
+
+.professional-consumption-map-frame canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.professional-consumption-map-note {
+  margin-top: 18px;
+  padding: 17px 19px;
+  border-radius: 20px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(248, 250, 252, 0.90);
+  color: #475569;
+  line-height: 1.65;
+}
+
+.professional-consumption-map-note strong {
+  color: #0f172a;
+}
+
+@media (max-width: 1180px) {
+  .professional-consumption-map-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .professional-consumption-map-frame {
+    min-height: 600px;
+    height: 600px;
+  }
+}
+
+@media (max-width: 720px) {
+  .professional-consumption-map-card {
+    padding: 18px;
+  }
+
+  .professional-consumption-map-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .professional-consumption-map-frame {
+    min-height: 520px;
+    height: 520px;
+    border-radius: 22px;
+  }
+}
+
+
+/* ==========================================================================
+   MAPUP005 — Player temporel des faisceaux de consommation
+   ========================================================================== */
+
+.professional-consumption-map-player {
+  display: grid;
+  gap: 16px;
+  margin-top: 22px;
+  padding: 18px 20px;
+  border-radius: 24px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background:
+    linear-gradient(
+      135deg,
+      rgba(248, 250, 252, 0.96),
+      rgba(241, 245, 249, 0.90)
+    );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.86),
+    0 18px 52px rgba(15, 23, 42, 0.06);
+}
+
+.professional-consumption-map-player-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.professional-consumption-map-player-buttons,
+.professional-consumption-map-player-durations {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.professional-consumption-map-player-durations span {
+  color: #475569;
+  font-size: 0.92rem;
+  font-weight: 700;
+  margin-right: 2px;
+}
+
+.professional-consumption-map-player-btn,
+.professional-consumption-map-duration-btn {
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #0f172a;
+  cursor: pointer;
+  font-weight: 800;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease,
+    opacity 160ms ease;
+}
+
+.professional-consumption-map-player-btn {
+  padding: 10px 15px;
+  font-size: 0.92rem;
+}
+
+.professional-consumption-map-duration-btn {
+  padding: 8px 12px;
+  font-size: 0.88rem;
+}
+
+.professional-consumption-map-player-btn:hover:not(:disabled),
+.professional-consumption-map-duration-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(37, 99, 235, 0.42);
+  box-shadow: 0 12px 26px rgba(37, 99, 235, 0.10);
+}
+
+.professional-consumption-map-player-btn:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.professional-consumption-map-duration-btn.is-active {
+  border-color: rgba(37, 99, 235, 0.56);
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #fff;
+  box-shadow: 0 14px 30px rgba(37, 99, 235, 0.22);
+}
+
+.professional-consumption-map-player-timeline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+}
+
+.professional-consumption-map-player-timeline input[type="range"] {
+  width: 100%;
+  accent-color: #2563eb;
+  cursor: pointer;
+}
+
+.professional-consumption-map-player-readout {
+  min-width: 260px;
+  display: grid;
+  gap: 4px;
+  text-align: right;
+}
+
+.professional-consumption-map-player-readout strong {
+  color: #0f172a;
+  font-size: 0.98rem;
+}
+
+.professional-consumption-map-player-readout span {
+  color: #475569;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+@media (max-width: 900px) {
+  .professional-consumption-map-player-timeline {
+    grid-template-columns: 1fr;
+  }
+
+  .professional-consumption-map-player-readout {
+    min-width: 0;
+    text-align: left;
+  }
+}
+
+@media (max-width: 720px) {
+  .professional-consumption-map-player {
+    padding: 16px;
+    border-radius: 20px;
+  }
+
+  .professional-consumption-map-player-controls {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .professional-consumption-map-player-buttons,
+  .professional-consumption-map-player-durations {
+    width: 100%;
+  }
+}
+
+
+/* ==========================================================================
+   MAPUP005D — Toggle Carte statique / Lecture dynamique
+   ========================================================================== */
+
+.professional-consumption-map-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 22px;
+  padding: 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background: rgba(241, 245, 249, 0.92);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    0 14px 34px rgba(15, 23, 42, 0.06);
+}
+
+.professional-consumption-map-mode-btn {
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  padding: 11px 17px;
+  background: transparent;
+  color: #475569;
+  cursor: pointer;
+  font-size: 0.92rem;
+  font-weight: 850;
+  transition:
+    transform 160ms ease,
+    background 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.professional-consumption-map-mode-btn:hover {
+  transform: translateY(-1px);
+  color: #0f172a;
+}
+
+.professional-consumption-map-mode-btn.is-active {
+  color: #fff;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  box-shadow:
+    0 12px 28px rgba(37, 99, 235, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+@media (max-width: 720px) {
+  .professional-consumption-map-mode-toggle {
+    display: grid;
+    width: 100%;
+    grid-template-columns: 1fr;
+    border-radius: 22px;
+  }
+
+  .professional-consumption-map-mode-btn {
+    width: 100%;
+  }
+}
+
+
+/* ==========================================================================
+   MAPUP005E — Player dynamique intégré dans la carte
+   ========================================================================== */
+
+.professional-consumption-map-player[hidden] {
+  display: none !important;
+}
+
+.professional-consumption-map-player-overlay {
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  bottom: 22px;
+  z-index: 4;
+  margin-top: 0;
+  padding: 16px 18px;
+  border-radius: 24px;
+  border: 1px solid rgba(226, 232, 240, 0.54);
+  background:
+    linear-gradient(
+      135deg,
+      rgba(248, 250, 252, 0.94),
+      rgba(226, 232, 240, 0.88)
+    );
+  backdrop-filter: blur(16px);
+  box-shadow:
+    0 24px 68px rgba(2, 6, 23, 0.30),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+.professional-consumption-map-player-overlay .professional-consumption-map-player-controls {
+  gap: 14px;
+}
+
+.professional-consumption-map-player-overlay .professional-consumption-map-player-timeline {
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .professional-consumption-map-player-overlay {
+    left: 14px;
+    right: 14px;
+    bottom: 14px;
+    padding: 15px;
+  }
+}
+
+@media (max-width: 720px) {
+  .professional-consumption-map-player-overlay {
+    border-radius: 20px;
+  }
+}
+
+
+/* ==========================================================================
+   MAPUP005H — Player translucide intégré à la carte dynamique
+   ========================================================================== */
+
+body.dark-mode .professional-consumption-map-player-overlay {
+  border: 1px solid rgba(226, 232, 240, 0.22);
+  background:
+    linear-gradient(
+      135deg,
+      rgba(15, 23, 42, 0.72),
+      rgba(2, 6, 23, 0.56)
+    );
+  backdrop-filter: blur(13px) saturate(132%);
+  -webkit-backdrop-filter: blur(13px) saturate(132%);
+  box-shadow:
+    0 24px 68px rgba(2, 6, 23, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+body.dark-mode .professional-consumption-map-player-durations span,
+body.dark-mode .professional-consumption-map-player-readout span {
+  color: rgba(226, 232, 240, 0.82);
+}
+
+body.dark-mode .professional-consumption-map-player-readout strong {
+  color: rgba(248, 250, 252, 0.98);
+}
+
+body.dark-mode .professional-consumption-map-player-btn,
+body.dark-mode .professional-consumption-map-duration-btn {
+  border-color: rgba(226, 232, 240, 0.24);
+  background: rgba(15, 23, 42, 0.58);
+  color: rgba(248, 250, 252, 0.96);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+body.dark-mode .professional-consumption-map-player-btn:hover:not(:disabled),
+body.dark-mode .professional-consumption-map-duration-btn:hover {
+  border-color: rgba(96, 165, 250, 0.56);
+  background: rgba(30, 41, 59, 0.72);
+  box-shadow:
+    0 12px 26px rgba(37, 99, 235, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.10);
+}
+
+body.dark-mode .professional-consumption-map-duration-btn.is-active {
+  border-color: rgba(96, 165, 250, 0.66);
+  background:
+    linear-gradient(
+      135deg,
+      rgba(37, 99, 235, 0.92),
+      rgba(29, 78, 216, 0.92)
+    );
+  color: #fff;
+  box-shadow:
+    0 14px 30px rgba(37, 99, 235, 0.30),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+
+/* ==========================================================================
+   MAPUP005J — Helper et agrandissement de la carte U→P
+   ========================================================================== */
+
+.professional-consumption-map-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 22px;
+}
+
+.professional-consumption-map-heading-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.professional-consumption-map-heading-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  padding-top: 2px;
+}
+
+.stats-chart-modal[data-mode="consumption-map-zoom"] .stats-chart-modal-panel {
+  width: min(1460px, 97vw);
+  max-height: min(92vh, 1120px);
+}
+
+.professional-consumption-map-zoom-shell {
+  min-width: 0;
+}
+
+.professional-consumption-map-zoom-frame {
+  position: relative;
+  min-height: 680px;
+  height: min(74vh, 860px);
+  margin-top: 20px;
+  overflow: hidden;
+  border-radius: 28px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background:
+    radial-gradient(circle at 50% 42%, rgba(15, 23, 42, 0.98), rgba(2, 6, 23, 1));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -30px 80px rgba(2, 6, 23, 0.28),
+    0 26px 84px rgba(15, 23, 42, 0.18);
+}
+
+.professional-consumption-map-zoom-frame canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.professional-consumption-map-zoom-note {
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 0.93rem;
+  line-height: 1.55;
+}
+
+@media (max-width: 960px) {
+  .professional-consumption-map-heading {
+    flex-direction: column;
+  }
+
+  .professional-consumption-map-heading-actions {
+    align-self: flex-end;
+  }
+
+  .professional-consumption-map-zoom-frame {
+    min-height: 520px;
+    height: min(66vh, 720px);
+  }
+}
+
+
+/* ==========================================================================
+   MAPUP005K — Territoire flottant sur le fond de page
+   ========================================================================== */
+
+.professional-consumption-map-frame {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.professional-consumption-map-zoom-frame {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/*
+  On conserve uniquement une très légère séparation spatiale,
+  pour que l’aire de visualisation garde une respiration sans redevenir une carte encadrée.
+*/
+.professional-consumption-map-frame::before,
+.professional-consumption-map-zoom-frame::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    radial-gradient(
+      circle at 50% 48%,
+      rgba(255, 255, 255, 0.020),
+      rgba(255, 255, 255, 0)
+    );
+}
+
+body.dark-mode .professional-consumption-map-frame::before,
+body.dark-mode .professional-consumption-map-zoom-frame::before {
+  background:
+    radial-gradient(
+      circle at 50% 48%,
+      rgba(255, 255, 255, 0.018),
+      rgba(255, 255, 255, 0)
+    );
+}
+
+
+/* ==========================================================================
+   MAPUP005L — Player dynamique sur la carte agrandie
+   ========================================================================== */
+
+.professional-consumption-map-player-zoom-overlay {
+  left: 28px;
+  right: 28px;
+  bottom: 28px;
+  z-index: 5;
+}
+
+@media (max-width: 960px) {
+  .professional-consumption-map-player-zoom-overlay {
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
+  }
+}
+
+/* ----------------------------------------------------------------------
+   Rafraîchissement doux lors d'un changement de période
+   ---------------------------------------------------------------------- */
+
+.period-refresh-indicator {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 2200;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  max-width: min(28rem, calc(100vw - 2rem));
+  padding: 0.8rem 1rem;
+  border-radius: 999px;
+  background: rgba(20, 26, 33, 0.94);
+  color: #fff;
+  font-size: 0.92rem;
+  line-height: 1.3;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(8px);
+}
+
+.period-refresh-indicator[hidden] {
+  display: none;
+}
+
+.period-refresh-indicator-dot {
+  width: 0.65rem;
+  height: 0.65rem;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.9;
+  animation: period-refresh-pulse 1.05s ease-in-out infinite;
+}
+
+@keyframes period-refresh-pulse {
+  0%,
+  100% {
+    transform: scale(0.82);
+    opacity: 0.45;
+  }
+
+  50% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* ----------------------------------------------------------------------
+   UXLOAD003A — Shells progressifs avant hydratation des données
+   ---------------------------------------------------------------------- */
+
+.progressive-shell-overview {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.progressive-shell-overview h2 {
+  margin: 0;
+}
+
+.progressive-shell-overview p {
+  margin: 0;
+  max-width: 980px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.progressive-shell-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(260px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.progressive-shell-card {
+  display: grid;
+  gap: 0.75rem;
+  min-height: 150px;
+  padding: 1rem;
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
+}
+
+.progressive-shell-card strong {
+  color: var(--text-strong);
+  font-size: 1rem;
+}
+
+.progressive-shell-card-line {
+  width: 100%;
+  height: 0.72rem;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    rgba(148, 163, 184, 0.16),
+    rgba(148, 163, 184, 0.34),
+    rgba(148, 163, 184, 0.16)
+  );
+  background-size: 220% 100%;
+  animation: progressive-shell-shimmer 1.2s ease-in-out infinite;
+}
+
+.progressive-shell-card-line-short {
+  width: 34%;
+}
+
+.progressive-shell-card-line-medium {
+  width: 72%;
+}
+
+@keyframes progressive-shell-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+@media (max-width: 900px) {
+  .progressive-shell-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+
+/* ==========================================================================
+   POSTCLUSTER003 — Répartition territoriale des particuliers
+   ========================================================================== */
+
+.user-postal-clusters-overview-card {
+  margin-bottom: 20px;
+}
+
+.user-postal-clusters-overview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+}
+
+.user-postal-clusters-overview-header h2 {
+  margin: 6px 0 10px;
+  color: var(--text-strong);
+}
+
+.user-postal-clusters-overview-header p {
+  max-width: 82ch;
+  margin: 0;
+  line-height: 1.58;
+  color: var(--text);
+}
+
+.user-postal-clusters-period-note {
+  margin-top: 10px !important;
+  color: var(--muted) !important;
+  font-size: 0.95rem;
+}
+
+.user-postal-clusters-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(118px, 1fr));
+  gap: 12px;
+  flex: 0 0 auto;
+}
+
+.user-postal-clusters-kpi {
+  min-width: 118px;
+  padding: 12px 14px;
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  background: var(--table-head-bg);
+  text-align: center;
+}
+
+.user-postal-clusters-kpi strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-strong);
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.user-postal-clusters-kpi span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.user-postal-clusters-map-card {
+  padding: 18px;
+  margin-bottom: 20px;
+}
+
+.user-postal-clusters-map {
+  min-height: 430px;
+  height: min(54vh, 620px);
+  overflow: hidden;
+  border: 1px solid var(--card-border);
+  border-radius: 22px;
+  background: var(--table-head-bg);
+}
+
+.user-postal-clusters-map-empty {
+  display: grid;
+  place-items: center;
+  min-height: 430px;
+  padding: 24px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.user-postal-clusters-map-note,
+.user-postal-clusters-table-note {
+  margin-top: 16px;
+  padding: 15px 17px;
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  background: var(--table-head-bg);
+  color: var(--text);
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+.user-postal-clusters-map-note strong,
+.user-postal-clusters-table-note strong {
+  color: var(--text-strong);
+}
+
+.user-postal-clusters-popup {
+  display: grid;
+  gap: 4px;
+  min-width: 180px;
+  color: #0f172a;
+}
+
+.user-postal-clusters-popup strong {
+  font-size: 0.98rem;
+}
+
+.user-postal-clusters-popup span {
+  font-size: 0.91rem;
+}
+
+.user-postal-clusters-table-card {
+  margin-bottom: 20px;
+}
+
+.user-postal-clusters-table-wrap {
+  margin-top: 16px;
+  overflow-x: auto;
+}
+
+.user-postal-clusters-table {
+  min-width: 1980px;
+}
+
+.user-postal-clusters-table td,
+.user-postal-clusters-table th {
+  white-space: nowrap;
+}
+
+.user-postal-clusters-empty-state {
+  margin-top: 16px;
+  padding: 18px;
+  border: 1px dashed var(--card-border);
+  border-radius: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+@media (max-width: 1100px) {
+  .user-postal-clusters-overview-header {
+    flex-direction: column;
+  }
+
+  .user-postal-clusters-kpis {
+    width: 100%;
+  }
+}
+
+@media (max-width: 760px) {
+  .user-postal-clusters-kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .user-postal-clusters-map {
+    min-height: 360px;
+    height: 56vh;
+    border-radius: 18px;
+  }
+
+  .user-postal-clusters-map-empty {
+    min-height: 360px;
+  }
+}
+
+
+/* ==========================================================================
+   PRODETAIL003 — Profil professionnel Odoo
+   ========================================================================== */
+
+.pro-context-card {
+  margin-bottom: 20px;
+  padding: 24px;
+  border: 1px solid var(--card-border);
+  background:
+    linear-gradient(
+      135deg,
+      rgba(248, 250, 252, 0.96),
+      rgba(241, 245, 249, 0.90)
+    );
+}
+
+body.dark-mode .pro-context-card {
+  background:
+    linear-gradient(
+      135deg,
+      rgba(15, 23, 42, 0.88),
+      rgba(30, 41, 59, 0.82)
+    );
+}
+
+.pro-context-heading {
+  margin-bottom: 18px;
+}
+
+.pro-context-heading h3 {
+  margin: 6px 0 0;
+  color: var(--text-strong);
+  font-size: clamp(1.25rem, 1.8vw, 1.65rem);
+  line-height: 1.28;
+}
+
+.pro-context-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.pro-context-meta-item {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  background: var(--table-head-bg);
+}
+
+.pro-context-meta-label {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.pro-context-meta-value {
+  color: var(--text-strong);
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 1.42;
+  overflow-wrap: anywhere;
+}
+
+.pro-context-secondary {
+  margin-top: 18px;
+}
+
+.pro-context-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.pro-context-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 7px 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  background: var(--table-head-bg);
+  color: var(--text-strong);
+  font-size: 0.92rem;
+  font-weight: 650;
+}
+
+.pro-context-description {
+  max-width: 92ch;
+  margin: 20px 0 0;
+  padding: 17px 19px;
+  border-left: 4px solid rgba(37, 99, 235, 0.58);
+  border-radius: 0 18px 18px 0;
+  background: rgba(255, 255, 255, 0.52);
+  color: var(--text);
+  font-size: 1rem;
+  line-height: 1.62;
+}
+
+body.dark-mode .pro-context-description {
+  background: rgba(15, 23, 42, 0.46);
+  border-left-color: rgba(96, 165, 250, 0.70);
+}
+
+@media (max-width: 920px) {
+  .pro-context-card {
+    padding: 20px;
+  }
+
+  .pro-context-meta-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* ==========================================================================
+   PRODETAIL004A — Dossier d’accompagnement professionnel
+   ========================================================================== */
+
+.pro-meeting-hero-card {
+  position: relative;
+  margin: 2px 0 22px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background:
+    radial-gradient(circle at 8% 12%, rgba(59, 130, 246, 0.13), rgba(59, 130, 246, 0) 34%),
+    radial-gradient(circle at 92% 8%, rgba(217, 119, 6, 0.14), rgba(217, 119, 6, 0) 28%),
+    linear-gradient(135deg, rgba(248, 250, 252, 0.98), rgba(241, 245, 249, 0.94));
+}
+
+body.dark-mode .pro-meeting-hero-card {
+  border-color: rgba(148, 163, 184, 0.28);
+  background:
+    radial-gradient(circle at 8% 12%, rgba(59, 130, 246, 0.18), rgba(59, 130, 246, 0) 34%),
+    radial-gradient(circle at 92% 8%, rgba(249, 115, 22, 0.15), rgba(249, 115, 22, 0) 28%),
+    linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.92));
+}
+
+.pro-meeting-hero-main {
+  display: grid;
+  grid-template-columns: minmax(320px, 1.12fr) minmax(420px, 0.88fr);
+  gap: 28px;
+  padding: 28px 30px 24px;
+}
+
+.pro-meeting-identity {
+  min-width: 0;
+}
+
+.pro-meeting-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.pro-meeting-professional-ref {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 8px 13px;
+  border: 1px solid rgba(37, 99, 235, 0.28);
+  border-radius: 999px;
+  background: rgba(239, 246, 255, 0.94);
+  color: #1d4ed8;
+  font-size: 0.96rem;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+}
+
+body.dark-mode .pro-meeting-professional-ref {
+  border-color: rgba(96, 165, 250, 0.34);
+  background: rgba(30, 58, 138, 0.34);
+  color: #93c5fd;
+}
+
+.pro-meeting-title-row h2 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: clamp(1.7rem, 2.6vw, 2.45rem);
+  line-height: 1.12;
+}
+
+.pro-meeting-activity {
+  margin: 14px 0 0;
+  color: var(--text-strong);
+  font-size: 1.14rem;
+  font-weight: 760;
+  line-height: 1.4;
+}
+
+.pro-meeting-identity-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.pro-meeting-identity-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 7px 12px;
+  border: 1px solid rgba(217, 119, 6, 0.25);
+  border-radius: 999px;
+  background: rgba(255, 247, 237, 0.88);
+  color: #9a3412;
+  font-size: 0.92rem;
+  font-weight: 760;
+}
+
+.pro-meeting-identity-tag-muted {
+  border-color: var(--card-border);
+  background: var(--table-head-bg);
+  color: var(--text);
+}
+
+body.dark-mode .pro-meeting-identity-tag {
+  border-color: rgba(251, 146, 60, 0.34);
+  background: rgba(124, 45, 18, 0.28);
+  color: #fdba74;
+}
+
+body.dark-mode .pro-meeting-identity-tag-muted {
+  border-color: rgba(148, 163, 184, 0.28);
+  background: rgba(15, 23, 42, 0.60);
+  color: rgba(226, 232, 240, 0.92);
+}
+
+.pro-meeting-purpose {
+  max-width: 72ch;
+  margin: 20px 0 0;
+  color: var(--text);
+  font-size: 1rem;
+  line-height: 1.62;
+}
+
+.pro-meeting-portrait-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-content: start;
+}
+
+.pro-meeting-portrait-card {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-height: 132px;
+  padding: 18px 18px 17px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.76);
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.06);
+}
+
+body.dark-mode .pro-meeting-portrait-card {
+  border-color: rgba(148, 163, 184, 0.22);
+  background: rgba(15, 23, 42, 0.56);
+  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.22);
+}
+
+.pro-meeting-portrait-card span {
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 780;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.pro-meeting-portrait-card strong {
+  color: var(--text-strong);
+  font-size: clamp(1.45rem, 2.25vw, 2rem);
+  line-height: 1.14;
+}
+
+.pro-meeting-portrait-card small {
+  color: var(--text);
+  font-size: 0.92rem;
+  line-height: 1.42;
+}
+
+.pro-meeting-portrait-card-highlight {
+  border-color: rgba(217, 119, 6, 0.30);
+  background:
+    linear-gradient(135deg, rgba(255, 247, 237, 0.95), rgba(254, 215, 170, 0.58));
+}
+
+body.dark-mode .pro-meeting-portrait-card-highlight {
+  border-color: rgba(251, 146, 60, 0.34);
+  background:
+    linear-gradient(135deg, rgba(124, 45, 18, 0.34), rgba(30, 41, 59, 0.74));
+}
+
+.pro-meeting-diagnostic-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  padding: 0 30px 24px;
+}
+
+.pro-meeting-diagnostic-card {
+  min-height: 184px;
+  padding: 19px 20px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+body.dark-mode .pro-meeting-diagnostic-card {
+  border-color: rgba(148, 163, 184, 0.22);
+  background: rgba(15, 23, 42, 0.52);
+}
+
+.pro-meeting-diagnostic-card span {
+  display: block;
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.pro-meeting-diagnostic-card strong {
+  display: block;
+  color: var(--text-strong);
+  font-size: 1.18rem;
+  line-height: 1.34;
+}
+
+.pro-meeting-diagnostic-card p {
+  margin: 12px 0 0;
+  color: var(--text);
+  line-height: 1.58;
+}
+
+.pro-meeting-diagnostic-card-attention {
+  border-color: rgba(220, 38, 38, 0.24);
+  background:
+    linear-gradient(135deg, rgba(254, 242, 242, 0.96), rgba(255, 255, 255, 0.72));
+}
+
+body.dark-mode .pro-meeting-diagnostic-card-attention {
+  border-color: rgba(248, 113, 113, 0.28);
+  background:
+    linear-gradient(135deg, rgba(127, 29, 29, 0.30), rgba(15, 23, 42, 0.56));
+}
+
+.pro-meeting-diagnostic-card-watch {
+  border-color: rgba(217, 119, 6, 0.28);
+  background:
+    linear-gradient(135deg, rgba(255, 247, 237, 0.96), rgba(255, 255, 255, 0.72));
+}
+
+body.dark-mode .pro-meeting-diagnostic-card-watch {
+  border-color: rgba(251, 146, 60, 0.30);
+  background:
+    linear-gradient(135deg, rgba(124, 45, 18, 0.28), rgba(15, 23, 42, 0.56));
+}
+
+.pro-meeting-diagnostic-card-positive {
+  border-color: rgba(22, 163, 74, 0.28);
+  background:
+    linear-gradient(135deg, rgba(240, 253, 244, 0.96), rgba(255, 255, 255, 0.72));
+}
+
+body.dark-mode .pro-meeting-diagnostic-card-positive {
+  border-color: rgba(74, 222, 128, 0.28);
+  background:
+    linear-gradient(135deg, rgba(20, 83, 45, 0.32), rgba(15, 23, 42, 0.56));
+}
+
+.pro-meeting-method-note {
+  margin: 0 30px 28px;
+  padding: 16px 18px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 18px;
+  background: rgba(248, 250, 252, 0.72);
+  color: var(--text);
+  font-size: 0.96rem;
+  line-height: 1.58;
+}
+
+body.dark-mode .pro-meeting-method-note {
+  border-color: rgba(148, 163, 184, 0.20);
+  background: rgba(15, 23, 42, 0.44);
+}
+
+.pro-meeting-method-note strong {
+  color: var(--text-strong);
+}
+
+@media (max-width: 1180px) {
+  .pro-meeting-hero-main {
+    grid-template-columns: 1fr;
+  }
+
+  .pro-meeting-diagnostic-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .pro-meeting-hero-main {
+    padding: 22px 20px 20px;
+  }
+
+  .pro-meeting-title-row h2 {
+    font-size: 1.72rem;
+  }
+
+  .pro-meeting-portrait-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pro-meeting-diagnostic-grid {
+    padding: 0 20px 20px;
+  }
+
+  .pro-meeting-method-note {
+    margin: 0 20px 22px;
+  }
+}
+
+
+/* ==========================================================================
+   PRODETAIL004B — Trajectoire économique des Gonettes
+   ========================================================================== */
+
+.pro-flow-reading-card {
+  margin-bottom: 22px;
+  padding: 26px;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background:
+    radial-gradient(circle at 10% 8%, rgba(59, 130, 246, 0.08), rgba(59, 130, 246, 0) 28%),
+    radial-gradient(circle at 94% 12%, rgba(217, 119, 6, 0.08), rgba(217, 119, 6, 0) 25%),
+    rgba(255, 255, 255, 0.82);
+}
+
+body.dark-mode .pro-flow-reading-card {
+  border-color: rgba(148, 163, 184, 0.22);
+  background:
+    radial-gradient(circle at 10% 8%, rgba(59, 130, 246, 0.12), rgba(59, 130, 246, 0) 28%),
+    radial-gradient(circle at 94% 12%, rgba(249, 115, 22, 0.11), rgba(249, 115, 22, 0) 25%),
+    rgba(15, 23, 42, 0.72);
+}
+
+.pro-flow-reading-heading {
+  display: block;
+  margin-bottom: 24px;
+}
+
+.pro-flow-reading-heading h3 {
+  margin: 7px 0 10px;
+  color: var(--text-strong);
+  font-size: clamp(1.28rem, 2vw, 1.75rem);
+  line-height: 1.28;
+}
+
+.pro-flow-reading-heading p {
+  max-width: 90ch;
+  margin: 0;
+  color: var(--text);
+  line-height: 1.62;
+}
+
+.pro-flow-reading-focus {
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  min-height: 146px;
+  padding: 18px 20px;
+  border: 1px solid rgba(217, 119, 6, 0.28);
+  border-radius: 24px;
+  background:
+    linear-gradient(135deg, rgba(255, 247, 237, 0.96), rgba(254, 215, 170, 0.54));
+}
+
+body.dark-mode .pro-flow-reading-focus {
+  border-color: rgba(251, 146, 60, 0.30);
+  background:
+    linear-gradient(135deg, rgba(124, 45, 18, 0.30), rgba(30, 41, 59, 0.64));
+}
+
+.pro-flow-reading-focus span {
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.pro-flow-reading-focus strong {
+  color: var(--text-strong);
+  font-size: clamp(2rem, 3vw, 2.8rem);
+  line-height: 1.1;
+}
+
+.pro-flow-reading-focus small {
+  color: var(--text);
+  line-height: 1.45;
+}
+
+.pro-flow-stage {
+  display: grid;
+  grid-template-columns: minmax(230px, 1fr) minmax(235px, 0.78fr) minmax(230px, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.pro-flow-column {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.pro-flow-column-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pro-flow-column-heading span {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.10);
+  color: #2563eb;
+  font-size: 0.94rem;
+  font-weight: 900;
+}
+
+body.dark-mode .pro-flow-column-heading span {
+  background: rgba(59, 130, 246, 0.20);
+  color: #93c5fd;
+}
+
+.pro-flow-column-heading h4 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 1.08rem;
+}
+
+.pro-flow-node-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.pro-flow-node {
+  width: 100%;
+  display: grid;
+  gap: 5px;
+  min-height: 126px;
+  padding: 16px 17px;
+  border: 1px solid var(--card-border);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.78);
+  color: inherit;
+  text-align: left;
+}
+
+body.dark-mode .pro-flow-node {
+  background: rgba(15, 23, 42, 0.54);
+}
+
+.pro-flow-node span {
+  color: var(--muted);
+  font-size: 0.80rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.pro-flow-node strong {
+  color: var(--text-strong);
+  font-size: 1rem;
+  line-height: 1.34;
+}
+
+.pro-flow-node b {
+  color: var(--text-strong);
+  font-size: clamp(1.35rem, 2vw, 1.72rem);
+  line-height: 1.18;
+}
+
+.pro-flow-node small {
+  color: var(--text);
+  line-height: 1.42;
+}
+
+.pro-flow-node-clickable {
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    border-color 160ms ease;
+}
+
+.pro-flow-node-clickable:hover {
+  transform: translateY(-2px);
+  border-color: rgba(37, 99, 235, 0.34);
+  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.10);
+}
+
+.pro-flow-node-active {
+  border-color: rgba(37, 99, 235, 0.52);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.pro-flow-node-c2b {
+  border-left: 4px solid rgba(59, 130, 246, 0.58);
+}
+
+.pro-flow-node-b2b {
+  border-left: 4px solid rgba(14, 165, 233, 0.58);
+}
+
+.pro-flow-node-conversion {
+  border-left: 4px solid rgba(16, 185, 129, 0.58);
+}
+
+.pro-flow-node-reemission {
+  border-left: 4px solid rgba(217, 119, 6, 0.62);
+}
+
+.pro-flow-node-reconversion {
+  border-left: 4px solid rgba(220, 38, 38, 0.58);
+}
+
+.pro-flow-core-card {
+  display: grid;
+  align-content: center;
+  gap: 8px;
+  min-height: 274px;
+  padding: 22px;
+  border: 1px solid rgba(37, 99, 235, 0.28);
+  border-radius: 26px;
+  background:
+    radial-gradient(circle at 50% 20%, rgba(59, 130, 246, 0.12), rgba(59, 130, 246, 0) 44%),
+    rgba(239, 246, 255, 0.82);
+  text-align: center;
+}
+
+body.dark-mode .pro-flow-core-card {
+  border-color: rgba(96, 165, 250, 0.30);
+  background:
+    radial-gradient(circle at 50% 20%, rgba(59, 130, 246, 0.16), rgba(59, 130, 246, 0) 44%),
+    rgba(30, 58, 138, 0.20);
+}
+
+.pro-flow-core-card span {
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.pro-flow-core-card strong {
+  color: var(--text-strong);
+  font-size: clamp(2rem, 3vw, 2.9rem);
+  line-height: 1.12;
+}
+
+.pro-flow-core-card small {
+  color: var(--text);
+  line-height: 1.48;
+}
+
+.pro-flow-core-secondary .card {
+  margin: 0;
+}
+
+.pro-flow-insight-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 15px;
+  margin-top: 24px;
+}
+
+.pro-flow-meter {
+  padding: 17px 18px;
+  border: 1px solid var(--card-border);
+  border-radius: 20px;
+  background: var(--table-head-bg);
+}
+
+.pro-flow-meter-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.pro-flow-meter-heading span {
+  color: var(--text-strong);
+  font-weight: 760;
+  line-height: 1.4;
+}
+
+.pro-flow-meter-heading strong {
+  color: var(--text-strong);
+  font-size: 1.16rem;
+}
+
+.pro-flow-meter-track {
+  height: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.20);
+}
+
+.pro-flow-meter-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2563eb, #60a5fa);
+}
+
+.pro-flow-meter-b2b .pro-flow-meter-fill {
+  background: linear-gradient(90deg, #0284c7, #38bdf8);
+}
+
+.pro-flow-meter-reconversion .pro-flow-meter-fill {
+  background: linear-gradient(90deg, #dc2626, #fb7185);
+}
+
+.pro-flow-meter small {
+  display: block;
+  margin-top: 10px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.pro-flow-legend-note {
+  margin-top: 22px;
+  padding: 17px 19px;
+  border: 1px solid var(--card-border);
+  border-radius: 20px;
+  background: rgba(248, 250, 252, 0.78);
+  color: var(--text);
+  line-height: 1.62;
+}
+
+body.dark-mode .pro-flow-legend-note {
+  background: rgba(15, 23, 42, 0.44);
+}
+
+.pro-flow-legend-note strong {
+  color: var(--text-strong);
+}
+
+@media (max-width: 1240px) {
+  .pro-flow-stage {
+    grid-template-columns: 1fr;
+  }
+
+  .pro-flow-core-card {
+    min-height: 190px;
+  }
+}
+
+@media (max-width: 1040px) {
+  .pro-flow-reading-heading {
+    grid-template-columns: 1fr;
+  }
+
+  .pro-flow-insight-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .pro-flow-reading-card {
+    padding: 20px;
+  }
+
+  .pro-flow-meter-heading {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+
+/* ==========================================================================
+   PRODETAIL004A-FIX3 — Description Odoo dans le hero
+   ========================================================================== */
+
+.pro-meeting-description {
+  max-width: 76ch;
+  margin: 20px 0 0;
+  padding: 15px 18px;
+  border-left: 4px solid rgba(37, 99, 235, 0.48);
+  border-radius: 0 18px 18px 0;
+  background: rgba(255, 255, 255, 0.56);
+  color: var(--text);
+  font-size: 1rem;
+  line-height: 1.62;
+}
+
+body.dark-mode .pro-meeting-description {
+  border-left-color: rgba(96, 165, 250, 0.68);
+  background: rgba(15, 23, 42, 0.42);
+}
+
+@media (max-width: 760px) {
+  .pro-meeting-description {
+    padding: 14px 15px;
+  }
+}
+
+
+/* ==========================================================================
+   PROCLUSTERS_LAYOUT001 — Cartes secondaires 2 et 3 sur une même ligne
+   ========================================================================== */
+
+.professional-clusters-panel {
+  display: grid;
+  gap: 20px;
+}
+
+/*
+  Sur écran large :
+  - la grande carte U→P reste pleine largeur ;
+  - les deux lectures cartographiques secondaires deviennent deux colonnes ;
+  - leurs cartes d'introduction s'alignent au-dessus ;
+  - les cartes elles-mêmes sont volontairement un peu plus compactes.
+*/
+@media (min-width: 1080px) {
+  .professional-clusters-panel {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+
+  .professional-clusters-panel > .professional-consumption-map-card,
+  .professional-clusters-panel > .user-postal-clusters-table-card,
+  .professional-clusters-panel > .territory-overview-card,
+  .professional-clusters-panel > .territory-ranking-card,
+  .professional-clusters-panel > .territory-table-card {
+    grid-column: 1 / -1;
+  }
+
+  .professional-clusters-panel > .user-postal-clusters-overview-card {
+    grid-column: 1;
+    grid-row: 2;
+    min-width: 0;
+  }
+
+  .professional-clusters-panel > .cartography-overview-card {
+    grid-column: 2;
+    grid-row: 2;
+    min-width: 0;
+  }
+
+  .professional-clusters-panel > .user-postal-clusters-map-card {
+    grid-column: 1;
+    grid-row: 3;
+    min-width: 0;
+    margin-bottom: 0;
+  }
+
+  .professional-clusters-panel > .cartography-map-card {
+    grid-column: 2;
+    grid-row: 3;
+    min-width: 0;
+  }
+
+  .professional-clusters-panel > .user-postal-clusters-map-card .user-postal-clusters-map,
+  .professional-clusters-panel > .cartography-map-card .cartography-map {
+    min-height: 380px;
+    height: min(48vh, 520px);
+  }
+
+  .professional-clusters-panel > .user-postal-clusters-map-card .user-postal-clusters-map-empty,
+  .professional-clusters-panel > .cartography-map-card .cartography-map-empty {
+    min-height: 380px;
+  }
+}
+
+
+/* ==========================================================================
+   PROCLUSTERS_EDITORIAL001 — Chapeau commun et légendes compactes
+   ========================================================================== */
+
+.professional-clusters-secondary-intro-card {
+  padding: 24px 28px;
+  border-color: rgba(59, 130, 246, 0.22);
+  background:
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.11), transparent 38%),
+    linear-gradient(135deg, rgba(239, 246, 255, 0.88), rgba(248, 250, 252, 0.98));
+}
+
+body.dark-mode .professional-clusters-secondary-intro-card {
+  border-color: rgba(96, 165, 250, 0.28);
+  background:
+    radial-gradient(circle at top right, rgba(96, 165, 250, 0.16), transparent 40%),
+    linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(17, 24, 39, 0.98));
+}
+
+.professional-clusters-secondary-intro {
+  max-width: 1120px;
+}
+
+.professional-clusters-secondary-intro .stat-label {
+  margin-bottom: 8px;
+}
+
+.professional-clusters-secondary-intro h3 {
+  margin: 0 0 10px;
+  font-size: clamp(1.35rem, 2vw, 1.85rem);
+  line-height: 1.12;
+}
+
+.professional-clusters-secondary-intro p {
+  margin: 0;
+  max-width: 108ch;
+  line-height: 1.62;
+  color: var(--muted);
+}
+
+.user-postal-clusters-overview-card,
+.cartography-overview-card {
+  padding: 20px 20px 18px;
+}
+
+.user-postal-clusters-overview-card h2,
+.cartography-overview-card h2 {
+  margin: 6px 0 10px;
+  font-size: clamp(1.18rem, 1.55vw, 1.5rem);
+  line-height: 1.14;
+}
+
+.user-postal-clusters-overview-card p,
+.cartography-overview-card p {
+  margin: 0;
+  max-width: 64ch;
+  line-height: 1.56;
+}
+
+.user-postal-clusters-period-note {
+  margin-top: 10px !important;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.cartography-quality-note {
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/*
+  Ajustement de la grille après insertion du chapeau commun :
+  - carte principale U→P en haut ;
+  - chapeau commun en pleine largeur ;
+  - deux légendes compactes côte à côte ;
+  - deux cartes côte à côte.
+*/
+@media (min-width: 1080px) {
+  .professional-clusters-panel > .professional-clusters-secondary-intro-card {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .professional-clusters-panel > .user-postal-clusters-overview-card {
+    grid-column: 1;
+    grid-row: 3;
+  }
+
+  .professional-clusters-panel > .cartography-overview-card {
+    grid-column: 2;
+    grid-row: 3;
+  }
+
+  .professional-clusters-panel > .user-postal-clusters-map-card {
+    grid-column: 1;
+    grid-row: 4;
+  }
+
+  .professional-clusters-panel > .cartography-map-card {
+    grid-column: 2;
+    grid-row: 4;
+  }
+
+  .professional-clusters-panel > .user-postal-clusters-overview-card .user-postal-clusters-overview-header,
+  .professional-clusters-panel > .cartography-overview-card .cartography-overview-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+  }
+
+  .professional-clusters-panel > .user-postal-clusters-overview-card .user-postal-clusters-kpis,
+  .professional-clusters-panel > .cartography-overview-card .cartography-kpis {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+}
+
+@media (max-width: 1079px) {
+  .professional-clusters-secondary-intro-card {
+    padding: 20px;
+  }
+
+  .professional-clusters-secondary-intro h3 {
+    font-size: 1.35rem;
+  }
+}
+
+
+/* ==========================================================================
+   PRODETAIL005B — Network B2B centré sur le professionnel
+   ========================================================================== */
+
+.pro-detail-network-loading-card {
+  padding: 24px;
+  color: var(--muted);
+}
+
+.pro-detail-network-card {
+  padding: 26px;
+  overflow: hidden;
+}
+
+.pro-detail-network-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 24px;
+  align-items: start;
+  margin-bottom: 20px;
+}
+
+.pro-detail-network-heading h3 {
+  margin: 7px 0 10px;
+  color: var(--text-strong);
+  font-size: clamp(1.28rem, 2vw, 1.72rem);
+  line-height: 1.3;
+}
+
+.pro-detail-network-heading p {
+  max-width: 90ch;
+  margin: 0;
+  color: var(--text);
+  line-height: 1.62;
+}
+
+.pro-detail-network-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(112px, 1fr));
+  gap: 12px;
+}
+
+.pro-detail-network-kpis > div {
+  min-width: 112px;
+  padding: 14px 15px;
+  border: 1px solid var(--card-border);
+  border-radius: 18px;
+  background: var(--table-head-bg);
+  text-align: center;
+}
+
+.pro-detail-network-kpis strong {
+  display: block;
+  color: var(--text-strong);
+  font-size: 1.62rem;
+  line-height: 1.18;
+}
+
+.pro-detail-network-kpis span {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.pro-detail-network-operator-note {
+  margin-bottom: 18px;
+  padding: 15px 17px;
+  border: 1px solid rgba(217, 119, 6, 0.28);
+  border-radius: 18px;
+  background: rgba(255, 247, 237, 0.82);
+  color: var(--text);
+  line-height: 1.58;
+}
+
+body.dark-mode .pro-detail-network-operator-note {
+  border-color: rgba(251, 146, 60, 0.30);
+  background: rgba(124, 45, 18, 0.26);
+}
+
+.pro-detail-network-operator-note strong {
+  color: var(--text-strong);
+}
+
+.pro-detail-network-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.pro-detail-network-legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  color: var(--text);
+  font-size: 0.94rem;
+}
+
+.pro-detail-network-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pro-detail-network-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+}
+
+.pro-detail-network-dot-inbound {
+  background: #60a5fa;
+  border: 2px solid #2563eb;
+}
+
+.pro-detail-network-dot-outbound {
+  background: #fdba74;
+  border: 2px solid #ea580c;
+}
+
+.pro-detail-network-dot-reciprocal {
+  background: #c084fc;
+  border: 2px solid #7e22ce;
+}
+
+.pro-detail-network-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pro-detail-network-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 18px;
+  align-items: stretch;
+}
+
+.pro-detail-network-main {
+  min-width: 0;
+}
+
+.pro-detail-network-graph {
+  width: 100%;
+  height: min(68vh, 720px);
+  min-height: 520px;
+  border: 1px solid var(--network-graph-border);
+  border-radius: 24px;
+  background: var(--network-graph-bg);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.pro-detail-network-panel {
+  min-height: 520px;
+  padding: 16px;
+  border: 1px solid var(--network-panel-border);
+  border-radius: 24px;
+  background: var(--network-panel-bg);
+}
+
+.pro-detail-network-panel-card h4 {
+  margin: 8px 0 12px;
+  color: var(--text-strong);
+  font-size: 1.15rem;
+  line-height: 1.32;
+}
+
+.pro-detail-network-panel-card p {
+  margin: 10px 0;
+  color: var(--text);
+  line-height: 1.55;
+}
+
+.pro-detail-network-panel-ref {
+  display: inline-flex;
+  margin-bottom: 10px;
+  padding: 5px 10px;
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  background: var(--table-head-bg);
+  color: var(--text-strong);
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.pro-detail-network-panel-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.pro-detail-network-panel-metrics > div {
+  padding: 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  background: var(--table-head-bg);
+  text-align: center;
+}
+
+.pro-detail-network-panel-metrics strong {
+  display: block;
+  color: var(--text-strong);
+  font-size: 1.45rem;
+}
+
+.pro-detail-network-panel-metrics span {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.pro-detail-network-relation-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.pro-detail-network-relation {
+  display: grid;
+  gap: 5px;
+  padding: 13px 14px;
+  border: 1px solid var(--card-border);
+  border-radius: 18px;
+}
+
+.pro-detail-network-relation span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.pro-detail-network-relation strong {
+  color: var(--text-strong);
+  font-size: 1.24rem;
+}
+
+.pro-detail-network-relation small {
+  color: var(--text);
+}
+
+.pro-detail-network-relation-inbound {
+  border-left: 4px solid rgba(37, 99, 235, 0.70);
+}
+
+.pro-detail-network-relation-outbound {
+  border-left: 4px solid rgba(234, 88, 12, 0.74);
+}
+
+.pro-detail-network-panel-actions {
+  margin-top: 18px;
+}
+
+.pro-detail-network-panel-actions .primary-btn {
+  width: 100%;
+}
+
+.pro-detail-network-empty-shell,
+.pro-detail-network-empty {
+  display: grid;
+  place-items: center;
+  min-height: 280px;
+  padding: 28px;
+  border: 1px dashed var(--card-border);
+  border-radius: 22px;
+  color: var(--muted);
+  text-align: center;
+}
+
+@media (max-width: 1180px) {
+  .pro-detail-network-heading {
+    grid-template-columns: 1fr;
+  }
+
+  .pro-detail-network-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .pro-detail-network-panel {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .pro-detail-network-card {
+    padding: 20px;
+  }
+
+  .pro-detail-network-kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .pro-detail-network-graph {
+    min-height: 420px;
+    height: 58vh;
+  }
+
+  .pro-detail-network-panel-metrics {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* ==========================================================================
+   PROCLUSTERS_HARMONY002 — Harmonisation des blocs et des cartes secondaires
+   ========================================================================== */
+
+.user-postal-clusters-overview-card,
+.cartography-overview-card {
+  min-height: 252px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.user-postal-clusters-overview-card .user-postal-clusters-overview-header,
+.cartography-overview-card .cartography-overview-header {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.user-postal-clusters-overview-card p,
+.cartography-overview-card p {
+  min-height: 72px;
+}
+
+.user-postal-clusters-kpis,
+.cartography-kpis {
+  margin-top: 4px;
+}
+
+.user-postal-clusters-map-card,
+.cartography-map-card {
+  padding-bottom: 14px;
+}
+
+.user-postal-clusters-map-card .user-postal-clusters-map,
+.cartography-map-card .cartography-map {
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.user-postal-clusters-map-note,
+.cartography-map-note {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: rgba(148, 163, 184, 0.08);
+  font-size: 0.96rem;
+  line-height: 1.55;
+}
+
+.user-postal-clusters-map-note strong,
+.cartography-map-note strong {
+  color: var(--text-color);
+}
+
+body.dark-mode .user-postal-clusters-map-note,
+body.dark-mode .cartography-map-note {
+  background: rgba(148, 163, 184, 0.10);
+}
+
+.cartography-map-toolbar,
+.user-postal-clusters-map-toolbar {
+  margin-bottom: 10px;
+}
+
+.cartography-quality-note,
+.user-postal-clusters-period-note {
+  margin-top: 10px;
+}
+
+@media (min-width: 1080px) {
+  .user-postal-clusters-overview-card,
+  .cartography-overview-card {
+    min-height: 260px;
+  }
+
+  .user-postal-clusters-map-card,
+  .cartography-map-card {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .user-postal-clusters-map-note,
+  .cartography-map-note {
+    min-height: 82px;
+  }
+}
+
+@media (max-width: 1079px) {
+  .user-postal-clusters-overview-card,
+  .cartography-overview-card {
+    min-height: auto;
+  }
+
+  .user-postal-clusters-overview-card p,
+  .cartography-overview-card p {
+    min-height: auto;
+  }
+}
+
+
+/* ==========================================================================
+   PRODETAIL005B-FIX1 — Particuliers payeurs agrégés
+   ========================================================================== */
+
+.pro-detail-network-dot-individual {
+  background: #6ee7b7;
+  border: 2px solid #059669;
+}
+
+.pro-detail-network-panel-metrics-single {
+  grid-template-columns: 1fr;
+}
+
+.pro-detail-network-relation-individual {
+  border-left: 4px solid rgba(5, 150, 105, 0.72);
+}
+
+.pro-detail-network-individual-note {
+  margin-top: 18px !important;
+  padding: 13px 14px;
+  border: 1px solid rgba(5, 150, 105, 0.22);
+  border-radius: 16px;
+  background: rgba(236, 253, 245, 0.82);
+  color: var(--text);
+  font-size: 0.93rem;
+  line-height: 1.55;
+}
+
+body.dark-mode .pro-detail-network-individual-note {
+  border-color: rgba(52, 211, 153, 0.26);
+  background: rgba(6, 78, 59, 0.26);
+}
+
+
+/* ==========================================================================
+   PRODETAIL005C — Trajectoire de solde professionnel
+   ========================================================================== */
+
+.pro-detail-balance-card {
+  margin-top: 22px;
+  padding: 26px;
+  overflow: hidden;
+}
+
+.pro-detail-balance-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  gap: 22px;
+  align-items: stretch;
+  margin-bottom: 20px;
+}
+
+.pro-detail-balance-heading h3 {
+  margin: 7px 0 10px;
+  color: var(--text-strong);
+  font-size: clamp(1.28rem, 2vw, 1.72rem);
+  line-height: 1.3;
+}
+
+.pro-detail-balance-heading p {
+  max-width: 90ch;
+  margin: 0;
+  color: var(--text);
+  line-height: 1.62;
+}
+
+.pro-detail-balance-change {
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  padding: 18px 20px;
+  border: 1px solid var(--card-border);
+  border-radius: 24px;
+  background: var(--table-head-bg);
+}
+
+.pro-detail-balance-change span {
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.pro-detail-balance-change strong {
+  color: var(--text-strong);
+  font-size: clamp(1.8rem, 2.6vw, 2.45rem);
+  line-height: 1.12;
+}
+
+.pro-detail-balance-change small {
+  color: var(--text);
+  line-height: 1.45;
+}
+
+.pro-detail-balance-change-watch {
+  border-color: rgba(217, 119, 6, 0.28);
+  background: rgba(255, 247, 237, 0.90);
+}
+
+body.dark-mode .pro-detail-balance-change-watch {
+  border-color: rgba(251, 146, 60, 0.30);
+  background: rgba(124, 45, 18, 0.28);
+}
+
+.pro-detail-balance-change-active {
+  border-color: rgba(37, 99, 235, 0.28);
+  background: rgba(239, 246, 255, 0.90);
+}
+
+body.dark-mode .pro-detail-balance-change-active {
+  border-color: rgba(96, 165, 250, 0.30);
+  background: rgba(30, 58, 138, 0.24);
+}
+
+.pro-detail-balance-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.pro-detail-balance-kpis > div {
+  padding: 15px 16px;
+  border: 1px solid var(--card-border);
+  border-radius: 18px;
+  background: var(--table-head-bg);
+}
+
+.pro-detail-balance-kpis span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.pro-detail-balance-kpis strong {
+  color: var(--text-strong);
+  font-size: clamp(1.18rem, 1.8vw, 1.52rem);
+  line-height: 1.24;
+}
+
+.pro-detail-balance-chart-frame {
+  height: min(48vh, 520px);
+  min-height: 360px;
+  padding: 18px 16px 10px;
+  border: 1px solid var(--card-border);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.76);
+}
+
+body.dark-mode .pro-detail-balance-chart-frame {
+  background: rgba(15, 23, 42, 0.48);
+}
+
+.pro-detail-balance-empty {
+  display: grid;
+  place-items: center;
+  min-height: 220px;
+  padding: 24px;
+  border: 1px dashed var(--card-border);
+  border-radius: 22px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.pro-detail-balance-method-note {
+  margin-top: 18px;
+  padding: 16px 18px;
+  border: 1px solid var(--card-border);
+  border-radius: 18px;
+  background: var(--table-head-bg);
+  color: var(--text);
+  line-height: 1.58;
+}
+
+.pro-detail-balance-method-note strong {
+  color: var(--text-strong);
+}
+
+@media (max-width: 1080px) {
+  .pro-detail-balance-heading {
+    grid-template-columns: 1fr;
+  }
+
+  .pro-detail-balance-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .pro-detail-balance-card {
+    padding: 20px;
+  }
+
+  .pro-detail-balance-kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .pro-detail-balance-chart-frame {
+    min-height: 300px;
+    height: 46vh;
+  }
+}
+
+
+/* ==========================================================================
+   PRODETAIL005D — Rythme des paiements particuliers
+   ========================================================================== */
+
+.pro-detail-payment-rhythm-card {
+  margin-top: 22px;
+  padding: 26px;
+  overflow: hidden;
+}
+
+.pro-detail-payment-rhythm-heading h3 {
+  margin: 7px 0 10px;
+  color: var(--text-strong);
+  font-size: clamp(1.28rem, 2vw, 1.72rem);
+  line-height: 1.3;
+}
+
+.pro-detail-payment-rhythm-heading p {
+  max-width: 96ch;
+  margin: 0;
+  color: var(--text);
+  line-height: 1.62;
+}
+
+.pro-detail-payment-rhythm-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 20px;
+  margin-bottom: 18px;
+}
+
+.pro-detail-payment-rhythm-kpis > div {
+  padding: 15px 16px;
+  border: 1px solid var(--card-border);
+  border-radius: 18px;
+  background: var(--table-head-bg);
+}
+
+.pro-detail-payment-rhythm-kpis span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.pro-detail-payment-rhythm-kpis strong {
+  color: var(--text-strong);
+  font-size: clamp(1.18rem, 1.8vw, 1.52rem);
+  line-height: 1.24;
+}
+
+.pro-detail-payment-heatmap-wrap {
+  overflow-x: auto;
+  padding: 18px;
+  border: 1px solid var(--card-border);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.76);
+}
+
+body.dark-mode .pro-detail-payment-heatmap-wrap {
+  background: rgba(15, 23, 42, 0.48);
+}
+
+.pro-detail-payment-heatmap {
+  display: grid;
+  grid-template-columns: 104px repeat(24, minmax(34px, 1fr));
+  gap: 6px;
+  min-width: 980px;
+  align-items: center;
+}
+
+.pro-detail-payment-heatmap-corner {
+  height: 30px;
+}
+
+.pro-detail-payment-heatmap-hour {
+  display: grid;
+  place-items: center;
+  min-height: 30px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.pro-detail-payment-heatmap-day {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  color: var(--text-strong);
+  font-size: 0.90rem;
+  font-weight: 760;
+}
+
+.pro-detail-payment-heatmap-cell {
+  display: grid;
+  place-items: center;
+  min-height: 34px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 10px;
+  color: var(--text-strong);
+  font-size: 0.80rem;
+  font-weight: 850;
+  cursor: help;
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease,
+    border-color 120ms ease;
+}
+
+.pro-detail-payment-heatmap-cell:hover {
+  transform: translateY(-1px);
+  border-color: rgba(37, 99, 235, 0.40);
+  box-shadow: 0 10px 18px rgba(15, 23, 42, 0.10);
+}
+
+.pro-detail-payment-heatmap-level-0 {
+  background: rgba(226, 232, 240, 0.36);
+  color: transparent;
+}
+
+body.dark-mode .pro-detail-payment-heatmap-level-0 {
+  background: rgba(51, 65, 85, 0.36);
+}
+
+.pro-detail-payment-heatmap-level-1 {
+  background: rgba(191, 219, 254, 0.54);
+}
+
+.pro-detail-payment-heatmap-level-2 {
+  background: rgba(147, 197, 253, 0.66);
+}
+
+.pro-detail-payment-heatmap-level-3 {
+  background: rgba(96, 165, 250, 0.76);
+}
+
+.pro-detail-payment-heatmap-level-4 {
+  background: rgba(59, 130, 246, 0.84);
+  color: #eff6ff;
+}
+
+.pro-detail-payment-heatmap-level-5 {
+  background: rgba(37, 99, 235, 0.94);
+  color: #eff6ff;
+}
+
+.pro-detail-payment-heatmap-empty {
+  display: grid;
+  place-items: center;
+  min-height: 220px;
+  border: 1px dashed var(--card-border);
+  border-radius: 22px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.pro-detail-payment-rhythm-note {
+  margin-top: 18px;
+  padding: 16px 18px;
+  border: 1px solid var(--card-border);
+  border-radius: 18px;
+  background: var(--table-head-bg);
+  color: var(--text);
+  line-height: 1.58;
+}
+
+.pro-detail-payment-rhythm-note strong {
+  color: var(--text-strong);
+}
+
+@media (max-width: 1080px) {
+  .pro-detail-payment-rhythm-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .pro-detail-payment-rhythm-card {
+    padding: 20px;
+  }
+
+  .pro-detail-payment-rhythm-kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .pro-detail-payment-heatmap-wrap {
+    padding: 14px;
+  }
+}
+
+
+/* ==========================================================================
+   PROSUMMARY_USERS001 — KPI de synthèse équilibrés particuliers / professionnels
+   ========================================================================== */
+
+.professional-summary-kpi-grid-balanced {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 1180px) {
+  .professional-summary-kpi-grid-balanced {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .professional-summary-kpi-grid-balanced {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* ==========================================================================
+   PRODETAIL005E — Structure du fond de commerce Gonette
+   ========================================================================== */
+
+.pro-detail-customer-concentration-card {
+  margin-top: 22px;
+  padding: 26px;
+  overflow: hidden;
+}
+
+.pro-detail-customer-concentration-heading h3 {
+  margin: 7px 0 10px;
+  color: var(--text-strong);
+  font-size: clamp(1.28rem, 2vw, 1.72rem);
+  line-height: 1.3;
+}
+
+.pro-detail-customer-concentration-heading p {
+  max-width: 98ch;
+  margin: 0;
+  color: var(--text);
+  line-height: 1.62;
+}
+
+.pro-detail-customer-concentration-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 20px;
+  margin-bottom: 18px;
+}
+
+.pro-detail-customer-concentration-kpis > div {
+  padding: 15px 16px;
+  border: 1px solid var(--card-border);
+  border-radius: 18px;
+  background: var(--table-head-bg);
+}
+
+.pro-detail-customer-concentration-kpis span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.pro-detail-customer-concentration-kpis strong {
+  color: var(--text-strong);
+  font-size: clamp(1.18rem, 1.8vw, 1.52rem);
+  line-height: 1.24;
+}
+
+.pro-detail-customer-concentration-chart-frame {
+  height: min(48vh, 520px);
+  min-height: 360px;
+  padding: 18px 16px 10px;
+  border: 1px solid var(--card-border);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.76);
+}
+
+body.dark-mode .pro-detail-customer-concentration-chart-frame {
+  background: rgba(15, 23, 42, 0.48);
+}
+
+.pro-detail-customer-concentration-empty {
+  display: grid;
+  place-items: center;
+  min-height: 220px;
+  padding: 24px;
+  border: 1px dashed var(--card-border);
+  border-radius: 22px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.pro-detail-customer-concentration-note {
+  margin-top: 18px;
+  padding: 16px 18px;
+  border: 1px solid var(--card-border);
+  border-radius: 18px;
+  background: var(--table-head-bg);
+  color: var(--text);
+  line-height: 1.58;
+}
+
+.pro-detail-customer-concentration-note strong {
+  color: var(--text-strong);
+}
+
+@media (max-width: 1080px) {
+  .pro-detail-customer-concentration-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .pro-detail-customer-concentration-card {
+    padding: 20px;
+  }
+
+  .pro-detail-customer-concentration-kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .pro-detail-customer-concentration-chart-frame {
+    min-height: 300px;
+    height: 46vh;
+  }
+}
+
+
+/* ==========================================================================
+   PRODETAIL006A — Refonte des onglets de fiche pro
+   ========================================================================== */
+
+.pro-detail-tabs {
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pro-detail-tabs .tab-btn {
+  white-space: normal;
+  line-height: 1.25;
+}
+
+.pro-customer-profile-loading-card {
+  padding: 24px;
+  color: var(--muted);
+}
+
+.pro-customer-profile-intro-card,
+.pro-prospects-intro-card {
+  margin-bottom: 22px;
+  padding: 26px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background:
+    radial-gradient(circle at 8% 10%, rgba(16, 185, 129, 0.08), rgba(16, 185, 129, 0) 30%),
+    rgba(255, 255, 255, 0.82);
+}
+
+body.dark-mode .pro-customer-profile-intro-card,
+body.dark-mode .pro-prospects-intro-card {
+  border-color: rgba(148, 163, 184, 0.22);
+  background:
+    radial-gradient(circle at 8% 10%, rgba(16, 185, 129, 0.12), rgba(16, 185, 129, 0) 30%),
+    rgba(15, 23, 42, 0.72);
+}
+
+.pro-prospects-intro-card {
+  background:
+    radial-gradient(circle at 8% 10%, rgba(217, 119, 6, 0.10), rgba(217, 119, 6, 0) 30%),
+    rgba(255, 255, 255, 0.82);
+}
+
+body.dark-mode .pro-prospects-intro-card {
+  background:
+    radial-gradient(circle at 8% 10%, rgba(251, 146, 60, 0.13), rgba(251, 146, 60, 0) 30%),
+    rgba(15, 23, 42, 0.72);
+}
+
+.pro-customer-profile-intro-card h3,
+.pro-prospects-intro-card h3 {
+  margin: 7px 0 10px;
+  color: var(--text-strong);
+  font-size: clamp(1.28rem, 2vw, 1.72rem);
+  line-height: 1.3;
+}
+
+.pro-customer-profile-intro-card p,
+.pro-prospects-intro-card p {
+  max-width: 100ch;
+  margin: 0;
+  color: var(--text);
+  line-height: 1.62;
+}
+
+@media (max-width: 760px) {
+  .pro-customer-profile-intro-card,
+  .pro-prospects-intro-card {
+    padding: 20px;
+  }
+}
+
+
+/* ==========================================================================
+   PRODETAIL006B — Fidélité & récurrence des payeurs
+   ========================================================================== */
+
+.pro-detail-loyalty-card {
+  margin-top: 22px;
+  padding: 26px;
+  overflow: hidden;
+}
+
+.pro-detail-loyalty-heading h3 {
+  margin: 7px 0 10px;
+  color: var(--text-strong);
+  font-size: clamp(1.28rem, 2vw, 1.72rem);
+  line-height: 1.3;
+}
+
+.pro-detail-loyalty-heading p {
+  max-width: 100ch;
+  margin: 0;
+  color: var(--text);
+  line-height: 1.62;
+}
+
+.pro-detail-loyalty-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 20px;
+  margin-bottom: 18px;
+}
+
+.pro-detail-loyalty-kpis > div {
+  padding: 15px 16px;
+  border: 1px solid var(--card-border);
+  border-radius: 18px;
+  background: var(--table-head-bg);
+}
+
+.pro-detail-loyalty-kpis span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.pro-detail-loyalty-kpis strong {
+  color: var(--text-strong);
+  font-size: clamp(1.18rem, 1.8vw, 1.52rem);
+  line-height: 1.24;
+}
+
+.pro-detail-loyalty-axes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.pro-detail-loyalty-axis-card {
+  padding: 18px 18px 16px;
+  border: 1px solid var(--card-border);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.76);
+}
+
+body.dark-mode .pro-detail-loyalty-axis-card {
+  background: rgba(15, 23, 42, 0.48);
+}
+
+.pro-detail-loyalty-axis-card h4 {
+  margin: 0 0 8px;
+  color: var(--text-strong);
+  font-size: 1.08rem;
+  line-height: 1.34;
+}
+
+.pro-detail-loyalty-axis-card p {
+  margin: 0 0 16px;
+  color: var(--text);
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+.pro-detail-loyalty-segment-track {
+  display: flex;
+  width: 100%;
+  height: 18px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.18);
+}
+
+.pro-detail-loyalty-segment {
+  min-width: 0;
+  height: 100%;
+  transition: width 180ms ease;
+}
+
+.pro-detail-loyalty-segment-new,
+.pro-detail-loyalty-legend-swatch-new {
+  background: #38bdf8;
+}
+
+.pro-detail-loyalty-segment-returning,
+.pro-detail-loyalty-legend-swatch-returning {
+  background: #2563eb;
+}
+
+.pro-detail-loyalty-segment-single,
+.pro-detail-loyalty-legend-swatch-single {
+  background: #cbd5e1;
+}
+
+.pro-detail-loyalty-segment-occasional,
+.pro-detail-loyalty-legend-swatch-occasional {
+  background: #f59e0b;
+}
+
+.pro-detail-loyalty-segment-frequent,
+.pro-detail-loyalty-legend-swatch-frequent {
+  background: #10b981;
+}
+
+.pro-detail-loyalty-legend {
+  display: grid;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.pro-detail-loyalty-legend-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  color: var(--text);
+  font-size: 0.94rem;
+}
+
+.pro-detail-loyalty-legend-item strong {
+  color: var(--text-strong);
+  font-size: 0.92rem;
+}
+
+.pro-detail-loyalty-legend-swatch {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  border-radius: 999px;
+}
+
+.pro-detail-loyalty-empty {
+  display: grid;
+  place-items: center;
+  min-height: 180px;
+  padding: 24px;
+  border: 1px dashed var(--card-border);
+  border-radius: 22px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.pro-detail-loyalty-note {
+  margin-top: 18px;
+  padding: 16px 18px;
+  border: 1px solid var(--card-border);
+  border-radius: 18px;
+  background: var(--table-head-bg);
+  color: var(--text);
+  line-height: 1.58;
+}
+
+.pro-detail-loyalty-note strong {
+  color: var(--text-strong);
+}
+
+@media (max-width: 1080px) {
+  .pro-detail-loyalty-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pro-detail-loyalty-axes {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .pro-detail-loyalty-card {
+    padding: 20px;
+  }
+
+  .pro-detail-loyalty-kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .pro-detail-loyalty-legend-item {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .pro-detail-loyalty-legend-item strong {
+    grid-column: 2;
+  }
+}
+
+
+/* ==========================================================================
+   PRODETAIL006C — Perspectives & débouchés
+   ========================================================================== */
+
+.pro-prospects-loading-card {
+  padding: 24px;
+  color: var(--muted);
+}
+
+.pro-prospects-overview-card {
+  margin-bottom: 22px;
+  padding: 26px;
+  overflow: hidden;
+}
+
+.pro-prospects-overview-heading h3 {
+  margin: 7px 0 10px;
+  color: var(--text-strong);
+  font-size: clamp(1.28rem, 2vw, 1.72rem);
+  line-height: 1.3;
+}
+
+.pro-prospects-overview-heading p {
+  max-width: 105ch;
+  margin: 0;
+  color: var(--text);
+  line-height: 1.62;
+}
+
+.pro-prospects-summary-kpis {
+  display: grid;
+  grid-template-columns: 1.4fr repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.pro-prospects-summary-kpis > div {
+  padding: 15px 16px;
+  border: 1px solid var(--card-border);
+  border-radius: 18px;
+  background: var(--table-head-bg);
+}
+
+.pro-prospects-summary-kpis span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.pro-prospects-summary-kpis strong {
+  display: block;
+  color: var(--text-strong);
+  font-size: clamp(1.08rem, 1.55vw, 1.36rem);
+  line-height: 1.28;
+}
+
+.pro-prospects-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.pro-prospect-card {
+  display: grid;
+  gap: 16px;
+  padding: 22px;
+  border-left: 5px solid rgba(148, 163, 184, 0.38);
+}
+
+.pro-prospect-card-strong {
+  border-left-color: rgba(16, 185, 129, 0.76);
+}
+
+.pro-prospect-card-medium {
+  border-left-color: rgba(59, 130, 246, 0.72);
+}
+
+.pro-prospect-card-exploratory {
+  border-left-color: rgba(217, 119, 6, 0.72);
+}
+
+.pro-prospect-card-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 14px;
+}
+
+.pro-prospect-card-heading h4 {
+  margin: 5px 0 0;
+  color: var(--text-strong);
+  font-size: 1.18rem;
+  line-height: 1.34;
+}
+
+.pro-prospect-signal {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.pro-prospect-signal-strong {
+  background: rgba(209, 250, 229, 0.94);
+  color: #047857;
+}
+
+.pro-prospect-signal-medium {
+  background: rgba(219, 234, 254, 0.94);
+  color: #1d4ed8;
+}
+
+.pro-prospect-signal-exploratory {
+  background: rgba(255, 237, 213, 0.94);
+  color: #9a3412;
+}
+
+body.dark-mode .pro-prospect-signal-strong {
+  background: rgba(6, 78, 59, 0.48);
+  color: #6ee7b7;
+}
+
+body.dark-mode .pro-prospect-signal-medium {
+  background: rgba(30, 58, 138, 0.40);
+  color: #93c5fd;
+}
+
+body.dark-mode .pro-prospect-signal-exploratory {
+  background: rgba(124, 45, 18, 0.42);
+  color: #fdba74;
+}
+
+.pro-prospect-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pro-prospect-meta span {
+  display: inline-flex;
+  padding: 6px 10px;
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  background: var(--table-head-bg);
+  color: var(--text);
+  font-size: 0.90rem;
+}
+
+.pro-prospect-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.pro-prospect-metrics > div {
+  padding: 14px 15px;
+  border: 1px solid var(--card-border);
+  border-radius: 18px;
+  background: var(--table-head-bg);
+}
+
+.pro-prospect-metrics span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.pro-prospect-metrics strong {
+  display: block;
+  color: var(--text-strong);
+  font-size: 1.24rem;
+  line-height: 1.24;
+}
+
+.pro-prospect-metrics small {
+  display: block;
+  margin-top: 5px;
+  color: var(--text);
+  line-height: 1.42;
+}
+
+.pro-prospect-flag {
+  padding: 13px 14px;
+  border-radius: 16px;
+  color: var(--text);
+  line-height: 1.55;
+}
+
+.pro-prospect-flag-reciprocal {
+  border: 1px solid rgba(37, 99, 235, 0.24);
+  background: rgba(239, 246, 255, 0.90);
+}
+
+body.dark-mode .pro-prospect-flag-reciprocal {
+  border-color: rgba(96, 165, 250, 0.28);
+  background: rgba(30, 58, 138, 0.26);
+}
+
+.pro-prospect-flag-reactivation {
+  border: 1px solid rgba(217, 119, 6, 0.26);
+  background: rgba(255, 247, 237, 0.90);
+}
+
+body.dark-mode .pro-prospect-flag-reactivation {
+  border-color: rgba(251, 146, 60, 0.30);
+  background: rgba(124, 45, 18, 0.28);
+}
+
+.pro-prospect-peers {
+  display: grid;
+  gap: 10px;
+}
+
+.pro-prospect-peers > span {
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.pro-prospect-peer-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pro-prospect-peer-chip {
+  appearance: none;
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  padding: 7px 11px;
+  background: var(--table-head-bg);
+  color: var(--text);
+  font-size: 0.90rem;
+  font-weight: 720;
+  cursor: pointer;
+  transition:
+    transform 120ms ease,
+    border-color 120ms ease;
+}
+
+.pro-prospect-peer-chip:hover {
+  transform: translateY(-1px);
+  border-color: rgba(37, 99, 235, 0.42);
+}
+
+.pro-prospect-actions {
+  margin-top: auto;
+}
+
+.pro-prospect-actions .primary-btn {
+  width: 100%;
+}
+
+.pro-prospects-empty-card,
+.pro-prospects-method-card {
+  margin-top: 18px;
+  padding: 20px;
+  line-height: 1.62;
+}
+
+.pro-prospects-method-card strong {
+  color: var(--text-strong);
+}
+
+@media (max-width: 1180px) {
+  .pro-prospects-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pro-prospects-summary-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .pro-prospects-overview-card {
+    padding: 20px;
+  }
+
+  .pro-prospects-summary-kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .pro-prospect-card {
+    padding: 18px;
+  }
+
+  .pro-prospect-card-heading {
+    flex-direction: column;
+  }
+
+  .pro-prospect-metrics {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* ==========================================================================
+   NETWORK001_ATLAS — Refonte de l'atlas relationnel P→P
+   ========================================================================== */
+
+.network-atlas-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(380px, 0.9fr);
+  gap: 24px;
+  align-items: start;
+  padding: 26px 28px;
+  border-color: rgba(59, 130, 246, 0.20);
+  background:
+    radial-gradient(circle at top right, rgba(37, 99, 235, 0.12), transparent 38%),
+    linear-gradient(135deg, rgba(239, 246, 255, 0.96), rgba(255, 255, 255, 0.98));
+}
+
+body.dark-mode .network-atlas-hero {
+  border-color: rgba(96, 165, 250, 0.28);
+  background:
+    radial-gradient(circle at top right, rgba(96, 165, 250, 0.18), transparent 42%),
+    linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(17, 24, 39, 0.98));
+}
+
+.network-atlas-hero-main h2 {
+  margin: 8px 0 12px;
+  font-size: clamp(1.7rem, 2.6vw, 2.55rem);
+  line-height: 1.04;
+}
+
+.network-atlas-hero-main p {
+  max-width: 88ch;
+  margin: 0;
+  line-height: 1.62;
+}
+
+.network-atlas-method-note {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border: 1px solid rgba(59, 130, 246, 0.18);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.66);
+  line-height: 1.55;
+}
+
+body.dark-mode .network-atlas-method-note {
+  border-color: rgba(96, 165, 250, 0.22);
+  background: rgba(15, 23, 42, 0.54);
+}
+
+.network-atlas-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.network-atlas-kpi {
+  min-height: 116px;
+  padding: 16px 16px 14px;
+  border: 1px solid var(--network-panel-border);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.88);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+}
+
+body.dark-mode .network-atlas-kpi {
+  background: rgba(15, 23, 42, 0.68);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.24);
+}
+
+.network-atlas-kpi span {
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.network-atlas-kpi strong {
+  font-size: clamp(1.45rem, 2vw, 2rem);
+  line-height: 1.08;
+}
+
+.network-atlas-kpi small {
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.network-atlas-workbench {
+  padding: 22px 22px 20px;
+}
+
+.network-atlas-workbench-header {
+  margin-bottom: 18px;
+}
+
+.network-atlas-workbench-header h3 {
+  margin: 6px 0 8px;
+  font-size: clamp(1.3rem, 1.8vw, 1.7rem);
+}
+
+.network-atlas-workbench-header p {
+  margin: 0;
+  max-width: 104ch;
+  line-height: 1.6;
+}
+
+.network-atlas-toolbar {
+  display: grid;
+  grid-template-columns: minmax(300px, 1.15fr) minmax(280px, 0.95fr) auto;
+  align-items: end;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid var(--network-panel-border);
+  background: rgba(148, 163, 184, 0.08);
+}
+
+body.dark-mode .network-atlas-toolbar {
+  background: rgba(148, 163, 184, 0.10);
+}
+
+.network-atlas-toolbar .network-search-box {
+  width: 100%;
+  min-width: 0;
+}
+
+.network-atlas-toolbar .network-search-box input {
+  width: 100%;
+}
+
+.network-atlas-toolbar .network-slider-group {
+  min-width: 0;
+}
+
+.network-atlas-toolbar .network-slider-group small {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.network-atlas-toolbar .network-actions {
+  justify-content: flex-end;
+}
+
+.network-atlas-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-bottom: 16px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.network-atlas-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 18px;
+  align-items: start;
+}
+
+.network-atlas-main {
+  min-width: 0;
+}
+
+#networkGraph {
+  height: min(78vh, 940px);
+  min-height: 720px;
+  border-radius: 24px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 18px 40px rgba(15, 23, 42, 0.10);
+}
+
+body.dark-mode #networkGraph {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 18px 42px rgba(0, 0, 0, 0.32);
+}
+
+.network-sidepanel {
+  max-width: none;
+  width: 340px;
+  padding: 18px;
+  border-radius: 20px;
+}
+
+.network-sidepanel-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 180px;
+  justify-content: center;
+}
+
+.network-sidepanel-empty strong {
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.network-sidepanel-empty span {
+  line-height: 1.6;
+}
+
+.network-sidepanel-card {
+  padding: 18px;
+  border-radius: 18px;
+}
+
+.network-sidepanel-card .stat-label {
+  margin-bottom: 8px;
+}
+
+.network-sidepanel-card h3 {
+  margin: 0 0 8px;
+  font-size: 1.2rem;
+  line-height: 1.25;
+}
+
+.network-sidepanel-ref {
+  margin: 0 0 16px !important;
+  color: var(--muted);
+  font-size: 0.92rem !important;
+}
+
+.network-sidepanel-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.network-sidepanel-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--network-panel-border);
+  border-radius: 14px;
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.network-sidepanel-metric span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.3;
+}
+
+.network-sidepanel-metric strong {
+  font-size: 1.08rem;
+}
+
+.network-sidepanel-directional {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.network-sidepanel-direction {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 12px;
+  border: 1px solid var(--network-panel-border);
+  border-radius: 14px;
+  background: rgba(148, 163, 184, 0.05);
+}
+
+.network-sidepanel-direction span {
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.network-sidepanel-direction strong {
+  text-align: right;
+  font-size: 0.98rem;
+}
+
+.network-sidepanel-reading {
+  margin: 12px 0 16px !important;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--muted);
+  font-size: 0.9rem !important;
+  line-height: 1.55;
+}
+
+body.dark-mode .network-sidepanel-reading {
+  background: rgba(96, 165, 250, 0.12);
+}
+
+@media (max-width: 1280px) {
+  .network-atlas-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .network-atlas-toolbar {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .network-atlas-toolbar .network-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+
+  .network-atlas-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .network-sidepanel {
+    position: static;
+    width: 100%;
+  }
+}
+
+@media (max-width: 760px) {
+  .network-atlas-hero {
+    padding: 20px;
+  }
+
+  .network-atlas-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .network-atlas-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .network-sidepanel-metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  #networkGraph {
+    min-height: 560px;
+    height: 70vh;
+  }
+}
+
+
+/* ==========================================================================
+   NETWORK002_ANALYTICS — Panneau analytique du graphe P→P
+   ========================================================================== */
+
+.network-role-chip {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 0 10px;
+  padding: 7px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--network-panel-border);
+  font-size: 0.84rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.network-role-chip-receiver {
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+  border-color: rgba(37, 99, 235, 0.24);
+}
+
+.network-role-chip-emitter {
+  background: rgba(249, 115, 22, 0.12);
+  color: #c2410c;
+  border-color: rgba(249, 115, 22, 0.24);
+}
+
+.network-role-chip-balanced {
+  background: rgba(16, 185, 129, 0.12);
+  color: #047857;
+  border-color: rgba(16, 185, 129, 0.24);
+}
+
+.network-role-chip-neutral {
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--muted);
+}
+
+body.dark-mode .network-role-chip-receiver {
+  color: #93c5fd;
+}
+
+body.dark-mode .network-role-chip-emitter {
+  color: #fdba74;
+}
+
+body.dark-mode .network-role-chip-balanced {
+  color: #6ee7b7;
+}
+
+.network-role-reading {
+  margin: 0 0 14px !important;
+  color: var(--muted);
+  font-size: 0.92rem !important;
+  line-height: 1.55;
+}
+
+.network-sidepanel-period-card {
+  margin: 12px 0;
+  padding: 13px;
+  border: 1px solid var(--network-panel-border);
+  border-radius: 16px;
+  background: rgba(148, 163, 184, 0.06);
+}
+
+.network-sidepanel-period-title {
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.network-sidepanel-period-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.network-sidepanel-period-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.network-sidepanel-period-grid span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
+
+.network-sidepanel-period-grid strong {
+  font-size: 0.98rem;
+  line-height: 1.25;
+  word-break: break-word;
+}
+
+.network-sidepanel-direction-muted {
+  background: rgba(148, 163, 184, 0.04);
+}
+
+.network-sidepanel-relations {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.network-relation-group h4 {
+  margin: 0 0 8px;
+  font-size: 0.92rem;
+  line-height: 1.3;
+}
+
+.network-relation-empty {
+  padding: 10px 11px;
+  border-radius: 12px;
+  border: 1px dashed var(--network-panel-border);
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.network-relation-list {
+  display: grid;
+  gap: 8px;
+}
+
+.network-relation-item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  padding: 10px 11px;
+  border: 1px solid var(--network-panel-border);
+  border-radius: 13px;
+  background: rgba(148, 163, 184, 0.06);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 0.16s ease,
+    border-color 0.16s ease,
+    background 0.16s ease;
+}
+
+.network-relation-item:hover {
+  transform: translateY(-1px);
+  border-color: rgba(37, 99, 235, 0.34);
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.network-relation-label {
+  font-size: 0.88rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.network-relation-item strong {
+  font-size: 0.96rem;
+  line-height: 1.2;
+}
+
+.network-relation-item small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+@media (max-width: 760px) {
+  .network-sidepanel-period-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* ==========================================================================
+   NETWORK003_OPERATORS — Toggle des comptes opérateurs
+   ========================================================================== */
+
+.network-operator-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  border: 1px solid rgba(249, 115, 22, 0.24);
+  border-radius: 18px;
+  background: rgba(249, 115, 22, 0.08);
+  cursor: pointer;
+}
+
+.network-operator-toggle input {
+  margin-top: 3px;
+  width: 18px;
+  height: 18px;
+  accent-color: #f97316;
+  flex: 0 0 auto;
+}
+
+.network-operator-toggle span {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.network-operator-toggle strong {
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+
+.network-operator-toggle small {
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+body.dark-mode .network-operator-toggle {
+  border-color: rgba(251, 146, 60, 0.32);
+  background: rgba(249, 115, 22, 0.12);
+}
+
+
+/* ==========================================================================
+   PRODETAIL006D — Carte dynamique du bassin de paiement
+   ========================================================================== */
+
+.pro-detail-payment-basin-card {
+  margin-top: 22px;
+  padding: 26px;
+  overflow: hidden;
+}
+
+.pro-detail-payment-basin-heading h3 {
+  margin: 7px 0 10px;
+  color: var(--text-strong);
+  font-size: clamp(1.34rem, 2.1vw, 1.82rem);
+  line-height: 1.3;
+}
+
+.pro-detail-payment-basin-heading p {
+  max-width: 104ch;
+  margin: 0;
+  color: var(--text);
+  line-height: 1.62;
+}
+
+.pro-detail-payment-basin-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 20px;
+  margin-bottom: 18px;
+}
+
+.pro-detail-payment-basin-kpis > div {
+  padding: 15px 16px;
+  border: 1px solid var(--card-border);
+  border-radius: 18px;
+  background: var(--table-head-bg);
+}
+
+.pro-detail-payment-basin-kpis span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.pro-detail-payment-basin-kpis strong {
+  display: block;
+  color: var(--text-strong);
+  font-size: clamp(1.16rem, 1.8vw, 1.52rem);
+  line-height: 1.24;
+}
+
+.pro-detail-payment-basin-map-frame {
+  position: relative;
+  height: min(62vh, 720px);
+  min-height: 520px;
+  overflow: hidden;
+  border: 1px solid var(--card-border);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(15, 23, 42, 0.04), rgba(15, 23, 42, 0) 58%),
+    rgba(255, 255, 255, 0.54);
+}
+
+body.dark-mode .pro-detail-payment-basin-map-frame {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(148, 163, 184, 0.07), rgba(148, 163, 184, 0) 58%),
+    rgba(15, 23, 42, 0.42);
+}
+
+#proDetailPaymentBasinCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.pro-detail-payment-basin-legend {
+  position: absolute;
+  left: 18px;
+  bottom: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  max-width: calc(100% - 36px);
+  padding: 11px 14px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.84);
+  backdrop-filter: blur(8px);
+  color: var(--text);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+body.dark-mode .pro-detail-payment-basin-legend {
+  background: rgba(15, 23, 42, 0.84);
+  border-color: rgba(148, 163, 184, 0.22);
+}
+
+.pro-detail-payment-basin-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.pro-detail-payment-basin-dot {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+}
+
+.pro-detail-payment-basin-dot-u {
+  background: #10b981;
+}
+
+.pro-detail-payment-basin-dot-p {
+  background: #3b82f6;
+}
+
+.pro-detail-payment-basin-dot-center {
+  background: #f59e0b;
+}
+
+.pro-detail-payment-basin-empty {
+  display: grid;
+  place-items: center;
+  min-height: 260px;
+  padding: 28px;
+  border: 1px dashed var(--card-border);
+  border-radius: 24px;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.58;
+}
+
+.pro-detail-payment-basin-note {
+  margin-top: 18px;
+  padding: 16px 18px;
+  border: 1px solid var(--card-border);
+  border-radius: 18px;
+  background: var(--table-head-bg);
+  color: var(--text);
+  line-height: 1.58;
+}
+
+.pro-detail-payment-basin-note strong {
+  color: var(--text-strong);
+}
+
+@media (max-width: 1080px) {
+  .pro-detail-payment-basin-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .pro-detail-payment-basin-card {
+    padding: 20px;
+  }
+
+  .pro-detail-payment-basin-kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .pro-detail-payment-basin-map-frame {
+    min-height: 420px;
+    height: 54vh;
+  }
+
+  .pro-detail-payment-basin-legend {
+    border-radius: 18px;
+  }
+}
+
+
+/* ==========================================================================
+   PRODETAIL006D-FIX2 — Échelle et labels cartographiques
+   ========================================================================== */
+
+.pro-detail-payment-basin-scale {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  display: grid;
+  justify-items: end;
+  gap: 5px;
+  padding: 10px 12px 9px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(8px);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1;
+  pointer-events: none;
+}
+
+body.dark-mode .pro-detail-payment-basin-scale {
+  background: rgba(15, 23, 42, 0.78);
+  border-color: rgba(148, 163, 184, 0.22);
+}
+
+.pro-detail-payment-basin-scale[hidden] {
+  display: none;
+}
+
+.pro-detail-payment-basin-scale-line {
+  height: 0;
+  border-top: 2px solid var(--text-strong);
+  position: relative;
+}
+
+.pro-detail-payment-basin-scale-line::before,
+.pro-detail-payment-basin-scale-line::after {
+  content: "";
+  position: absolute;
+  top: -5px;
+  width: 0;
+  height: 8px;
+  border-left: 2px solid var(--text-strong);
+}
+
+.pro-detail-payment-basin-scale-line::before {
+  left: 0;
+}
+
+.pro-detail-payment-basin-scale-line::after {
+  right: 0;
+}
+
+@media (max-width: 1180px) {
+  .pro-detail-payment-basin-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .pro-detail-payment-basin-scale {
+    top: 14px;
+    right: 14px;
+  }
+}
+
+
+/* ==========================================================================
+   PRODETAIL006D-FIX3 — Répartition par code postal
+   ========================================================================== */
+
+.pro-detail-payment-basin-postal-breakdown {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 15px 16px;
+  border: 1px solid var(--card-border);
+  border-radius: 20px;
+  background: var(--table-head-bg);
+}
+
+.pro-detail-payment-basin-postal-breakdown-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.pro-detail-payment-basin-postal-breakdown-heading span {
+  color: var(--text-strong);
+  font-size: 0.96rem;
+  font-weight: 850;
+}
+
+.pro-detail-payment-basin-postal-breakdown-heading small {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.pro-detail-payment-basin-postal-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.pro-detail-payment-basin-postal-chip {
+  display: grid;
+  gap: 3px;
+  min-width: 118px;
+  padding: 10px 12px;
+  border: 1px solid rgba(16, 185, 129, 0.24);
+  border-radius: 16px;
+  background: rgba(236, 253, 245, 0.82);
+}
+
+body.dark-mode .pro-detail-payment-basin-postal-chip {
+  border-color: rgba(52, 211, 153, 0.24);
+  background: rgba(6, 78, 59, 0.24);
+}
+
+.pro-detail-payment-basin-postal-chip strong {
+  color: var(--text-strong);
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.pro-detail-payment-basin-postal-chip span {
+  color: var(--text);
+  font-size: 0.90rem;
+  font-weight: 760;
+}
+
+.pro-detail-payment-basin-postal-chip small {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+@media (max-width: 760px) {
+  .pro-detail-payment-basin-postal-chip {
+    min-width: 0;
+    flex: 1 1 140px;
+  }
 }

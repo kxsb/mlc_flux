@@ -44,7 +44,26 @@ def network():
     year = request.args.get("year", default=None, type=int)
     start = request.args.get("start")
     end = request.args.get("end")
-    return jsonify(compute_network_data(start=start, end=end, year=year))
+
+    include_operators_raw = str(
+        request.args.get("include_operators", default="", type=str) or ""
+    ).strip().lower()
+
+    include_operators = include_operators_raw in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+    return jsonify(
+        compute_network_data(
+            start=start,
+            end=end,
+            year=year,
+            include_operators=include_operators,
+        )
+    )
 
 
 @legacy_api_bp.route("/api/pros", methods=["GET"])
