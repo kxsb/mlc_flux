@@ -92,8 +92,11 @@ const appState = {
     daily: null
   },
 
-  info: {
-    markdown: null
+      info: {
+    pages: null,
+    activePage: null,
+    markdown: null,
+    searchIndex: null
   },
 
   tickets: {
@@ -3918,12 +3921,582 @@ function setInfoFeedback(message, isError = false) {
   feedback.classList.toggle("is-success", Boolean(message) && !isError);
 }
 
+function renderInfoPageCards(pages, activePageSlug) {
+  const safePages = Array.isArray(pages) ? pages : [];
+
+  if (safePages.length === 0) {
+    return `
+      <p class="info-page-grid-empty">
+        Aucune fiche de documentation disponible.
+      </p>
+    `;
+  }
+
+  return safePages.map((page) => {
+    const slug = String(page?.slug || "");
+    const title = String(page?.title || "Fiche sans titre");
+    const kicker = String(page?.kicker || "Documentation");
+    const summary = String(page?.summary || "");
+    const isActive = slug && slug === activePageSlug;
+
+    return `
+      <button
+        class="card info-page-card ${isActive ? "is-active" : ""}"
+        type="button"
+        data-info-page-slug="${escapeHtml(slug)}"
+        aria-pressed="${isActive ? "true" : "false"}"
+      >
+        <span class="info-page-card-kicker">${escapeHtml(kicker)}</span>
+        <strong class="info-page-card-title">${escapeHtml(title)}</strong>
+        <span class="info-page-card-summary">${escapeHtml(summary)}</span>
+      </button>
+    `;
+  }).join("");
+}
+
+function getActiveInfoPage() {
+  const pages = Array.isArray(appState.info.pages) ? appState.info.pages : [];
+  return pages.find((page) => page?.slug === appState.info.activePage) || null;
+}
+
+function renderInfoActivePageMeta(page) {
+  const kicker = String(page?.kicker || "Documentation");
+  const title = String(page?.title || "Fiche de documentation");
+  const summary = String(page?.summary || "");
+
+  return `
+    <div class="info-active-page-copy">
+      <p class="info-view-kicker">${escapeHtml(kicker)}</p>
+      <h3>${escapeHtml(title)}</h3>
+      <p class="info-active-page-summary">${escapeHtml(summary)}</p>
+    </div>
+  `;
+}
+
+function normalizeInfoDocumentationSearchText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/→/g, " vers ")
+    .replace(/[^\w]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function stripInfoMarkdownForSearch(markdown) {
+  return String(markdown || "")
+    .replace(/```[\s\S]*?```/g, (block) => block.replace(/```/g, " "))
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^>\s?/gm, "")
+    .replace(/[*_`~]/g, "")
+    .replace(/\[(.*?)\]\((.*?)\)/g, "$1")
+    .replace(/\|/g, " ")
+    .replace(/-{3,}/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractInfoSearchSections(markdown) {
+  const lines = String(markdown || "").split(/\r?\n/);
+  const sections = [];
+  const usedIds = new Map();
+
+  let current = {
+    heading: "",
+    level: 0,
+    body: []
+  };
+
+  const pushCurrent = () => {
+    const heading = String(current.heading || "").trim();
+
+    if (!heading) {
+      return;
+    }
+
+    const baseId = slugifyInfoHeadingText(heading);
+    const occurrence = usedIds.get(baseId) || 0;
+    const anchorId = occurrence === 0
+      ? baseId
+      : `${baseId}-${occurrence + 1}`;
+
+    usedIds.set(baseId, occurrence + 1);
+
+    const bodyMarkdown = current.body.join("\n");
+    const bodyText = stripInfoMarkdownForSearch(bodyMarkdown);
+
+    sections.push({
+      heading,
+      level: current.level,
+      anchorId,
+      bodyText,
+      searchableText: normalizeInfoDocumentationSearchText(
+        `${heading} ${bodyText}`
+      )
+    });
+  };
+
+  lines.forEach((line) => {
+    const match = line.match(/^(#{1,3})\s+(.+?)\s*$/);
+
+    if (match) {
+      pushCurrent();
+
+      current = {
+        heading: match[2],
+        level: match[1].length,
+        body: []
+      };
+      return;
+    }
+
+    current.body.push(line);
+  });
+
+  pushCurrent();
+
+  return sections;
+}
+
+function prepareInfoSearchIndex(items) {
+  const safeItems = Array.isArray(items) ? items : [];
+
+  return safeItems.map((item) => {
+    const page = item?.page || {};
+    const markdown = String(item?.markdown || "");
+    const title = String(page?.title || "");
+    const kicker = String(page?.kicker || "");
+    const summary = String(page?.summary || "");
+    const plainText = stripInfoMarkdownForSearch(markdown);
+
+    return {
+      page,
+      markdown,
+      pageSearchText: normalizeInfoDocumentationSearchText(
+        `${title} ${kicker} ${summary} ${plainText}`
+      ),
+      sections: extractInfoSearchSections(markdown)
+    };
+  });
+}
+
+async function ensureInfoSearchIndex() {
+  if (Array.isArray(appState.info.searchIndex)) {
+    return appState.info.searchIndex;
+  }
+
+  const data = await apiGet("/api/info-search-index");
+  appState.info.searchIndex = prepareInfoSearchIndex(data.items || []);
+  return appState.info.searchIndex;
+}
+
+function infoSearchAllTokensMatch(searchableText, tokens) {
+  return tokens.every((token) => searchableText.includes(token));
+}
+
+function buildInfoSearchSnippet(text, tokens) {
+  const source = String(text || "").replace(/\s+/g, " ").trim();
+
+  if (!source) {
+    return "";
+  }
+
+  const normalized = normalizeInfoDocumentationSearchText(source);
+  let firstMatchIndex = -1;
+
+  for (const token of tokens) {
+    const index = normalized.indexOf(token);
+    if (index !== -1 && (firstMatchIndex === -1 || index < firstMatchIndex)) {
+      firstMatchIndex = index;
+    }
+  }
+
+  if (firstMatchIndex === -1) {
+    return source.length > 190
+      ? `${source.slice(0, 187).trim()}…`
+      : source;
+  }
+
+  const start = Math.max(0, firstMatchIndex - 55);
+  const end = Math.min(source.length, firstMatchIndex + 135);
+  const prefix = start > 0 ? "…" : "";
+  const suffix = end < source.length ? "…" : "";
+
+  return `${prefix}${source.slice(start, end).trim()}${suffix}`;
+}
+
+function scoreInfoSearchCandidate({
+  tokens,
+  page,
+  section = null
+}) {
+  const titleText = normalizeInfoDocumentationSearchText(page?.title || "");
+  const kickerText = normalizeInfoDocumentationSearchText(page?.kicker || "");
+  const summaryText = normalizeInfoDocumentationSearchText(page?.summary || "");
+  const sectionHeadingText = normalizeInfoDocumentationSearchText(section?.heading || "");
+  const sectionBodyText = normalizeInfoDocumentationSearchText(section?.bodyText || "");
+
+  let score = 0;
+
+  tokens.forEach((token) => {
+    if (sectionHeadingText.includes(token)) score += 14;
+    if (titleText.includes(token)) score += 12;
+    if (kickerText.includes(token)) score += 8;
+    if (summaryText.includes(token)) score += 6;
+    if (sectionBodyText.includes(token)) score += 3;
+  });
+
+  if (section && section.level === 1) score += 1;
+
+  return score;
+}
+
+function searchInfoDocumentation(query) {
+  const normalizedQuery = normalizeInfoDocumentationSearchText(query);
+  const tokens = normalizedQuery
+    .split(" ")
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 1);
+
+  if (tokens.length === 0) {
+    return [];
+  }
+
+  const index = Array.isArray(appState.info.searchIndex)
+    ? appState.info.searchIndex
+    : [];
+
+  const results = [];
+
+  index.forEach((item) => {
+    const page = item.page || {};
+
+    item.sections.forEach((section) => {
+      if (!infoSearchAllTokensMatch(section.searchableText, tokens)) {
+        return;
+      }
+
+      results.push({
+        kind: "section",
+        pageSlug: page.slug,
+        pageTitle: page.title,
+        pageKicker: page.kicker,
+        sectionHeading: section.heading,
+        anchorId: section.anchorId,
+        score: scoreInfoSearchCandidate({
+          tokens,
+          page,
+          section
+        }),
+        snippet: buildInfoSearchSnippet(section.bodyText, tokens)
+      });
+    });
+
+    const titleSummaryText = normalizeInfoDocumentationSearchText(
+      `${page.title || ""} ${page.kicker || ""} ${page.summary || ""}`
+    );
+
+    if (infoSearchAllTokensMatch(titleSummaryText, tokens)) {
+      results.push({
+        kind: "page",
+        pageSlug: page.slug,
+        pageTitle: page.title,
+        pageKicker: page.kicker,
+        sectionHeading: "",
+        anchorId: "",
+        score: scoreInfoSearchCandidate({
+          tokens,
+          page
+        }) + 4,
+        snippet: String(page.summary || "")
+      });
+    }
+  });
+
+  const deduped = new Map();
+
+  results.forEach((result) => {
+    const key = `${result.pageSlug}::${result.anchorId || "__page__"}`;
+    const existing = deduped.get(key);
+
+    if (!existing || result.score > existing.score) {
+      deduped.set(key, result);
+    }
+  });
+
+  return Array.from(deduped.values())
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 12);
+}
+
+function renderInfoSearchResults(results, query) {
+  const container = document.getElementById("infoSearchResults");
+
+  if (!container) {
+    return;
+  }
+
+  const trimmedQuery = String(query || "").trim();
+
+  if (!trimmedQuery) {
+    container.classList.add("hidden");
+    container.innerHTML = "";
+    return;
+  }
+
+  if (!Array.isArray(results) || results.length === 0) {
+    container.classList.remove("hidden");
+    container.innerHTML = `
+      <div class="info-search-empty">
+        Aucun résultat documentaire trouvé pour
+        <strong>${escapeHtml(trimmedQuery)}</strong>.
+      </div>
+    `;
+    return;
+  }
+
+  container.classList.remove("hidden");
+  container.innerHTML = `
+    <div class="info-search-results-header">
+      ${results.length} résultat${results.length > 1 ? "s" : ""} pertinent${results.length > 1 ? "s" : ""}
+    </div>
+    <div class="info-search-results-list">
+      ${results.map((result) => {
+        const label = result.kind === "section"
+          ? result.sectionHeading
+          : result.pageTitle;
+
+        const path = result.kind === "section"
+          ? `${result.pageTitle} → ${result.sectionHeading}`
+          : result.pageTitle;
+
+        return `
+          <button
+            class="info-search-result-item"
+            type="button"
+            data-info-search-page="${escapeHtml(result.pageSlug || "")}"
+            data-info-search-anchor="${escapeHtml(result.anchorId || "")}"
+          >
+            <span class="info-search-result-kicker">
+              ${escapeHtml(result.pageKicker || "Documentation")}
+            </span>
+            <strong class="info-search-result-title">
+              ${escapeHtml(label || result.pageTitle || "Résultat documentaire")}
+            </strong>
+            <span class="info-search-result-path">
+              ${escapeHtml(path || "")}
+            </span>
+            ${result.snippet ? `
+              <span class="info-search-result-snippet">
+                ${escapeHtml(result.snippet)}
+              </span>
+            ` : ""}
+          </button>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function highlightInfoSearchTarget(target) {
+  if (!target) {
+    return;
+  }
+
+  target.classList.add("info-search-target-highlight");
+
+  window.setTimeout(() => {
+    target.classList.remove("info-search-target-highlight");
+  }, 2200);
+}
+
+function bindInfoSearch() {
+  const input = document.getElementById("infoDocumentationSearch");
+  const clearButton = document.getElementById("infoDocumentationSearchClear");
+  const resultsContainer = document.getElementById("infoSearchResults");
+
+  if (!input || !clearButton || !resultsContainer) {
+    return;
+  }
+
+  const refreshSearch = async () => {
+    const query = input.value || "";
+
+    if (!query.trim()) {
+      renderInfoSearchResults([], "");
+      return;
+    }
+
+    resultsContainer.classList.remove("hidden");
+    resultsContainer.innerHTML = `
+      <div class="info-search-loading">
+        Recherche dans la documentation…
+      </div>
+    `;
+
+    await ensureInfoSearchIndex();
+
+    const results = searchInfoDocumentation(query);
+    renderInfoSearchResults(results, query);
+  };
+
+  input.addEventListener("input", refreshSearch);
+
+  clearButton.addEventListener("click", () => {
+    input.value = "";
+    renderInfoSearchResults([], "");
+    input.focus();
+  });
+
+  resultsContainer.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-info-search-page]");
+
+    if (!button) {
+      return;
+    }
+
+    const pageSlug = String(button.dataset.infoSearchPage || "").trim();
+    const anchorId = String(button.dataset.infoSearchAnchor || "").trim();
+
+    if (!pageSlug) {
+      return;
+    }
+
+    appState.info.activePage = pageSlug;
+    appState.info.markdown = null;
+
+    await renderInfoView(true, pageSlug);
+
+    if (anchorId) {
+      window.setTimeout(() => {
+        const target = document.getElementById(anchorId);
+
+        if (target) {
+          target.scrollIntoView({
+            behavior: "smooth",
+            block: "start"
+          });
+
+          highlightInfoSearchTarget(target);
+        }
+      }, 80);
+    }
+  });
+
+  ensureInfoSearchIndex().catch((err) => {
+    console.warn("Index de recherche Info indisponible :", err);
+  });
+}
+
+function bindInfoPageCards() {
+  document.querySelectorAll("[data-info-page-slug]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const slug = String(button.dataset.infoPageSlug || "").trim();
+
+      if (!slug || slug === appState.info.activePage) {
+        return;
+      }
+
+      appState.info.activePage = slug;
+      appState.info.markdown = null;
+      await renderInfoView(true, slug);
+    });
+  });
+}
+
+function bindInfoPageCreator() {
+  const createButton = document.getElementById("infoCreatePageButton");
+  const form = document.getElementById("infoPageCreatorForm");
+  const panel = document.getElementById("infoPageCreatorPanel");
+  const cancelButton = document.getElementById("infoCancelCreatePageButton");
+  const submitButton = document.getElementById("infoSubmitCreatePageButton");
+  const titleInput = document.getElementById("infoNewPageTitle");
+  const kickerInput = document.getElementById("infoNewPageKicker");
+  const summaryInput = document.getElementById("infoNewPageSummary");
+
+  if (
+    !createButton
+    || !form
+    || !panel
+    || !cancelButton
+    || !submitButton
+    || !titleInput
+    || !kickerInput
+    || !summaryInput
+  ) {
+    return;
+  }
+
+  const openCreator = () => {
+    panel.classList.remove("hidden");
+    createButton.classList.add("hidden");
+    titleInput.focus();
+    setInfoFeedback("");
+  };
+
+  const closeCreator = () => {
+    panel.classList.add("hidden");
+    createButton.classList.remove("hidden");
+    form.reset();
+  };
+
+  createButton.addEventListener("click", openCreator);
+
+  cancelButton.addEventListener("click", () => {
+    closeCreator();
+    setInfoFeedback("Création de carte annulée.");
+  });
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const title = titleInput.value.trim();
+    const kicker = kickerInput.value.trim();
+    const summary = summaryInput.value.trim();
+
+    if (!title) {
+      setInfoFeedback("Le titre de la nouvelle carte est obligatoire.", true);
+      titleInput.focus();
+      return;
+    }
+
+    try {
+      submitButton.disabled = true;
+      cancelButton.disabled = true;
+      submitButton.textContent = "Création...";
+
+      const result = await apiPostJson("/api/info-pages", {
+        title,
+        kicker,
+        summary
+      });
+
+      appState.info.pages = Array.isArray(result.pages) ? result.pages : null;
+      appState.info.activePage = result.page?.slug || null;
+      appState.info.markdown = result.markdown || null;
+
+      await renderInfoView(true, appState.info.activePage);
+      setInfoFeedback(result.message || "Nouvelle carte créée.");
+    } catch (err) {
+      setInfoFeedback(`Erreur : ${err.message}`, true);
+    } finally {
+      submitButton.disabled = false;
+      cancelButton.disabled = false;
+      submitButton.textContent = "Créer la carte";
+    }
+  });
+}
+
 function bindInfoEditor() {
   const editButton = document.getElementById("infoEditButton");
   const reader = document.getElementById("infoMarkdownReader");
   const editor = document.getElementById("infoMarkdownEditor");
   const textarea = document.getElementById("infoMarkdownTextarea");
   const preview = document.getElementById("infoMarkdownPreview");
+  const titleInput = document.getElementById("infoEditPageTitle");
+  const kickerInput = document.getElementById("infoEditPageKicker");
+  const summaryInput = document.getElementById("infoEditPageSummary");
   const saveButton = document.getElementById("infoSaveButton");
   const cancelButton = document.getElementById("infoCancelButton");
 
@@ -3933,6 +4506,9 @@ function bindInfoEditor() {
     || !editor
     || !textarea
     || !preview
+    || !titleInput
+    || !kickerInput
+    || !summaryInput
     || !saveButton
     || !cancelButton
   ) {
@@ -3945,6 +4521,12 @@ function bindInfoEditor() {
   };
 
   const openEditor = () => {
+    const activePage = getActiveInfoPage();
+
+    titleInput.value = activePage?.title || "";
+    kickerInput.value = activePage?.kicker || "";
+    summaryInput.value = activePage?.summary || "";
+
     textarea.value = appState.info.markdown || "";
     refreshPreview();
 
@@ -3977,15 +4559,50 @@ function bindInfoEditor() {
       saveButton.textContent = "Enregistrement...";
 
       const markdown = textarea.value;
-      const result = await apiPostJson("/api/info-content", { markdown });
+      const metadataResult = await apiPostJson(
+        `/api/info-pages/${encodeURIComponent(appState.info.activePage)}/metadata`,
+        {
+          title: titleInput.value.trim(),
+          kicker: kickerInput.value.trim(),
+          summary: summaryInput.value.trim()
+        }
+      );
 
+      const result = await apiPostJson("/api/info-content", {
+        page: appState.info.activePage,
+        markdown
+      });
+
+      appState.info.pages = Array.isArray(metadataResult.pages)
+        ? metadataResult.pages
+        : appState.info.pages;
       appState.info.markdown = markdown;
+
+      const updatedPage = getActiveInfoPage();
+      const cards = document.getElementById("infoPageCards");
+      const activeMetaHost = document.querySelector(".info-active-page-header .info-active-page-copy");
+
+      if (cards) {
+        cards.innerHTML = renderInfoPageCards(appState.info.pages, appState.info.activePage);
+        bindInfoPageCards();
+      }
+
+      if (activeMetaHost && updatedPage) {
+        activeMetaHost.outerHTML = renderInfoActivePageMeta(updatedPage);
+      }
+
+      appState.info.searchIndex = null;
+
       reader.innerHTML = renderInfoMarkdown(markdown);
       decorateInfoMarkdownHeadings(reader);
       renderInfoMarkdownToc(reader);
 
       closeEditor();
-      setInfoFeedback(result.message || "Documentation enregistrée.");
+      setInfoFeedback(
+        metadataResult.message
+        || result.message
+        || "Fiche enregistrée."
+      );
     } catch (err) {
       setInfoFeedback(`Erreur : ${err.message}`, true);
     } finally {
@@ -3996,79 +4613,245 @@ function bindInfoEditor() {
   });
 }
 
-async function renderInfoView(forceReload = false) {
+async function renderInfoView(forceReload = false, requestedPageSlug = null) {
   appState.currentView = "info";
   syncSidebarView("info");
   destroyCartographyMap();
   setTitle("Info & méthodologie");
 
   content.innerHTML = `
-    <section class="card info-view-card">
-      <div class="info-view-header">
-        <div>
-          <p class="info-view-kicker">Documentation éditoriale</p>
-          <h2>À propos des données et des calculs</h2>
-          <p class="info-view-intro">
-            Cette page est alimentée par un fichier Markdown modifiable directement depuis MLCFlux.
-          </p>
-        </div>
-        <button id="infoEditButton" class="primary-btn" type="button">
-          Modifier le Markdown
-        </button>
-      </div>
-
-      <div id="infoFeedback" class="info-feedback hidden"></div>
-
-      <details id="infoMarkdownTocCard" class="info-toc-card" open>
-        <summary class="info-toc-summary">
-          Sommaire de la fiche
-        </summary>
-        <nav id="infoMarkdownToc" class="info-toc-nav" aria-label="Sommaire de la fiche">
-          <p class="info-toc-empty">Chargement du sommaire…</p>
-        </nav>
-      </details>
-
-      <div id="infoMarkdownReader" class="markdown-body info-markdown-reader">
-        <p>Chargement de la documentation…</p>
-      </div>
-
-      <div id="infoMarkdownEditor" class="info-editor hidden">
-        <div class="info-editor-grid">
-          <div class="info-editor-column">
-            <label class="info-editor-label" for="infoMarkdownTextarea">Markdown</label>
-            <textarea
-              id="infoMarkdownTextarea"
-              class="info-markdown-textarea"
-              spellcheck="true"
-            ></textarea>
-          </div>
-
-          <div class="info-editor-column">
-            <div class="info-editor-label">Aperçu</div>
-            <div
-              id="infoMarkdownPreview"
-              class="markdown-body info-markdown-preview"
-            ></div>
-          </div>
-        </div>
-
-        <div class="info-editor-actions">
-          <button id="infoSaveButton" class="primary-btn" type="button">
-            Enregistrer
-          </button>
-          <button id="infoCancelButton" class="secondary-btn" type="button">
-            Annuler
-          </button>
-        </div>
-      </div>
+    <section class="card">
+      <h2>Info & méthodologie</h2>
+      <p>Chargement de la documentation…</p>
     </section>
   `;
 
   try {
-    if (forceReload || appState.info.markdown === null) {
-      const data = await apiGet("/api/info-content");
+    const requestedSlug = String(
+      requestedPageSlug || appState.info.activePage || ""
+    ).trim();
+
+    const mustReload = (
+      forceReload
+      || !Array.isArray(appState.info.pages)
+      || appState.info.markdown === null
+      || (requestedSlug && requestedSlug !== appState.info.activePage)
+    );
+
+    if (mustReload) {
+      const endpoint = requestedSlug
+        ? `/api/info-content?page=${encodeURIComponent(requestedSlug)}`
+        : "/api/info-content";
+
+      const data = await apiGet(endpoint);
+
+      appState.info.pages = Array.isArray(data.pages) ? data.pages : [];
+      appState.info.activePage = data.page?.slug
+        || appState.info.pages[0]?.slug
+        || null;
       appState.info.markdown = data.markdown || "";
     }
+
+    const activePage = getActiveInfoPage();
+
+    content.innerHTML = `
+      <section class="card info-view-card">
+        <div class="info-view-header">
+          <div>
+            <p class="info-view-kicker">Documentation modulaire</p>
+            <h2>Info & méthodologie</h2>
+            <p class="info-view-intro">
+              La documentation est organisée en plusieurs fiches Markdown.
+              Chaque carte ouvre un contenu thématique éditable directement depuis MLCFlux.
+            </p>
+          </div>
+
+          <div class="info-view-actions">
+            <button id="infoCreatePageButton" class="secondary-btn" type="button">
+              Créer une carte Markdown
+            </button>
+          </div>
+        </div>
+
+        <section class="card info-search-panel">
+          <div class="info-search-header">
+            <div>
+              <p class="info-view-kicker">Recherche documentaire</p>
+              <h3>Retrouver rapidement une formule, une notion ou un périmètre</h3>
+            </div>
+          </div>
+
+          <div class="info-search-controls">
+            <input
+              id="infoDocumentationSearch"
+              class="info-documentation-search-input"
+              type="search"
+              autocomplete="off"
+              placeholder="Ex. LM3, U → P, fonds de garantie, comptes opérateurs, dormance…"
+              aria-label="Rechercher dans la documentation Info et méthodologie"
+            >
+            <button
+              id="infoDocumentationSearchClear"
+              class="secondary-btn"
+              type="button"
+            >
+              Effacer
+            </button>
+          </div>
+
+          <div
+            id="infoSearchResults"
+            class="info-search-results hidden"
+            aria-live="polite"
+          ></div>
+        </section>
+
+        <div id="infoFeedback" class="info-feedback hidden"></div>
+
+        <section id="infoPageCreatorPanel" class="card info-page-creator hidden">
+          <form id="infoPageCreatorForm" class="info-page-creator-form">
+            <div class="info-page-creator-header">
+              <div>
+                <p class="info-view-kicker">Nouvelle fiche</p>
+                <h3>Créer une carte Markdown</h3>
+              </div>
+            </div>
+
+            <div class="info-page-creator-grid">
+              <div class="info-page-creator-field">
+                <label for="infoNewPageTitle">Titre de la carte</label>
+                <input
+                  id="infoNewPageTitle"
+                  type="text"
+                  maxlength="140"
+                  placeholder="Ex. Fonctions clés — onglets 1 & 2"
+                  required
+                >
+              </div>
+
+              <div class="info-page-creator-field">
+                <label for="infoNewPageKicker">Petit repère</label>
+                <input
+                  id="infoNewPageKicker"
+                  type="text"
+                  maxlength="80"
+                  placeholder="Ex. Antisèche technique"
+                >
+              </div>
+
+              <div class="info-page-creator-field info-page-creator-field-wide">
+                <label for="infoNewPageSummary">Résumé affiché sur la carte</label>
+                <textarea
+                  id="infoNewPageSummary"
+                  maxlength="600"
+                  placeholder="Ex. Tableau de référence des principales fonctions, endpoints et périmètres analytiques."
+                ></textarea>
+              </div>
+            </div>
+
+            <div class="info-page-creator-actions">
+              <button id="infoSubmitCreatePageButton" class="primary-btn" type="submit">
+                Créer la carte
+              </button>
+              <button id="infoCancelCreatePageButton" class="secondary-btn" type="button">
+                Annuler
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <div class="info-page-grid" id="infoPageCards">
+          ${renderInfoPageCards(appState.info.pages, appState.info.activePage)}
+        </div>
+
+        <section class="card info-active-page-card">
+          <div class="info-active-page-header">
+            ${renderInfoActivePageMeta(activePage)}
+            <button id="infoEditButton" class="primary-btn" type="button">
+              Modifier cette fiche
+            </button>
+          </div>
+
+          <details id="infoMarkdownTocCard" class="info-toc-card" open>
+            <summary class="info-toc-summary">
+              Sommaire de la fiche
+            </summary>
+            <nav id="infoMarkdownToc" class="info-toc-nav" aria-label="Sommaire de la fiche">
+              <p class="info-toc-empty">Chargement du sommaire…</p>
+            </nav>
+          </details>
+
+          <div id="infoMarkdownReader" class="markdown-body info-markdown-reader">
+            <p>Chargement de la documentation…</p>
+          </div>
+
+          <div id="infoMarkdownEditor" class="info-editor hidden">
+            <section class="info-card-metadata-editor">
+              <div class="info-card-metadata-editor-header">
+                <p class="info-view-kicker">Métadonnées de la carte</p>
+                <h4>Titre, sous-titre et résumé</h4>
+              </div>
+
+              <div class="info-card-metadata-grid">
+                <div class="info-page-creator-field">
+                  <label for="infoEditPageTitle">Titre de la carte</label>
+                  <input
+                    id="infoEditPageTitle"
+                    type="text"
+                    maxlength="140"
+                  >
+                </div>
+
+                <div class="info-page-creator-field">
+                  <label for="infoEditPageKicker">Sous-titre / repère</label>
+                  <input
+                    id="infoEditPageKicker"
+                    type="text"
+                    maxlength="80"
+                  >
+                </div>
+
+                <div class="info-page-creator-field info-page-creator-field-wide">
+                  <label for="infoEditPageSummary">Résumé affiché sur la carte</label>
+                  <textarea
+                    id="infoEditPageSummary"
+                    maxlength="600"
+                  ></textarea>
+                </div>
+              </div>
+            </section>
+
+            <div class="info-editor-grid">
+              <div class="info-editor-column">
+                <label class="info-editor-label" for="infoMarkdownTextarea">Markdown</label>
+                <textarea
+                  id="infoMarkdownTextarea"
+                  class="info-markdown-textarea"
+                  spellcheck="true"
+                ></textarea>
+              </div>
+
+              <div class="info-editor-column">
+                <div class="info-editor-label">Aperçu</div>
+                <div
+                  id="infoMarkdownPreview"
+                  class="markdown-body info-markdown-preview"
+                ></div>
+              </div>
+            </div>
+
+            <div class="info-editor-actions">
+              <button id="infoSaveButton" class="primary-btn" type="button">
+                Enregistrer
+              </button>
+              <button id="infoCancelButton" class="secondary-btn" type="button">
+                Annuler
+              </button>
+            </div>
+          </div>
+        </section>
+      </section>
+    `;
 
     const reader = document.getElementById("infoMarkdownReader");
     if (reader) {
@@ -4077,6 +4860,9 @@ async function renderInfoView(forceReload = false) {
       renderInfoMarkdownToc(reader);
     }
 
+    bindInfoSearch();
+    bindInfoPageCards();
+    bindInfoPageCreator();
     bindInfoEditor();
   } catch (err) {
     content.innerHTML = `
