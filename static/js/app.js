@@ -4667,6 +4667,15 @@ async function renderInfoView(forceReload = false, requestedPageSlug = null) {
           </div>
 
           <div class="info-view-actions">
+            <a
+              class="secondary-btn"
+              href="https://github.com/kxsb/mlc_flux"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Voir le dépôt GitHub
+            </a>
+
             <button id="infoCreatePageButton" class="secondary-btn" type="button">
               Créer une carte Markdown
             </button>
