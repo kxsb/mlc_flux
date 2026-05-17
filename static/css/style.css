@@ -10683,3 +10683,145 @@ body.dark-mode .admin-integrity-audit-controls select {
     width: min(24rem, calc(100vw - 2rem));
   }
 }
+
+/* --------------------------------------------------------------------------
+   PROSCOLS-RECOVERY-I — picker colonnes pros
+   -------------------------------------------------------------------------- */
+
+.professionals-directory-topbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.professionals-directory-topbar #searchPros {
+  flex: 1 1 20rem;
+  min-width: min(20rem, 100%);
+}
+
+.professionals-directory-topbar-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.85rem;
+  flex: 0 0 auto;
+}
+
+.pros-directory-columns-picker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.pros-directory-columns-picker > summary {
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.65rem;
+  padding: 0.68rem 0.95rem;
+  border-radius: 0.9rem;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(255, 255, 255, 0.84);
+  cursor: pointer;
+  font-weight: 650;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.pros-directory-columns-picker > summary::-webkit-details-marker {
+  display: none;
+}
+
+.pros-directory-columns-picker > summary::after {
+  content: "▾";
+  font-size: 0.8em;
+  opacity: 0.72;
+  transform: translateY(-0.03rem);
+}
+
+.pros-directory-columns-picker[open] > summary::after {
+  transform: rotate(180deg);
+}
+
+.pros-directory-columns-picker > summary:hover {
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.pros-directory-columns-menu {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 0.65rem);
+  right: 0;
+  width: min(24rem, calc(100vw - 2rem));
+  padding: 1rem;
+  border-radius: 1rem;
+  box-shadow: 0 1.25rem 3rem rgba(15, 23, 42, 0.2);
+}
+
+.pros-directory-columns-menu-title {
+  margin-bottom: 0.85rem;
+  font-size: 0.95rem;
+  font-weight: 750;
+}
+
+.pros-directory-columns-options {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.pros-directory-column-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.56rem 0.68rem;
+  border-radius: 0.8rem;
+  cursor: pointer;
+}
+
+.pros-directory-column-option:hover {
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.pros-directory-column-option input {
+  margin-top: 0.2rem;
+}
+
+.pros-directory-column-option span {
+  line-height: 1.35;
+}
+
+body.dark-mode .pros-directory-columns-picker > summary {
+  background: rgba(15, 23, 42, 0.55);
+}
+
+@media (max-width: 900px) {
+  .professionals-directory-topbar-actions {
+    width: 100%;
+    margin-left: 0;
+    justify-content: space-between;
+  }
+}
+
+@media (max-width: 620px) {
+  .professionals-directory-topbar-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .pros-directory-columns-picker {
+    width: 100%;
+  }
+
+  .pros-directory-columns-picker > summary {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .pros-directory-columns-menu {
+    left: 0;
+    right: auto;
+  }
+}
