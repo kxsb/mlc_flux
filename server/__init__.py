@@ -6,6 +6,7 @@ from server.routes.sync import sync_bp
 from server.routes.legacy_api import legacy_api_bp
 from server.routes.status import status_bp
 from server.routes.info_content import info_content_bp
+from server.routes.admin_integrity import admin_integrity_bp
 from server.routes.tickets import tickets_bp
 from server.routes.monetary_indicators import monetary_indicators_bp
 from server.routes.individual_balances import individual_balances_bp
@@ -34,6 +35,7 @@ def create_app():
     app.register_blueprint(legacy_api_bp)
     app.register_blueprint(status_bp)
     app.register_blueprint(info_content_bp)
+    app.register_blueprint(admin_integrity_bp)
     app.register_blueprint(tickets_bp)
     app.register_blueprint(monetary_indicators_bp)
     app.register_blueprint(individual_balances_bp)
