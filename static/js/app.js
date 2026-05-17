@@ -320,8 +320,12 @@ function addCartographyPixelOffsets(professionals) {
 }
 
 
-function initializeProfessionalsMap(professionals) {
-  const mapNode = document.getElementById("professionalsMap");
+function initializeProfessionalsMap(professionals, options = {}) {
+  const containerId = options.containerId || "professionalsMap";
+  const fitButtonId = options.fitButtonId || "cartographyFitBtn";
+  const mapStateKey = options.mapStateKey || "map";
+  const overlayStateKey = options.overlayStateKey || "overlay";
+  const mapNode = document.getElementById(containerId);
   if (!mapNode) return;
 
   if (!professionals.length) {
@@ -349,7 +353,7 @@ function initializeProfessionalsMap(professionals) {
   }
 
   const map = new window.maplibregl.Map({
-    container: "professionalsMap",
+    container: containerId,
     style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
     center: [4.8357, 45.7640],
     zoom: 9,
@@ -443,15 +447,17 @@ function initializeProfessionalsMap(professionals) {
     fitCartographyMapToProfessionals(map, professionals);
   });
 
-  const fitButton = document.getElementById("cartographyFitBtn");
+  const fitButton = document.getElementById(fitButtonId);
   if (fitButton) {
     fitButton.addEventListener("click", () => {
       fitCartographyMapToProfessionals(map, professionals);
     });
   }
 
-  appState.cartography.map = map;
-  appState.cartography.overlay = overlay;
+  appState.cartography[mapStateKey] = map;
+  appState.cartography[overlayStateKey] = overlay;
+
+  return map;
 }
 
 
@@ -12510,19 +12516,24 @@ function fitUserPostalClustersMapToPoints(map, points = []) {
   });
 }
 
-function destroyUserPostalClustersMap() {
+function destroyUserPostalClustersMap(stateKey = "userPostalClustersMap") {
+  const map = appState[stateKey];
+
   if (
-    appState.userPostalClustersMap
-    && typeof appState.userPostalClustersMap.remove === "function"
+    map
+    && typeof map.remove === "function"
   ) {
-    appState.userPostalClustersMap.remove();
+    map.remove();
   }
 
-  appState.userPostalClustersMap = null;
+  appState[stateKey] = null;
 }
 
-function initializeUserPostalClustersMap(points = []) {
-  const mapNode = document.getElementById("userPostalClustersMap");
+function initializeUserPostalClustersMap(points = [], options = {}) {
+  const containerId = options.containerId || "userPostalClustersMap";
+  const fitButtonId = options.fitButtonId || "userPostalClustersFitBtn";
+  const stateKey = options.stateKey || "userPostalClustersMap";
+  const mapNode = document.getElementById(containerId);
   if (!mapNode) {
     return;
   }
@@ -12550,7 +12561,7 @@ function initializeUserPostalClustersMap(points = []) {
     return;
   }
 
-  destroyUserPostalClustersMap();
+  destroyUserPostalClustersMap(stateKey);
 
   const maxIndividualCount = Math.max(
     1,
@@ -12560,7 +12571,7 @@ function initializeUserPostalClustersMap(points = []) {
   const geojson = buildUserPostalClusterGeoJson(validPoints);
 
   const map = new window.maplibregl.Map({
-    container: "userPostalClustersMap",
+    container: containerId,
     style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
     center: [4.8357, 45.7640],
     zoom: 9,
@@ -12687,14 +12698,167 @@ function initializeUserPostalClustersMap(points = []) {
     fitUserPostalClustersMapToPoints(map, validPoints);
   });
 
-  const fitButton = document.getElementById("userPostalClustersFitBtn");
+  const fitButton = document.getElementById(fitButtonId);
   if (fitButton) {
     fitButton.addEventListener("click", () => {
       fitUserPostalClustersMapToPoints(map, validPoints);
     });
   }
 
-  appState.userPostalClustersMap = map;
+  appState[stateKey] = map;
+
+  return map;
+}
+
+function buildProfessionalClusterMapZoomModalHtml({
+  kicker,
+  title,
+  description,
+  mapContainerId,
+  mapClassName,
+  fitButtonId
+}) {
+  return `
+    <section class="professional-clusters-map-zoom-shell">
+      <div class="professional-clusters-map-zoom-heading">
+        <div>
+          <p class="stats-chart-modal-kicker">${escapeHtml(kicker)}</p>
+          <h2>${escapeHtml(title)}</h2>
+          <p>${escapeHtml(description)}</p>
+        </div>
+
+        <button id="${escapeHtml(fitButtonId)}" class="secondary-btn" type="button">
+          Recentrer
+        </button>
+      </div>
+
+      <div class="professional-clusters-map-zoom-frame">
+        <div
+          id="${escapeHtml(mapContainerId)}"
+          class="${escapeHtml(mapClassName)} professional-clusters-map-zoom-map"
+        ></div>
+      </div>
+    </section>
+  `;
+}
+
+function openUserPostalClustersMapZoom(points = []) {
+  openStatsChartModal(
+    buildProfessionalClusterMapZoomModalHtml({
+      kicker: "Cartographie agrandie",
+      title: "Foyers d’usage des particuliers",
+      description: "Vue agrandie des concentrations territoriales de particuliers présents dans les flux U→P cartographiables.",
+      mapContainerId: "userPostalClustersMapZoom",
+      mapClassName: "user-postal-clusters-map",
+      fitButtonId: "userPostalClustersZoomFitBtn"
+    }),
+    "cluster-cartography-zoom"
+  );
+
+  window.requestAnimationFrame(() => {
+    const map = initializeUserPostalClustersMap(points, {
+      containerId: "userPostalClustersMapZoom",
+      fitButtonId: "userPostalClustersZoomFitBtn",
+      stateKey: "userPostalClustersZoomMap"
+    });
+
+    if (map && typeof map.resize === "function") {
+      window.setTimeout(() => map.resize(), 180);
+    }
+  });
+}
+
+function openProfessionalsCartographyZoom(professionals = []) {
+  openStatsChartModal(
+    buildProfessionalClusterMapZoomModalHtml({
+      kicker: "Cartographie agrandie",
+      title: "Implantation des professionnels",
+      description: "Vue agrandie des professionnels géolocalisés et du relief d’activité monétaire sur la période analysée.",
+      mapContainerId: "professionalsMapZoom",
+      mapClassName: "cartography-map",
+      fitButtonId: "cartographyZoomFitBtn"
+    }),
+    "cluster-cartography-zoom"
+  );
+
+  window.requestAnimationFrame(() => {
+    const map = initializeProfessionalsMap(professionals, {
+      containerId: "professionalsMapZoom",
+      fitButtonId: "cartographyZoomFitBtn",
+      mapStateKey: "zoomMap",
+      overlayStateKey: "zoomOverlay"
+    });
+
+    if (map && typeof map.resize === "function") {
+      window.setTimeout(() => map.resize(), 180);
+    }
+  });
+}
+
+function bindProfessionalClusterMapZoomButtons() {
+  const userZoomButton = document.getElementById("userPostalClustersZoomBtn");
+  const proZoomButton = document.getElementById("cartographyZoomBtn");
+
+  if (userZoomButton) {
+    userZoomButton.addEventListener("click", () => {
+      openUserPostalClustersMapZoom(
+        appState.userPostalClustersData?.heatmap_points || []
+      );
+    });
+  }
+
+  if (proZoomButton) {
+    proZoomButton.addEventListener("click", () => {
+      openProfessionalsCartographyZoom(
+        appState.cartography.data?.professionals || []
+      );
+    });
+  }
+}
+
+function syncProfessionalClustersMapPairHeights() {
+  const userOverview = document.querySelector(
+    ".professional-clusters-map-pair-users > .user-postal-clusters-overview-card"
+  );
+  const proOverview = document.querySelector(
+    ".professional-clusters-map-pair-pros > .cartography-overview-card"
+  );
+
+  if (!userOverview || !proOverview) {
+    return;
+  }
+
+  userOverview.style.minHeight = "";
+  proOverview.style.minHeight = "";
+
+  if (window.innerWidth < 1080) {
+    return;
+  }
+
+  const targetHeight = Math.max(
+    userOverview.offsetHeight,
+    proOverview.offsetHeight
+  );
+
+  userOverview.style.minHeight = `${targetHeight}px`;
+  proOverview.style.minHeight = `${targetHeight}px`;
+}
+
+function bindProfessionalClustersMapPairResizeSync() {
+  if (appState.professionalClustersMapPairResizeBound) {
+    return;
+  }
+
+  appState.professionalClustersMapPairResizeBound = true;
+
+  let resizeTimer = null;
+
+  window.addEventListener("resize", () => {
+    window.clearTimeout(resizeTimer);
+    resizeTimer = window.setTimeout(() => {
+      syncProfessionalClustersMapPairHeights();
+    }, 120);
+  });
 }
 
 function buildUserPostalClustersTableHtml(postalCodes = []) {
@@ -12800,9 +12964,14 @@ function buildUserPostalClustersMapPairHtml(userPostalClustersData = null) {
             <strong>${formatUserPostalClusterInteger(points.length)}</strong> foyer(s) territoriaux ·
             intensité pondérée par le nombre de particuliers.
           </div>
-          <button id="userPostalClustersFitBtn" class="secondary-btn" type="button">
-            Recentrer
-          </button>
+          <div class="cartography-map-toolbar-actions">
+            <button id="userPostalClustersZoomBtn" class="secondary-btn" type="button">
+              Agrandir
+            </button>
+            <button id="userPostalClustersFitBtn" class="secondary-btn" type="button">
+              Recentrer
+            </button>
+          </div>
         </div>
 
         <div id="userPostalClustersMap" class="user-postal-clusters-map"></div>
@@ -12917,9 +13086,14 @@ function buildProfessionalClustersPanelHtml(cartographyData = null, territoriesD
           <div>
             <strong>${professionals.length}</strong> points confirmés · relief d’activité monétaire.
           </div>
-          <button id="cartographyFitBtn" class="secondary-btn" type="button">
-            Recentrer
-          </button>
+          <div class="cartography-map-toolbar-actions">
+            <button id="cartographyZoomBtn" class="secondary-btn" type="button">
+              Agrandir
+            </button>
+            <button id="cartographyFitBtn" class="secondary-btn" type="button">
+              Recentrer
+            </button>
+          </div>
         </div>
 
         <div id="professionalsMap" class="cartography-map"></div>
@@ -13072,6 +13246,10 @@ async function renderProfessionalClustersPanel(forceReload = false) {
       renderProfessionalConsumptionMapCanvas();
       initializeUserPostalClustersMap(userPostalClustersData?.heatmap_points || []);
       initializeProfessionalsMap(professionals);
+      bindProfessionalClusterMapZoomButtons();
+      bindProfessionalClustersMapPairResizeSync();
+      syncProfessionalClustersMapPairHeights();
+      window.setTimeout(syncProfessionalClustersMapPairHeights, 180);
     });
   } catch (error) {
     console.warn(
@@ -15144,6 +15322,20 @@ function closeStatsChartModal() {
   if (appState.statsZoomChart) {
     appState.statsZoomChart.destroy();
     appState.statsZoomChart = null;
+  }
+
+  destroyUserPostalClustersMap("userPostalClustersZoomMap");
+
+  if (
+    appState.cartography?.zoomMap
+    && typeof appState.cartography.zoomMap.remove === "function"
+  ) {
+    appState.cartography.zoomMap.remove();
+  }
+
+  if (appState.cartography) {
+    appState.cartography.zoomMap = null;
+    appState.cartography.zoomOverlay = null;
   }
 
   if (body) {

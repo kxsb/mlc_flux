@@ -10187,3 +10187,80 @@ body.dark-mode .pro-detail-payment-basin-postal-chip {
   }
 }
 
+/* ==========================================================================
+   PROCLUSTERS003 — zoom des petites cartos et alignement des panneaux
+   ========================================================================== */
+
+.cartography-map-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.stats-chart-modal[data-mode="cluster-cartography-zoom"] .stats-chart-modal-panel {
+  width: min(1240px, calc(100vw - 32px));
+  max-width: min(1240px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+}
+
+.professional-clusters-map-zoom-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.professional-clusters-map-zoom-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.professional-clusters-map-zoom-heading h2 {
+  margin: 4px 0 8px;
+  font-size: clamp(1.35rem, 2.2vw, 2rem);
+  line-height: 1.15;
+}
+
+.professional-clusters-map-zoom-heading p {
+  margin: 0;
+  max-width: 90ch;
+  color: var(--muted);
+  line-height: 1.56;
+}
+
+.professional-clusters-map-zoom-frame {
+  overflow: hidden;
+  border: 1px solid var(--border-soft);
+  border-radius: 22px;
+  background: var(--surface-soft);
+}
+
+.professional-clusters-map-zoom-map {
+  width: 100%;
+  min-height: 560px;
+  height: min(72vh, 820px);
+  border-radius: 22px;
+}
+
+@media (max-width: 860px) {
+  .cartography-map-toolbar-actions {
+    justify-content: flex-start;
+  }
+
+  .professional-clusters-map-zoom-heading {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .professional-clusters-map-zoom-heading .secondary-btn {
+    width: fit-content;
+  }
+
+  .professional-clusters-map-zoom-map {
+    min-height: 420px;
+    height: min(66vh, 680px);
+  }
+}
+
