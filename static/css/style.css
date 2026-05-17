@@ -10603,3 +10603,83 @@ body.dark-mode .admin-status-finished {
 body.dark-mode .admin-integrity-audit-controls select {
   background: rgba(15, 23, 42, 0.55);
 }
+
+/* --------------------------------------------------------------------------
+   Répertoire des professionnels — sélection des colonnes visibles
+   -------------------------------------------------------------------------- */
+
+.pros-directory-columns-picker {
+  position: relative;
+  display: inline-block;
+}
+
+.pros-directory-columns-picker > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.pros-directory-columns-picker > summary::-webkit-details-marker {
+  display: none;
+}
+
+.pros-directory-columns-menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 0.65rem);
+  right: 0;
+  width: min(24rem, calc(100vw - 2rem));
+  padding: 1rem;
+  border-radius: 1rem;
+  box-shadow: 0 1.2rem 2.8rem rgba(15, 23, 42, 0.18);
+}
+
+.pros-directory-columns-menu-title {
+  margin-bottom: 0.8rem;
+  font-size: 0.92rem;
+  font-weight: 750;
+}
+
+.pros-directory-columns-options {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.pros-directory-column-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.8rem;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    transform 0.15s ease;
+}
+
+.pros-directory-column-option:hover {
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.pros-directory-column-option input {
+  margin-top: 0.18rem;
+}
+
+.pros-directory-column-option span {
+  line-height: 1.35;
+}
+
+@media (max-width: 760px) {
+  .pros-directory-columns-picker {
+    width: 100%;
+  }
+
+  .pros-directory-columns-picker > summary {
+    width: 100%;
+  }
+
+  .pros-directory-columns-menu {
+    left: 0;
+    right: auto;
+    width: min(24rem, calc(100vw - 2rem));
+  }
+}

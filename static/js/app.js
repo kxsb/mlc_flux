@@ -16487,44 +16487,300 @@ function renderGlobalStatsChartsFromSeries(charts) {
   bindStatsChartTools(charts);
 }
 
+const PROS_DIRECTORY_COLUMNS_STORAGE_KEY = "mlcflux.pros-directory.visible-columns.v1";
+
+const PROS_DIRECTORY_COLUMNS = [
+  {
+    id: "professional",
+    field: "Professionnel",
+    header: "Professionnel",
+    menuLabel: "Professionnel",
+    kind: "professional",
+    sortable: true,
+    alwaysVisible: true,
+    defaultVisible: true,
+    description: "Référence MLCFlux et nom du professionnel."
+  },
+  {
+    id: "sector",
+    field: "Secteur d’activité",
+    header: "Secteur d’activité",
+    menuLabel: "Secteur d’activité",
+    kind: "text",
+    sortable: true,
+    defaultVisible: false,
+    description: "Secteur principal issu de l’enrichissement Odoo."
+  },
+  {
+    id: "postalCode",
+    field: "Code postal",
+    header: "Code postal",
+    menuLabel: "Code postal",
+    kind: "text",
+    sortable: true,
+    defaultVisible: false,
+    description: "Code postal du professionnel, issu en priorité d’Odoo avec repli Cyclos."
+  },
+  {
+    id: "receivedFromProfessionals",
+    field: "Reçu des professionnels",
+    header: "Reçu des pros",
+    menuLabel: "Reçu des professionnels",
+    kind: "money",
+    sortable: true,
+    defaultVisible: true,
+    description: "Volume des paiements P→P reçus."
+  },
+  {
+    id: "receivedFromUsers",
+    field: "Reçu des particuliers",
+    header: "Reçu des particuliers",
+    menuLabel: "Reçu des particuliers",
+    kind: "money",
+    sortable: true,
+    defaultVisible: true,
+    description: "Volume des paiements U→P reçus."
+  },
+  {
+    id: "totalReceived",
+    field: "Total reçu",
+    header: "Total reçu",
+    menuLabel: "Total reçu",
+    kind: "money",
+    sortable: true,
+    defaultVisible: true,
+    description: "Reçu des professionnels + reçu des particuliers."
+  },
+  {
+    id: "emittedToProfessionals",
+    field: "Émis vers les professionnels",
+    header: "Émis vers les pros",
+    menuLabel: "Émis vers les professionnels",
+    kind: "money",
+    sortable: true,
+    defaultVisible: true,
+    description: "Volume des paiements P→P émis."
+  },
+  {
+    id: "emittedToUsers",
+    field: "Émis vers les particuliers",
+    header: "Émis vers les particuliers",
+    menuLabel: "Émis vers les particuliers",
+    kind: "money",
+    sortable: true,
+    defaultVisible: true,
+    description: "Volume des paiements P→U émis, notamment rémunérations et flux assimilés."
+  },
+  {
+    id: "totalEmitted",
+    field: "Total émis",
+    header: "Total émis",
+    menuLabel: "Total émis",
+    kind: "money",
+    sortable: true,
+    defaultVisible: false,
+    description: "Émis vers les professionnels + émis vers les particuliers."
+  },
+  {
+    id: "totalConverted",
+    field: "Total converti",
+    header: "Converti",
+    menuLabel: "Total converti",
+    kind: "money",
+    sortable: true,
+    defaultVisible: false,
+    description: "Gonettes numériques converties directement vers ce professionnel."
+  },
+  {
+    id: "totalReconverted",
+    field: "Total reconverti",
+    header: "Reconverti",
+    menuLabel: "Total reconverti",
+    kind: "money",
+    sortable: true,
+    defaultVisible: false,
+    description: "Gonettes reconverties ou sorties du circuit numérique par ce professionnel."
+  },
+  {
+    id: "reuseRate",
+    field: "Taux de réutilisation",
+    header: "Taux de réutilisation",
+    menuLabel: "Taux de réutilisation",
+    kind: "ratio",
+    sortable: true,
+    defaultVisible: false,
+    description: "Total émis / (total reçu + total converti)."
+  }
+];
+
+function getDefaultProsDirectoryVisibleColumnIds() {
+  return PROS_DIRECTORY_COLUMNS
+    .filter(column => column.alwaysVisible || column.defaultVisible)
+    .map(column => column.id);
+}
+
+function getProsDirectoryVisibleColumnIds() {
+  const knownIds = new Set(PROS_DIRECTORY_COLUMNS.map(column => column.id));
+  const fallbackIds = getDefaultProsDirectoryVisibleColumnIds();
+
+  let ids = fallbackIds;
+
+  try {
+    const stored = JSON.parse(localStorage.getItem(PROS_DIRECTORY_COLUMNS_STORAGE_KEY) || "null");
+    if (Array.isArray(stored)) {
+      const filtered = stored.filter(id => knownIds.has(id));
+      if (filtered.length > 0) {
+        ids = filtered;
+      }
+    }
+  } catch (error) {
+    ids = fallbackIds;
+  }
+
+  const visibleIds = new Set(ids);
+
+  PROS_DIRECTORY_COLUMNS
+    .filter(column => column.alwaysVisible)
+    .forEach(column => visibleIds.add(column.id));
+
+  return visibleIds;
+}
+
+function saveProsDirectoryVisibleColumnIds(visibleIds) {
+  const safeIds = PROS_DIRECTORY_COLUMNS
+    .filter(column => column.alwaysVisible || visibleIds.has(column.id))
+    .map(column => column.id);
+
+  localStorage.setItem(
+    PROS_DIRECTORY_COLUMNS_STORAGE_KEY,
+    JSON.stringify(safeIds)
+  );
+}
+
+function getVisibleProsDirectoryColumns() {
+  const visibleIds = getProsDirectoryVisibleColumnIds();
+  return PROS_DIRECTORY_COLUMNS.filter(column => visibleIds.has(column.id));
+}
+
+function formatProsDirectoryReuseRate(value) {
+  if (value === null || value === undefined || value === "") {
+    return "—";
+  }
+
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return "—";
+  }
+
+  return `${(numericValue * 100).toLocaleString("fr-FR", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1
+  })} %`;
+}
+
+function renderProsDirectoryCell(row, column) {
+  if (column.kind === "professional") {
+    const rawProfessional = String(row.Professionnel || "");
+    const professionalRef = rawProfessional.split(" - ")[0];
+
+    return `
+      <td>
+        <button class="linkish" onclick="renderProDetail('${escapeHtml(professionalRef)}')">
+          ${escapeHtml(rawProfessional)}
+        </button>
+      </td>
+    `;
+  }
+
+  if (column.kind === "text") {
+    return `<td>${escapeHtml(row[column.field] || "—")}</td>`;
+  }
+
+  if (column.kind === "ratio") {
+    return `<td class="num">${formatProsDirectoryReuseRate(row[column.field])}</td>`;
+  }
+
+  return `<td class="num">${euro(row[column.field])}</td>`;
+}
+
+function renderProsDirectoryColumnPicker(visibleIds) {
+  const options = PROS_DIRECTORY_COLUMNS.map(column => {
+    const checked = visibleIds.has(column.id) ? "checked" : "";
+    const disabled = column.alwaysVisible ? "disabled" : "";
+    const title = column.description
+      ? ` title="${escapeHtml(column.description)}"`
+      : "";
+
+    return `
+      <label class="pros-directory-column-option"${title}>
+        <input
+          type="checkbox"
+          data-pros-directory-column="${escapeHtml(column.id)}"
+          ${checked}
+          ${disabled}
+        >
+        <span>${escapeHtml(column.menuLabel)}</span>
+      </label>
+    `;
+  }).join("");
+
+  return `
+    <details class="pros-directory-columns-picker">
+      <summary>Colonnes affichées</summary>
+      <div class="card pros-directory-columns-menu">
+        <div class="pros-directory-columns-menu-title">Colonnes du tableau</div>
+        <div class="pros-directory-columns-options">
+          ${options}
+        </div>
+      </div>
+    </details>
+  `;
+}
+
 function drawProsTable() {
   const filtered = getSortedAndFilteredPros();
+  const visibleIds = getProsDirectoryVisibleColumnIds();
+  const visibleColumns = getVisibleProsDirectoryColumns();
 
   const tableRows = filtered.map(row => `
     <tr>
-      <td>
-        <button class="linkish" onclick="renderProDetail('${String(row.Professionnel).split(' - ')[0]}')">
-          ${escapeHtml(row.Professionnel)}
-        </button>
-      </td>
-      <td class="num">${euro(row["B2B Reçu"])}</td>
-      <td class="num">${euro(row["B2B Emis"])}</td>
-      <td class="num">${euro(row["B2C"])}</td>
-      <td class="num">${euro(row["Rémunération"])}</td>
-      <td class="num">${euro(row["Total Reçu"])}</td>
+      ${visibleColumns.map(column => renderProsDirectoryCell(row, column)).join("")}
     </tr>
   `).join("");
 
+  const headerCells = visibleColumns.map(column => {
+    const title = column.description
+      ? ` title="${escapeHtml(column.description)}"`
+      : "";
+
+    return `
+      <th${title}>
+        ${column.sortable
+          ? sortableHeader(column.header, column.field)
+          : escapeHtml(column.header)}
+      </th>
+    `;
+  }).join("");
+
   const professionalsDirectoryTarget = document.getElementById("professionalsDirectoryPanel") || content;
   professionalsDirectoryTarget.innerHTML = `
-    <div class="topbar">
+    <div class="topbar professionals-directory-topbar">
       <input type="text" id="searchPros" placeholder="Recherche rapide..." value="${escapeHtml(appState.prosSearch)}">
-      <span>${filtered.length} résultat(s)</span>
+
+      <div class="professionals-directory-topbar-actions">
+        <span>${filtered.length} résultat(s)</span>
+        ${renderProsDirectoryColumnPicker(visibleIds)}
+      </div>
     </div>
 
-    <table>
+    <table class="professionals-directory-table">
       <thead>
         <tr>
-          <th>${sortableHeader("Professionnel", "Professionnel")}</th>
-          <th>${sortableHeader("B2B Reçu", "B2B Reçu")}</th>
-          <th>${sortableHeader("B2B Emis", "B2B Emis")}</th>
-          <th>${sortableHeader("B2C", "B2C")}</th>
-          <th>${sortableHeader("Rémunération", "Rémunération")}</th>
-          <th>${sortableHeader("Total Reçu", "Total Reçu")}</th>
+          ${headerCells}
         </tr>
       </thead>
       <tbody>
-        ${tableRows || `<tr><td colspan="6">Aucun résultat</td></tr>`}
+        ${tableRows || `<tr><td colspan="${visibleColumns.length}">Aucun résultat</td></tr>`}
       </tbody>
     </table>
   `;
@@ -16545,6 +16801,30 @@ function drawProsTable() {
       appState.prosSearch = nextValue;
       drawProsTable();
     }, 140);
+  });
+
+  document.querySelectorAll("[data-pros-directory-column]").forEach(input => {
+    input.addEventListener("change", (event) => {
+      const currentInput = event.currentTarget;
+      const columnId = currentInput.dataset.prosDirectoryColumn;
+      const nextVisibleIds = getProsDirectoryVisibleColumnIds();
+      const pickerWasOpen = Boolean(
+        currentInput.closest(".pros-directory-columns-picker")?.open
+      );
+
+      if (currentInput.checked) {
+        nextVisibleIds.add(columnId);
+      } else {
+        nextVisibleIds.delete(columnId);
+      }
+
+      saveProsDirectoryVisibleColumnIds(nextVisibleIds);
+      drawProsTable();
+
+      if (pickerWasOpen) {
+        document.querySelector(".pros-directory-columns-picker")?.setAttribute("open", "");
+      }
+    });
   });
 }
 
