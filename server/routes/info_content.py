@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request
 
+from server.utils.admin_auth import require_admin_token
 from server.services.info_content import (
     create_info_page,
     get_default_info_page_slug,
@@ -51,6 +52,10 @@ def get_info_search_index():
 
 @info_content_bp.route("/api/info-content", methods=["POST"])
 def save_info_content():
+    auth_error = require_admin_token()
+    if auth_error is not None:
+        return auth_error
+
     payload = request.get_json(silent=True)
 
     if not isinstance(payload, dict):
@@ -96,6 +101,10 @@ def save_info_content():
 
 @info_content_bp.route("/api/info-pages/<page_slug>/metadata", methods=["POST"])
 def update_info_page_metadata_route(page_slug):
+    auth_error = require_admin_token()
+    if auth_error is not None:
+        return auth_error
+
     payload = request.get_json(silent=True)
 
     if not isinstance(payload, dict):
@@ -129,6 +138,10 @@ def update_info_page_metadata_route(page_slug):
 
 @info_content_bp.route("/api/info-pages", methods=["POST"])
 def create_info_page_route():
+    auth_error = require_admin_token()
+    if auth_error is not None:
+        return auth_error
+
     payload = request.get_json(silent=True)
 
     if not isinstance(payload, dict):

@@ -10264,3 +10264,342 @@ body.dark-mode .pro-detail-payment-basin-postal-chip {
   }
 }
 
+
+/* --------------------------------------------------------------------------
+   Administration — intégrité
+   -------------------------------------------------------------------------- */
+
+.admin-integrity-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.admin-status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2rem;
+  padding: 0.3rem 0.8rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.admin-status-healthy {
+  color: #15803d;
+  background: rgba(22, 163, 74, 0.14);
+  border: 1px solid rgba(22, 163, 74, 0.28);
+}
+
+.admin-status-degraded {
+  color: #b45309;
+  background: rgba(217, 119, 6, 0.14);
+  border: 1px solid rgba(217, 119, 6, 0.28);
+}
+
+.admin-status-critical {
+  color: #b91c1c;
+  background: rgba(220, 38, 38, 0.14);
+  border: 1px solid rgba(220, 38, 38, 0.28);
+}
+
+.admin-status-unknown {
+  color: #475569;
+  background: rgba(100, 116, 139, 0.14);
+  border: 1px solid rgba(100, 116, 139, 0.28);
+}
+
+.admin-integrity-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.9rem;
+  margin-top: 1rem;
+}
+
+.admin-integrity-kpi-grid article {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.95rem 1rem;
+  border-radius: 1rem;
+  background: rgba(148, 163, 184, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.admin-integrity-kpi-grid span {
+  color: var(--muted, #64748b);
+  font-size: 0.88rem;
+}
+
+.admin-integrity-kpi-grid strong {
+  font-size: 1.04rem;
+}
+
+.admin-report-list {
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 1rem;
+}
+
+.admin-report-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.9rem;
+  align-items: start;
+  padding: 0.95rem 1rem;
+  border-radius: 1rem;
+  background: rgba(148, 163, 184, 0.06);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.admin-report-main p {
+  margin: 0.3rem 0 0;
+  color: var(--muted, #64748b);
+  overflow-wrap: anywhere;
+}
+
+body.dark-mode .admin-status-healthy {
+  color: #86efac;
+}
+
+body.dark-mode .admin-status-degraded {
+  color: #fdba74;
+}
+
+body.dark-mode .admin-status-critical {
+  color: #fca5a5;
+}
+
+body.dark-mode .admin-status-unknown {
+  color: #cbd5e1;
+}
+
+@media (max-width: 760px) {
+  .admin-integrity-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .admin-report-item {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Administration — intégrité avancée / job côté serveur
+   -------------------------------------------------------------------------- */
+
+.admin-status-running {
+  color: #0369a1;
+  background: rgba(14, 165, 233, 0.14);
+  border: 1px solid rgba(14, 165, 233, 0.28);
+}
+
+.admin-status-finished {
+  color: #166534;
+  background: rgba(34, 197, 94, 0.14);
+  border: 1px solid rgba(34, 197, 94, 0.28);
+}
+
+.admin-integrity-access-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.admin-integrity-access-header h2 {
+  margin-bottom: 0.45rem;
+}
+
+.admin-integrity-access-header p {
+  margin: 0;
+}
+
+.admin-integrity-token-form {
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 1rem;
+}
+
+.admin-integrity-token-form label {
+  display: grid;
+  gap: 0.45rem;
+  font-weight: 650;
+}
+
+.admin-integrity-token-form input {
+  width: 100%;
+  min-height: 2.8rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 0.85rem;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  background: rgba(255, 255, 255, 0.92);
+  color: inherit;
+}
+
+body.dark-mode .admin-integrity-token-form input {
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.admin-integrity-token-actions,
+.admin-integrity-job-actions,
+.admin-report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+}
+
+.admin-integrity-inline-alert {
+  margin: 1rem 0 0;
+  padding: 0.9rem 1rem;
+  border-radius: 0.95rem;
+  border: 1px solid rgba(220, 38, 38, 0.28);
+  background: rgba(220, 38, 38, 0.1);
+  color: #b91c1c;
+}
+
+body.dark-mode .admin-integrity-inline-alert {
+  color: #fca5a5;
+}
+
+.admin-integrity-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+  margin: 1.15rem 0;
+}
+
+.admin-integrity-detail-card {
+  padding: 1rem;
+  border-radius: 1rem;
+  background: rgba(148, 163, 184, 0.06);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.admin-integrity-detail-card h3 {
+  margin-top: 0;
+}
+
+.admin-integrity-detail-card dl {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+}
+
+.admin-integrity-detail-card dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.45rem;
+  border-bottom: 1px dashed rgba(148, 163, 184, 0.22);
+}
+
+.admin-integrity-detail-card dt {
+  color: var(--muted, #64748b);
+}
+
+.admin-integrity-detail-card dd {
+  margin: 0;
+  font-weight: 650;
+  text-align: right;
+}
+
+.admin-integrity-job-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.9rem;
+  margin: 1rem 0;
+}
+
+.admin-integrity-job-grid article {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.95rem 1rem;
+  border-radius: 1rem;
+  background: rgba(148, 163, 184, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.admin-integrity-job-grid span {
+  color: var(--muted, #64748b);
+  font-size: 0.88rem;
+}
+
+.admin-integrity-job-result {
+  margin: 1rem 0;
+  padding: 0.85rem 1rem;
+  border-radius: 0.95rem;
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.22);
+}
+
+.admin-report-item {
+  grid-template-columns: auto 1fr auto;
+}
+
+.admin-integrity-reader {
+  scroll-margin-top: 1rem;
+}
+
+.admin-integrity-report-pre {
+  margin: 1rem 0 0;
+  padding: 1rem;
+  max-height: 72vh;
+  overflow: auto;
+  border-radius: 1rem;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.06);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+body.dark-mode .admin-status-running {
+  color: #7dd3fc;
+}
+
+body.dark-mode .admin-status-finished {
+  color: #86efac;
+}
+
+@media (max-width: 880px) {
+  .admin-integrity-access-header {
+    flex-direction: column;
+  }
+
+  .admin-report-item {
+    grid-template-columns: 1fr;
+  }
+}
+
+.admin-integrity-audit-controls {
+  margin: 1rem 0;
+}
+
+.admin-integrity-audit-controls label {
+  display: grid;
+  gap: 0.45rem;
+  max-width: 30rem;
+  font-weight: 650;
+}
+
+.admin-integrity-audit-controls select {
+  width: 100%;
+  min-height: 2.8rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 0.85rem;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  background: rgba(255, 255, 255, 0.92);
+  color: inherit;
+}
+
+body.dark-mode .admin-integrity-audit-controls select {
+  background: rgba(15, 23, 42, 0.55);
+}

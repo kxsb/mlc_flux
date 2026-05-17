@@ -27,3 +27,7 @@ class Config:
     # Routes HTTP de synchronisation désactivées tant qu'aucun token
     # d'administration n'est explicitement configuré.
     SYNC_API_TOKEN = os.getenv("SYNC_API_TOKEN", "")
+
+    # Routes HTTP d'administration désactivées tant qu'aucun token
+    # d'administration n'est explicitement configuré.
+    ADMIN_API_TOKEN = os.getenv("ADMIN_API_TOKEN", "")
