@@ -1,0 +1,44 @@
+[
+  {
+    "slug": "fonctions-cles",
+    "filename": "custom_fonctions-cles.md",
+    "kicker": "Code",
+    "title": "FAQ - Dev",
+    "summary": "foire aux questions principales relatives au code source"
+  },
+  {
+    "slug": "api-extraction-des-donnees",
+    "filename": "custom_api-extraction-des-donnees.md",
+    "kicker": "Code",
+    "title": "API - extraction des données",
+    "summary": "Mode et méthodes de récupérations des données via les API et affichage front end"
+  },
+  {
+    "slug": "fonction-frontend-interface-ux",
+    "filename": "custom_fonction-frontend-interface-ux.md",
+    "kicker": "Code",
+    "title": "Fonction Frontend, interface & UX",
+    "summary": "Liste des fonctions relatives au front end et à l'affichage de l'interface"
+  },
+  {
+    "slug": "architecture-front-ux",
+    "filename": "custom_architecture-front-ux.md",
+    "kicker": "Code",
+    "title": "Architecture Front-UX",
+    "summary": "constructeur et rôle des différentes composantes de l'interface"
+  },
+  {
+    "slug": "fonctions-critiques",
+    "filename": "custom_fonctions-critiques.md",
+    "kicker": "Code",
+    "title": "Fonctions critiques",
+    "summary": "Fonctions principales du code source (connexion api, classification des données, rendu…,)"
+  },
+  {
+    "slug": "synthese-et-explication-du-code-source",
+    "filename": "custom_synthese-et-explication-du-code-source.md",
+    "kicker": "Code",
+    "title": "Synthèse et explication du code-source",
+    "summary": "Synthèse des grandes fonctions du cod de MLCFlux"
+  }
+]

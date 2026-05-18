@@ -1,0 +1,28 @@
+services:
+  app:
+    build: .
+    env_file: .env
+    volumes:
+      - app_data:/app/server/data
+    networks:
+      - internal
+    restart: unless-stopped
+
+  nginx:
+    build: ./nginx
+    ports:
+      - "${NGINX_BIND_HOST:-0.0.0.0}:${NGINX_PUBLISHED_PORT:-80}:80"
+    environment:
+      NGINX_AUTH_USER: ${NGINX_AUTH_USER:-admin}
+      NGINX_AUTH_PASSWORD: ${NGINX_AUTH_PASSWORD:-changeme}
+    depends_on:
+      - app
+    networks:
+      - internal
+    restart: unless-stopped
+
+volumes:
+  app_data:
+
+networks:
+  internal:

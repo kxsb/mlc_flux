@@ -1,0 +1,46 @@
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+*.db
+*.sqlite
+*.sqlite3
+*.log
+logs/
+server/logs/
+nginx/
+docker-compose.yml
+.git/
+.gitignore
+TODO.md
+
+# Artefacts locaux de développement / audit / sauvegarde
+_backups/
+backups/
+_audit_archive/
+_audits/
+_diffs/
+_logs_tests/
+_logs_links/
+audits/
+
+# Fichiers de sauvegarde ponctuels
+*.bak
+*.bak_*
+*.before
+*.orig
+*~
+
+# Bases SQLite et fichiers associés, à toute profondeur
+**/*.db
+**/*.db-*
+**/*.sqlite
+**/*.sqlite-*
+**/*.sqlite3
+**/*.sqlite3-*
+
+# Données runtime MLCFlux
+# Ce dossier est initialisé explicitement par server/bootstrap_instance.py
+server/data/
