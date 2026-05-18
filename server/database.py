@@ -44,6 +44,12 @@ def init_db():
     """)
 
     cur.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_cyclos_id_unique
+        ON transactions (cyclos_id)
+        WHERE cyclos_id IS NOT NULL AND TRIM(cyclos_id) <> ''
+    """)
+
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS sync_state (
             sync_name TEXT PRIMARY KEY,
             last_run_at TEXT,
