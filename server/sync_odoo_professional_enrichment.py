@@ -1,3 +1,4 @@
+import argparse
 from datetime import datetime, UTC
 
 from server import create_app
@@ -90,9 +91,23 @@ def run_sync():
         }
 
 
+def build_parser() -> argparse.ArgumentParser:
+    return argparse.ArgumentParser(
+        description=(
+            "Synchronise l’enrichissement professionnel Odoo "
+            "à partir des références Pxxxx déjà présentes dans MLCFlux."
+        )
+    )
+
+
+def main() -> None:
+    build_parser().parse_args()
+    run_sync()
+
+
 if __name__ == "__main__":
     try:
-        run_sync()
+        main()
     except Exception as e:
         app = create_app()
         with app.app_context():

@@ -2253,9 +2253,16 @@ function sortRows(rows, mapping = null) {
     let bv = mapping ? mapping(b, key) : b[key];
 
     if (key === "Date") {
-      const ad = new Date(av.split("-").reverse().join("-"));
-      const bd = new Date(bv.split("-").reverse().join("-"));
-      return appState.detailSortDir === "asc" ? ad - bd : bd - ad;
+      const ad = parseFrDate(String(av ?? ""));
+      const bd = parseFrDate(String(bv ?? ""));
+      const at = ad.getTime();
+      const bt = bd.getTime();
+
+      if (Number.isNaN(at) && Number.isNaN(bt)) return 0;
+      if (Number.isNaN(at)) return 1;
+      if (Number.isNaN(bt)) return -1;
+
+      return appState.detailSortDir === "asc" ? at - bt : bt - at;
     }
 
     const aNum = Number(String(av).replace(/[^\d.-]/g, ""));
@@ -2350,7 +2357,7 @@ function parseFrDate(str) {
   const value = String(str || "").trim();
   if (!value) return new Date("invalid");
 
-  const datePart = value.split(" ")[0];
+  const datePart = value.split(/[T\s]/)[0];
 
   if (datePart.includes("-")) {
     const parts = datePart.split("-");
@@ -2372,11 +2379,22 @@ function parseFrDate(str) {
   return new Date(value);
 }
 
-function formatFrDate(date) {
+function formatDateFr(value) {
+  const date = value instanceof Date ? value : parseFrDate(value);
+
+  if (Number.isNaN(date.getTime())) {
+    const raw = String(value || "").trim();
+    return raw || "—";
+  }
+
   const dd = String(date.getDate()).padStart(2, "0");
   const mm = String(date.getMonth() + 1).padStart(2, "0");
   const yyyy = date.getFullYear();
-  return `${dd}-${mm}-${yyyy}`;
+  return `${dd}/${mm}/${yyyy}`;
+}
+
+function formatFrDate(date) {
+  return formatDateFr(date);
 }
 
 function toIsoDayFromFrDate(str) {
@@ -2844,7 +2862,7 @@ function transactionTable(rows) {
 
   const body = sortedRows.map(row => `
     <tr>
-      <td>${escapeHtml(row.Date)}</td>
+      <td>${escapeHtml(formatDateFr(row.Date))}</td>
       <td>${renderActorLink(row["Réalisé par"])}</td>
       <td>${renderActorLink(row["Vers"])}</td>
       <td class="num">${euro(row["Montant"])}</td>
@@ -2886,7 +2904,7 @@ function paginatedTransactionTable(rows) {
 
   const body = pageRows.map(row => `
     <tr>
-      <td>${escapeHtml(row.Date)}</td>
+      <td>${escapeHtml(formatDateFr(row.Date))}</td>
       <td>${renderActorLink(row["Réalisé par"])}</td>
       <td>${renderActorLink(row["Vers"])}</td>
       <td class="num">${euro(row["Montant"])}</td>
