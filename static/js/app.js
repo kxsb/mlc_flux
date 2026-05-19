@@ -6831,7 +6831,7 @@ function renderStatsCardsAndCharts(stats, charts) {
   }).join("");
 
   content.innerHTML = `
-    <nav class="pro-tabs stats-tabs" aria-label="Sections des statistiques globales">
+    <nav class="pro-tabs stats-tabs analysis-view-tabs" aria-label="Sections des statistiques globales">
       <button
         class="tab-btn tab-btn-active"
         type="button"
@@ -6866,34 +6866,73 @@ function renderStatsCardsAndCharts(stats, charts) {
       </button>
     </nav>
 
+    <section class="card analysis-view-masthead stats-analysis-masthead">
+      <div class="analysis-view-masthead-main">
+        <div class="stat-label">Lecture globale des flux</div>
+        <h2>Ce qui circule, ce qui entre, ce qui sort — et ce que cela raconte du circuit.</h2>
+        <p>
+          Cette vue pose le cadre transversal de MLCFlux. Elle distingue l’activité économique centrale,
+          les alimentations et sorties, les opérations associatives ou techniques, puis les repères de masse
+          monétaire et de garanties.
+        </p>
+      </div>
+
+      <aside class="analysis-view-masthead-aside">
+        <div class="analysis-view-masthead-kpi">
+          <strong>4 lectures</strong>
+          <span>Activité, circuit, opérations et repères monétaires.</span>
+        </div>
+
+        <div class="analysis-view-masthead-note">
+          Commencer par l’activité économique, puis élargir le regard pour comprendre la structure complète
+          de la période analysée.
+        </div>
+      </aside>
+    </section>
+
     <section class="stats-tab-panel" data-stats-panel="activity">
       <div class="grid activity-kpi-grid">
         <div class="card stat-card-static">
-          <div class="stat-label">Transactions économiques</div>
+          ${statLabelWithHelp(
+            "Transactions économiques",
+            "Nombre de transactions retenues dans le périmètre d’activité économique centrale, hors opérations associatives ou techniques."
+          )}
           <div class="stat-value">${integerFr(stats.nb_transactions_activite_economique)}</div>
           <div class="stat-subtext">Périmètre structurel de l’activité</div>
         </div>
 
         <div class="card stat-card-static">
-          <div class="stat-label">Volume d’activité</div>
+          ${statLabelWithHelp(
+            "Volume d’activité",
+            "Somme des montants des transactions économiques retenues sur la période sélectionnée."
+          )}
           <div class="stat-value">${euro(stats.volume_activite_economique || 0)}</div>
           <div class="stat-subtext">${euro(stats.volume_moyen_par_jour || 0)} par jour en moyenne</div>
         </div>
 
         <div class="card stat-card-static">
-          <div class="stat-label">Montant moyen par transaction</div>
+          ${statLabelWithHelp(
+            "Montant moyen par transaction",
+            "Volume total de l’activité économique divisé par le nombre de transactions économiques retenues."
+          )}
           <div class="stat-value">${euro(stats.montant_moyen_activite || 0)}</div>
           <div class="stat-subtext">Sur l’ensemble de l’activité retenue</div>
         </div>
 
         <div class="card stat-card-static">
-          <div class="stat-label">Transactions moyennes par jour</div>
+          ${statLabelWithHelp(
+            "Transactions moyennes par jour",
+            "Nombre moyen de transactions économiques par jour calendaire couvert par la période d’activité."
+          )}
           <div class="stat-value">${decimalFr(stats.moyenne_transactions_par_jour || 0)}</div>
           <div class="stat-subtext">${integerFr(stats.nb_jours_periode_activite || 0)} jours calendaires</div>
         </div>
 
         <div class="card stat-card-static">
-          <div class="stat-label">Acteurs impliqués</div>
+          ${statLabelWithHelp(
+            "Acteurs impliqués",
+            "Nombre d’acteurs distincts apparaissant dans l’activité économique centrale sur la période."
+          )}
           <div class="stat-value">${integerFr(stats.nb_acteurs_activite || 0)}</div>
           <div class="stat-subtext">
             ${integerFr(stats.nb_acteurs_particuliers || 0)} particuliers ·
@@ -6923,31 +6962,46 @@ function renderStatsCardsAndCharts(stats, charts) {
     <section class="stats-tab-panel hidden" data-stats-panel="circuit">
       <div class="grid circuit-kpi-grid">
         <div class="card stat-card-static">
-          <div class="stat-label">Opérations d’alimentation</div>
+          ${statLabelWithHelp(
+            "Opérations d’alimentation",
+            "Nombre d’opérations qui ajoutent des Gonettes numériques au circuit sur la période."
+          )}
           <div class="stat-value">${integerFr(stats.nb_alimentations_circuit || 0)}</div>
           <div class="stat-subtext">${euro(stats.montant_moyen_alimentation || 0)} par opération en moyenne</div>
         </div>
 
         <div class="card stat-card-static">
-          <div class="stat-label">Volume alimenté</div>
+          ${statLabelWithHelp(
+            "Volume alimenté",
+            "Montant total de Gonettes numériques entrées dans le circuit pendant la période."
+          )}
           <div class="stat-value">${euro(stats.volume_alimente_circuit || 0)}</div>
           <div class="stat-subtext">Entrées de Gonettes numériques sur la période</div>
         </div>
 
         <div class="card stat-card-static">
-          <div class="stat-label">Opérations de sortie</div>
+          ${statLabelWithHelp(
+            "Opérations de sortie",
+            "Nombre d’opérations qui retirent des Gonettes numériques du circuit, notamment les reconversions."
+          )}
           <div class="stat-value">${integerFr(stats.nb_sorties_circuit || 0)}</div>
           <div class="stat-subtext">${euro(stats.montant_moyen_sortie || 0)} par opération en moyenne</div>
         </div>
 
         <div class="card stat-card-static">
-          <div class="stat-label">Volume sorti</div>
+          ${statLabelWithHelp(
+            "Volume sorti",
+            "Montant total de Gonettes numériques sorties du circuit pendant la période."
+          )}
           <div class="stat-value">${euro(stats.volume_sorti_circuit || 0)}</div>
           <div class="stat-subtext">Reconversions / sorties professionnelles</div>
         </div>
 
         <div class="card stat-card-static">
-          <div class="stat-label">Écart net entrées – sorties</div>
+          ${statLabelWithHelp(
+            "Écart net entrées – sorties",
+            "Différence entre le volume alimenté et le volume sorti sur la période ; il s’agit d’un flux net, pas d’un stock."
+          )}
           <div class="stat-value">${euro(stats.ecart_net_circuit || 0)}</div>
           <div class="stat-subtext">Indicateur de flux sur la période, pas un stock de monnaie</div>
         </div>
@@ -6972,31 +7026,46 @@ function renderStatsCardsAndCharts(stats, charts) {
     <section class="stats-tab-panel hidden" data-stats-panel="operations">
       <div class="grid operations-kpi-grid">
         <div class="card stat-card-static">
-          <div class="stat-label">Opérations associatives / techniques</div>
+          ${statLabelWithHelp(
+            "Opérations associatives / techniques",
+            "Nombre de mouvements classés hors activité économique centrale : gestion, correction, comptes opérateurs ou cas techniques."
+          )}
           <div class="stat-value">${integerFr(stats.nb_operations_assoc_tech || 0)}</div>
           <div class="stat-subtext">Tous les mouvements hors activité économique centrale</div>
         </div>
 
         <div class="card stat-card-static">
-          <div class="stat-label">Volume associé</div>
+          ${statLabelWithHelp(
+            "Volume associé",
+            "Montant total des opérations associatives ou techniques observées sur la période."
+          )}
           <div class="stat-value">${euro(stats.volume_operations_assoc_tech || 0)}</div>
           <div class="stat-subtext">${euro(stats.montant_moyen_operations_assoc_tech || 0)} par opération en moyenne</div>
         </div>
 
         <div class="card stat-card-static">
-          <div class="stat-label">Comptes opérateurs</div>
+          ${statLabelWithHelp(
+            "Comptes opérateurs",
+            "Mouvements impliquant les comptes P0000 ou P9999, suivis séparément du réseau professionnel marchand."
+          )}
           <div class="stat-value">${integerFr(stats.nb_operations_operator_accounts || 0)}</div>
           <div class="stat-subtext">${euro(stats.volume_operations_operator_accounts || 0)} de mouvements impliquant P0000 / P9999</div>
         </div>
 
         <div class="card stat-card-static">
-          <div class="stat-label">Particuliers → comptes techniques</div>
+          ${statLabelWithHelp(
+            "Particuliers → comptes techniques",
+            "Nombre de flux depuis des comptes particuliers vers des comptes techniques, lus à part de l’activité économique."
+          )}
           <div class="stat-value">${integerFr(stats.nb_operations_user_to_technical_accounts || 0)}</div>
           <div class="stat-subtext">${euro(stats.volume_operations_user_to_technical_accounts || 0)} sur la période</div>
         </div>
 
         <div class="card stat-card-static">
-          <div class="stat-label">Montant moyen U→compte technique</div>
+          ${statLabelWithHelp(
+            "Montant moyen U→compte technique",
+            "Volume des flux particuliers vers comptes techniques divisé par leur nombre d’opérations."
+          )}
           <div class="stat-value">${euro(stats.montant_moyen_user_to_technical_accounts || 0)}</div>
           <div class="stat-subtext">Bloc structurel à lire comme opérations de gestion / correction</div>
         </div>
@@ -7428,19 +7497,28 @@ async function renderMonetaryIndicatorsTab() {
 
       <div class="grid monetary-kpi-grid">
         <div class="card stat-card-static">
-          <div class="stat-label">Masse totale de clôture</div>
+          ${statLabelWithHelp(
+            "Masse totale de clôture",
+            "Stock comptable total observé au dernier jour disponible : masse numérique plus masse papier."
+          )}
           <div class="stat-value">${gonettes(total)}</div>
           <div class="stat-subtext">Stock numérique + papier au ${closingDateLabel}</div>
         </div>
 
         <div class="card stat-card-static">
-          <div class="stat-label">Masse numérique de clôture</div>
+          ${statLabelWithHelp(
+            "Masse numérique de clôture",
+            "Stock de Gonettes numériques en circulation observé au dernier snapshot Odoo disponible."
+          )}
           <div class="stat-value">${gonettes(numeric)}</div>
           <div class="stat-subtext">${percentFr(numericShare)} de la masse monétaire à cette date</div>
         </div>
 
         <div class="card stat-card-static">
-          <div class="stat-label">Masse papier de clôture</div>
+          ${statLabelWithHelp(
+            "Masse papier de clôture",
+            "Stock de Gonettes papier en circulation observé au dernier snapshot Odoo disponible."
+          )}
           <div class="stat-value">${gonettes(paper)}</div>
           <div class="stat-subtext">${percentFr(paperShare)} de la masse monétaire à cette date</div>
         </div>
@@ -10876,22 +10954,7 @@ async function renderMonetaryPilotageView(forceReload = false) {
     }
 
     content.innerHTML = `
-      <section class="card pilotage-overview-card">
-        <div class="pilotage-overview-header pilotage-overview-header-refined">
-          <div>
-            <div class="stat-label">Analyse croisée Odoo × Cyclos</div>
-            <h2>La Gonette numérique circule. Mais que raconte vraiment son mouvement ?</h2>
-            <p>
-              Cette lecture croise les <strong>flux Cyclos</strong> et les <strong>stocks comptables Odoo</strong>
-              pour distinguer ce qui <strong>entre</strong>, ce qui <strong>circule</strong>,
-              ce qui <strong>s’ancre</strong> et ce qui reste <strong>à remobiliser</strong>.
-            </p>
-          </div>
-        </div>
-        ${pilotagePeriodNotice}
-      </section>
-
-      <nav class="stats-tabs pilotage-tabs" aria-label="Lectures du pilotage monétaire">
+      <nav class="stats-tabs pilotage-tabs analysis-view-tabs" aria-label="Lectures du pilotage monétaire">
         <button
           class="tab-btn tab-btn-active"
           type="button"
@@ -10928,6 +10991,34 @@ async function renderMonetaryPilotageView(forceReload = false) {
           Détention &amp; ancrage
         </button>
       </nav>
+
+      <section class="card pilotage-overview-card analysis-view-masthead pilotage-analysis-masthead">
+        <div class="analysis-view-masthead-main pilotage-overview-header pilotage-overview-header-refined">
+          <div class="stat-label">Analyse croisée Odoo × Cyclos</div>
+          <h2>La Gonette numérique circule. Mais que raconte vraiment son mouvement&nbsp;?</h2>
+          <p>
+            Cette lecture croise les <strong>flux Cyclos</strong> et les <strong>stocks comptables Odoo</strong>
+            pour distinguer ce qui <strong>entre</strong>, ce qui <strong>circule</strong>,
+            ce qui <strong>s’ancre</strong> et ce qui reste <strong>à remobiliser</strong>.
+          </p>
+        </div>
+
+        <aside class="analysis-view-masthead-aside">
+          <div class="analysis-view-masthead-kpi">
+            <strong>Stocks × flux</strong>
+            <span>Une lecture croisée entre circulation numérique et repères comptables.</span>
+          </div>
+
+          <div class="analysis-view-masthead-note">
+            La synthèse pose les ratios clés. Les onglets suivants approfondissent la circulation,
+            les garanties et la détention.
+          </div>
+        </aside>
+
+        <div class="analysis-view-masthead-period">
+          ${pilotagePeriodNotice}
+        </div>
+      </section>
 
       <section class="pilotage-tab-panel" data-pilotage-panel="summary">
         <section class="pilotage-primary-kpi-grid">
@@ -13078,32 +13169,7 @@ function buildProfessionalAnalysisShell(flowSummary = null, holdingsSummary = nu
     : 0;
 
   return `
-    <section class="card professional-analysis-hero">
-      <div class="professional-analysis-hero-main">
-        <div class="stat-label">Professionnels &amp; particuliers · usages, circulation et ancrage des communautés d’échange</div>
-        <h2>Comment les utilisateurs de la Gonette — particuliers et professionnels — structurent-ils la circulation, les pôles d’usage et les communautés d’échange&nbsp;?</h2>
-        <p>
-          Cette vue croise les flux, les soldes, les cartes, les secteurs et les trajectoires
-          historiques pour analyser ensemble les particuliers et les professionnels :
-          qui alimente la circulation, qui la capte, quels clusters se forment,
-          et quels leviers peuvent renforcer l’ancrage de la Gonette dans ses usages réels.
-        </p>
-      </div>
-
-      <div class="professional-analysis-hero-aside">
-        <div class="professional-analysis-hero-kpi">
-          <strong>${Number(activeProfessionals || 0).toLocaleString("fr-FR")}</strong>
-          <span>professionnel(s) visibles dans le classement de la période</span>
-        </div>
-        <div class="professional-analysis-hero-note">
-          Le classement professionnel existant reste disponible dans l’onglet
-          <strong>Liste &amp; fiches</strong> pendant la refonte de cette vue élargie
-          aux usages des particuliers et des professionnels.
-        </div>
-      </div>
-    </section>
-
-    <nav class="professional-analysis-tabs" aria-label="Analyse des professionnels et particuliers">
+    <nav class="professional-analysis-tabs analysis-view-tabs" aria-label="Analyse des professionnels et particuliers">
       <button
         type="button"
         class="professional-analysis-tab-btn"
@@ -13152,6 +13218,31 @@ function buildProfessionalAnalysisShell(flowSummary = null, holdingsSummary = nu
         Liste &amp; fiches
       </button>
     </nav>
+
+    <section class="card professional-analysis-hero analysis-view-masthead professional-analysis-masthead">
+      <div class="professional-analysis-hero-main analysis-view-masthead-main">
+        <div class="stat-label">Professionnels &amp; particuliers · usages, circulation et ancrage des communautés d’échange</div>
+        <h2>Comment les utilisateurs de la Gonette — particuliers et professionnels — structurent-ils la circulation, les pôles d’usage et les communautés d’échange&nbsp;?</h2>
+        <p>
+          Cette vue croise les flux, les soldes, les cartes, les secteurs et les trajectoires
+          historiques pour analyser ensemble les particuliers et les professionnels :
+          qui alimente la circulation, qui la capte, quels clusters se forment,
+          et quels leviers peuvent renforcer l’ancrage de la Gonette dans ses usages réels.
+        </p>
+      </div>
+
+      <div class="professional-analysis-hero-aside analysis-view-masthead-aside">
+        <div class="professional-analysis-hero-kpi analysis-view-masthead-kpi">
+          <strong>${Number(activeProfessionals || 0).toLocaleString("fr-FR")}</strong>
+          <span>professionnel(s) visibles dans le classement de la période</span>
+        </div>
+        <div class="professional-analysis-hero-note analysis-view-masthead-note">
+          Le classement professionnel existant reste disponible dans l’onglet
+          <strong>Liste &amp; fiches</strong> pendant la refonte de cette vue élargie
+          aux usages des particuliers et des professionnels.
+        </div>
+      </div>
+    </section>
 
     <section
       class="professional-analysis-panel"
@@ -17665,23 +17756,38 @@ async function renderUserDetail(userCode) {
 
     <div class="grid">
       <div class="card">
-        <div class="stat-label">Transactions</div>
+        ${statLabelWithHelp(
+          "Transactions",
+          "Nombre de transactions impliquant ce compte particulier sur la période affichée."
+        )}
         <div class="stat-value">${stats.nb_transactions}</div>
       </div>
       <div class="card">
-        <div class="stat-label">Somme reçue</div>
+        ${statLabelWithHelp(
+          "Somme reçue",
+          "Montant total reçu par ce compte particulier sur la période affichée."
+        )}
         <div class="stat-value">${euro(stats.somme_recue)}</div>
       </div>
       <div class="card">
-        <div class="stat-label">Somme émise</div>
+        ${statLabelWithHelp(
+          "Somme émise",
+          "Montant total émis par ce compte particulier sur la période affichée."
+        )}
         <div class="stat-value">${euro(stats.somme_emise)}</div>
       </div>
       <div class="card">
-        <div class="stat-label">Paiements vers pro</div>
+        ${statLabelWithHelp(
+          "Paiements vers pro",
+          "Nombre de transactions émises par ce compte particulier vers des professionnels."
+        )}
         <div class="stat-value">${stats.nb_paiements_vers_pro}</div>
       </div>
       <div class="card">
-        <div class="stat-label">Paiements vers particulier</div>
+        ${statLabelWithHelp(
+          "Paiements vers particulier",
+          "Nombre de transactions émises par ce compte particulier vers d’autres comptes particuliers."
+        )}
         <div class="stat-value">${stats.nb_paiements_vers_user}</div>
       </div>
     </div>

@@ -10426,3 +10426,323 @@ body.dark-mode .pro-detail-payment-basin-postal-chip {
   cursor: default;
 }
 
+
+
+/* VISUALHEAD002A — Rail d’onglets harmonisé des grandes vues */
+.analysis-view-tabs {
+  margin-top: 8px;
+  margin-bottom: 18px;
+}
+
+
+/* VISUALHEAD003A — Composant visuel commun des rails d’onglets analytiques */
+.analysis-view-tabs {
+  --analysis-tabs-accent-rgb: 37, 99, 235;
+  --analysis-tabs-accent-text: #1d4ed8;
+
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+
+  width: 100%;
+  box-sizing: border-box;
+
+  margin-top: 8px;
+  margin-bottom: 18px;
+  padding: 10px;
+
+  border-radius: 24px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background:
+    radial-gradient(
+      circle at top left,
+      rgba(var(--analysis-tabs-accent-rgb), 0.08),
+      transparent 28%
+    ),
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.94),
+      rgba(248, 250, 252, 0.84)
+    );
+  box-shadow:
+    0 18px 40px rgba(15, 23, 42, 0.055),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+/* Variantes d’univers */
+.stats-tabs.analysis-view-tabs {
+  --analysis-tabs-accent-rgb: 37, 99, 235;
+  --analysis-tabs-accent-text: #1d4ed8;
+}
+
+.pilotage-tabs.analysis-view-tabs {
+  --analysis-tabs-accent-rgb: 79, 70, 229;
+  --analysis-tabs-accent-text: #4338ca;
+}
+
+.professional-analysis-tabs.analysis-view-tabs {
+  --analysis-tabs-accent-rgb: 217, 119, 6;
+  --analysis-tabs-accent-text: #7c2d12;
+}
+
+/* Boutons : socle commun */
+.analysis-view-tabs .tab-btn,
+.analysis-view-tabs .professional-analysis-tab-btn {
+  appearance: none;
+  min-height: 40px;
+  padding: 11px 16px;
+
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background: rgba(248, 250, 252, 0.92);
+  color: #334155;
+
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.1;
+
+  cursor: pointer;
+  white-space: nowrap;
+
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.72),
+    0 4px 10px rgba(15, 23, 42, 0.035);
+
+  transition:
+    transform 0.16s ease,
+    border-color 0.16s ease,
+    background 0.16s ease,
+    color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+/* Survol */
+.analysis-view-tabs .tab-btn:hover,
+.analysis-view-tabs .professional-analysis-tab-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(var(--analysis-tabs-accent-rgb), 0.38);
+  background:
+    linear-gradient(
+      135deg,
+      rgba(var(--analysis-tabs-accent-rgb), 0.10),
+      rgba(255, 255, 255, 0.96)
+    );
+  box-shadow:
+    0 10px 22px rgba(var(--analysis-tabs-accent-rgb), 0.10),
+    0 1px 0 rgba(255, 255, 255, 0.82);
+}
+
+/* Onglet actif — stats / pilotage */
+.analysis-view-tabs .tab-btn.tab-btn-active {
+  color: var(--analysis-tabs-accent-text);
+  border-color: rgba(var(--analysis-tabs-accent-rgb), 0.44);
+  background:
+    linear-gradient(
+      135deg,
+      rgba(var(--analysis-tabs-accent-rgb), 0.22),
+      rgba(var(--analysis-tabs-accent-rgb), 0.10)
+    );
+  box-shadow:
+    0 14px 28px rgba(var(--analysis-tabs-accent-rgb), 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+/* Onglet actif — vue Professionnels & particuliers */
+.analysis-view-tabs .professional-analysis-tab-btn-active {
+  color: var(--analysis-tabs-accent-text);
+  border-color: rgba(var(--analysis-tabs-accent-rgb), 0.44);
+  background:
+    linear-gradient(
+      135deg,
+      rgba(var(--analysis-tabs-accent-rgb), 0.22),
+      rgba(var(--analysis-tabs-accent-rgb), 0.10)
+    );
+  box-shadow:
+    0 14px 28px rgba(var(--analysis-tabs-accent-rgb), 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+/* Réduction du léger écart historique spécifique à la vue Pilotage */
+.pilotage-tabs.analysis-view-tabs {
+  margin-bottom: 18px;
+}
+
+/* Mobile : le rail reste souple sans compacter excessivement les libellés */
+@media (max-width: 760px) {
+  .analysis-view-tabs {
+    gap: 8px;
+    padding: 9px;
+    border-radius: 20px;
+  }
+
+  .analysis-view-tabs .tab-btn,
+  .analysis-view-tabs .professional-analysis-tab-btn {
+    min-height: 38px;
+    padding: 10px 14px;
+    font-size: 0.9rem;
+  }
+}
+
+
+/* VISUALHEAD004A — Mastheads analytiques harmonisés */
+.analysis-view-masthead {
+  --analysis-masthead-accent-rgb: 37, 99, 235;
+
+  position: relative;
+  overflow: hidden;
+
+  display: grid;
+  grid-template-columns: minmax(0, 1.72fr) minmax(270px, 0.84fr);
+  gap: 28px;
+  align-items: stretch;
+
+  margin-bottom: 18px;
+  padding: 28px;
+
+  border-radius: 26px;
+  border: 1px solid rgba(var(--analysis-masthead-accent-rgb), 0.18);
+
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(var(--analysis-masthead-accent-rgb), 0.14),
+      transparent 40%
+    ),
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.985),
+      rgba(248, 250, 252, 0.965)
+    );
+
+  box-shadow:
+    0 20px 44px rgba(15, 23, 42, 0.055),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.stats-analysis-masthead {
+  --analysis-masthead-accent-rgb: 37, 99, 235;
+}
+
+.pilotage-analysis-masthead {
+  --analysis-masthead-accent-rgb: 79, 70, 229;
+}
+
+.professional-analysis-masthead {
+  --analysis-masthead-accent-rgb: 217, 119, 6;
+}
+
+.analysis-view-masthead-main {
+  min-width: 0;
+}
+
+.analysis-view-masthead-main h2 {
+  margin: 10px 0 12px;
+  max-width: 980px;
+
+  font-size: clamp(1.58rem, 2.24vw, 2.28rem);
+  line-height: 1.16;
+  letter-spacing: -0.022em;
+}
+
+.professional-analysis-masthead .analysis-view-masthead-main h2 {
+  font-size: clamp(1.72rem, 2.45vw, 2.48rem);
+}
+
+.analysis-view-masthead-main p {
+  max-width: 980px;
+  margin: 0;
+
+  color: var(--muted-text, #475569);
+  font-size: 0.98rem;
+  line-height: 1.66;
+}
+
+.analysis-view-masthead-aside {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.analysis-view-masthead-kpi,
+.analysis-view-masthead-note {
+  padding: 18px;
+  border-radius: 20px;
+
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(var(--analysis-masthead-accent-rgb), 0.16);
+
+  box-shadow:
+    0 14px 30px rgba(15, 23, 42, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.78);
+}
+
+.analysis-view-masthead-kpi {
+  display: grid;
+  gap: 7px;
+}
+
+.analysis-view-masthead-kpi strong {
+  font-size: clamp(1.58rem, 2.24vw, 2.28rem);
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+.professional-analysis-masthead .analysis-view-masthead-kpi strong {
+  font-size: clamp(2rem, 3vw, 2.8rem);
+}
+
+.analysis-view-masthead-kpi span,
+.analysis-view-masthead-note {
+  color: var(--muted-text, #475569);
+  font-size: 0.95rem;
+  line-height: 1.56;
+}
+
+.analysis-view-masthead-period {
+  grid-column: 1 / -1;
+}
+
+.analysis-view-masthead-period:empty {
+  display: none;
+}
+
+.analysis-view-masthead-period .monetary-period-warning,
+.analysis-view-masthead-period .pilotage-period-line {
+  margin-top: 0;
+}
+
+@media (max-width: 980px) {
+  .analysis-view-masthead {
+    grid-template-columns: 1fr;
+    gap: 20px;
+    padding: 24px;
+  }
+
+  .analysis-view-masthead-aside {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .analysis-view-masthead {
+    gap: 16px;
+    padding: 20px;
+    border-radius: 22px;
+  }
+
+  .analysis-view-masthead-main h2,
+  .professional-analysis-masthead .analysis-view-masthead-main h2 {
+    font-size: clamp(1.45rem, 6vw, 1.95rem);
+  }
+
+  .analysis-view-masthead-aside {
+    grid-template-columns: 1fr;
+  }
+
+  .analysis-view-masthead-kpi,
+  .analysis-view-masthead-note {
+    padding: 16px;
+    border-radius: 18px;
+  }
+}
