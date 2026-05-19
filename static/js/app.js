@@ -3521,6 +3521,7 @@ async function reloadCurrentViewForPeriod() {
 
   const useSoftPeriodRefresh = (
     appState.currentView !== "info"
+    && appState.currentView !== "admin"
   );
 
   if (useSoftPeriodRefresh) {
@@ -3574,6 +3575,8 @@ async function reloadCurrentViewForPeriod() {
     await renderSectorsView(true);
   } else if (appState.currentView === "info") {
     await renderInfoView(false);
+  } else if (appState.currentView === "admin") {
+    await renderAdministrationView();
   } else {
     await renderStatsView(true);
   }
@@ -3888,6 +3891,11 @@ async function openViewProgressively(viewKey) {
 
   if (viewKey === "info") {
     await renderInfoView();
+    return;
+  }
+
+  if (viewKey === "admin") {
+    await renderAdministrationView();
   }
 }
 
@@ -5077,6 +5085,612 @@ async function renderInfoView(forceReload = false, requestedPageSlug = null) {
       </section>
     `;
   }
+}
+
+
+
+const ADMIN_TOKEN_SESSION_KEY = "mlcflux.admin.token";
+let administrationIntegrityPollTimer = null;
+
+function getAdministrationToken() {
+  return sessionStorage.getItem(ADMIN_TOKEN_SESSION_KEY) || "";
+}
+
+function storeAdministrationToken(token) {
+  const normalized = String(token || "").trim();
+
+  if (!normalized) {
+    sessionStorage.removeItem(ADMIN_TOKEN_SESSION_KEY);
+    return "";
+  }
+
+  sessionStorage.setItem(ADMIN_TOKEN_SESSION_KEY, normalized);
+  return normalized;
+}
+
+function clearAdministrationToken() {
+  sessionStorage.removeItem(ADMIN_TOKEN_SESSION_KEY);
+}
+
+function setAdministrationFeedback(message, isError = false) {
+  const feedback = document.getElementById("administrationFeedback");
+  if (!feedback) return;
+
+  feedback.textContent = message || "";
+  feedback.classList.toggle("hidden", !message);
+  feedback.classList.toggle("is-error", Boolean(isError));
+  feedback.classList.toggle("is-success", Boolean(message) && !isError);
+}
+
+function formatAdministrationDate(value) {
+  if (!value) {
+    return "—";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return escapeHtml(String(value));
+  }
+
+  return new Intl.DateTimeFormat("fr-FR", {
+    dateStyle: "medium",
+    timeStyle: "short"
+  }).format(date);
+}
+
+function formatAdministrationBoolean(value) {
+  if (value === true) return "Oui";
+  if (value === false) return "Non";
+  return "—";
+}
+
+function formatAdministrationSize(bytes) {
+  const value = Number(bytes);
+
+  if (!Number.isFinite(value) || value < 0) {
+    return "—";
+  }
+
+  if (value < 1024) {
+    return `${value.toLocaleString("fr-FR")} o`;
+  }
+
+  const units = ["Ko", "Mo", "Go"];
+  let scaled = value / 1024;
+  let unit = units[0];
+
+  for (let index = 1; index < units.length && scaled >= 1024; index += 1) {
+    scaled /= 1024;
+    unit = units[index];
+  }
+
+  return `${scaled.toLocaleString("fr-FR", {
+    maximumFractionDigits: scaled >= 100 ? 0 : 1
+  })} ${unit}`;
+}
+
+async function administrationApiJson(endpoint, options = {}) {
+  const token = getAdministrationToken();
+  const headers = {
+    Accept: "application/json",
+    ...(options.headers || {})
+  };
+
+  if (token) {
+    headers["X-MLCFlux-Admin-Token"] = token;
+  }
+
+  if (options.body !== undefined && !headers["Content-Type"]) {
+    headers["Content-Type"] = "application/json";
+  }
+
+  const response = await fetch(endpoint, {
+    ...options,
+    headers
+  });
+
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch (_err) {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    const message = payload?.error || `Erreur HTTP ${response.status}`;
+    const error = new Error(message);
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
+  }
+
+  return payload || {};
+}
+
+async function administrationApiText(endpoint) {
+  const token = getAdministrationToken();
+  const headers = {};
+
+  if (token) {
+    headers["X-MLCFlux-Admin-Token"] = token;
+  }
+
+  const response = await fetch(endpoint, { headers });
+
+  if (!response.ok) {
+    let message = `Erreur HTTP ${response.status}`;
+    try {
+      const payload = await response.json();
+      message = payload?.error || message;
+    } catch (_err) {
+      // Rien à faire : on conserve le message HTTP générique.
+    }
+
+    const error = new Error(message);
+    error.status = response.status;
+    throw error;
+  }
+
+  return response.text();
+}
+
+function renderAdministrationAuthCard() {
+  const hasToken = Boolean(getAdministrationToken());
+
+  return `
+    <section class="card">
+      <p class="info-view-kicker">Accès protégé</p>
+      <h2>Administration & paramètres</h2>
+      <p>
+        Les opérations d’administration sensibles utilisent un jeton transmis uniquement
+        dans l’en-tête <code>X-MLCFlux-Admin-Token</code>. Le jeton saisi ici est conservé
+        dans la session du navigateur, jamais dans le stockage persistant.
+      </p>
+
+      <form id="administrationTokenForm" class="ticket-form">
+        <div class="ticket-form-grid">
+          <div class="ticket-form-field ticket-form-field-full">
+            <label for="administrationTokenInput">Jeton administrateur</label>
+            <input
+              id="administrationTokenInput"
+              type="password"
+              autocomplete="off"
+              spellcheck="false"
+              value="${hasToken ? escapeHtml(getAdministrationToken()) : ""}"
+              placeholder="Coller le jeton ADMIN_API_TOKEN"
+            >
+          </div>
+        </div>
+
+        <div class="ticket-form-actions">
+          <button class="primary-btn" type="submit">
+            Enregistrer dans la session
+          </button>
+          <button id="administrationTokenTestButton" class="secondary-btn" type="button">
+            Tester l’accès
+          </button>
+          <button id="administrationTokenClearButton" class="secondary-btn" type="button">
+            Effacer le jeton
+          </button>
+        </div>
+      </form>
+
+      <div id="administrationFeedback" class="ticket-feedback hidden"></div>
+    </section>
+  `;
+}
+
+function renderAdministrationLockedIntegrityCard(message = "") {
+  const detail = message
+    ? `<p class="ticket-card-excerpt">${escapeHtml(message)}</p>`
+    : "";
+
+  return `
+    <section class="card">
+      <p class="info-view-kicker">Audit d’intégrité</p>
+      <h3>Accès administrateur requis</h3>
+      <p>
+        Renseignez un jeton valide pour consulter les rapports, suivre les jobs
+        d’audit et déclencher un nouveau contrôle d’intégrité.
+      </p>
+      ${detail}
+    </section>
+  `;
+}
+
+function renderAdministrationLatestReport(data) {
+  const latest = data?.latest || null;
+
+  if (!latest) {
+    return `
+      <section class="card">
+        <p class="info-view-kicker">Dernier rapport</p>
+        <h3>Aucun rapport disponible</h3>
+        <p>Aucun audit d’intégrité JSON n’a encore été trouvé dans <code>_audits/</code>.</p>
+      </section>
+    `;
+  }
+
+  const statusLabel = latest.status || (latest.ok ? "healthy" : "unknown");
+  const warningCount = Number(latest.warnings_count || 0);
+  const errorCount = Number(latest.errors_count || 0);
+
+  return `
+    <section class="card">
+      <p class="info-view-kicker">Dernier rapport</p>
+      <h3>${escapeHtml(latest.filename || "Rapport d’intégrité")}</h3>
+
+      <div class="ticket-card-meta">
+        <span>Statut : <strong>${escapeHtml(statusLabel)}</strong></span>
+        <span>Généré le : <strong>${formatAdministrationDate(latest.generated_at)}</strong></span>
+        <span>${warningCount.toLocaleString("fr-FR")} avertissement${warningCount > 1 ? "s" : ""}</span>
+        <span>${errorCount.toLocaleString("fr-FR")} erreur${errorCount > 1 ? "s" : ""}</span>
+      </div>
+
+      <div class="ticket-card-meta">
+        <span>Base présente : <strong>${formatAdministrationBoolean(latest.database?.exists)}</strong></span>
+        <span>Base ouvrable : <strong>${formatAdministrationBoolean(latest.database?.openable)}</strong></span>
+        <span>Taille : <strong>${formatAdministrationSize(latest.database?.size_bytes)}</strong></span>
+      </div>
+
+      <div class="ticket-card-meta">
+        <span>Transactions : <strong>${Number(latest.transactions?.count || 0).toLocaleString("fr-FR")}</strong></span>
+        <span>Période : <strong>${escapeHtml(latest.transactions?.min_date || "—")} → ${escapeHtml(latest.transactions?.max_date || "—")}</strong></span>
+        <span>Doublons <code>cyclos_id</code> : <strong>${Number(latest.transactions?.duplicate_cyclos_id_groups || 0).toLocaleString("fr-FR")}</strong></span>
+      </div>
+    </section>
+  `;
+}
+
+function renderAdministrationJobCard(jobPayload) {
+  const job = jobPayload?.job || jobPayload || {};
+  const running = Boolean(job.running);
+  const status = job.status || "idle";
+
+  return `
+    <section class="card">
+      <p class="info-view-kicker">Job d’audit</p>
+      <h3>${running ? "Audit en cours" : "État du dernier job"}</h3>
+
+      <div class="ticket-card-meta">
+        <span>Statut : <strong>${escapeHtml(status)}</strong></span>
+        <span>Niveau : <strong>${escapeHtml(job.level || "—")}</strong></span>
+        <span>Préfixe : <strong>${escapeHtml(job.prefix || "—")}</strong></span>
+      </div>
+
+      <div class="ticket-card-meta">
+        <span>Demandé le : <strong>${formatAdministrationDate(job.requested_at)}</strong></span>
+        <span>Démarré le : <strong>${formatAdministrationDate(job.started_at)}</strong></span>
+        <span>Terminé le : <strong>${formatAdministrationDate(job.completed_at)}</strong></span>
+      </div>
+
+      ${job.error_message ? `
+        <p class="ticket-card-excerpt">
+          ${escapeHtml(job.error_message)}
+        </p>
+      ` : ""}
+
+      ${job.report_txt_filename || job.report_json_filename ? `
+        <div class="ticket-card-meta">
+          <span>Rapport TXT : <strong>${escapeHtml(job.report_txt_filename || "—")}</strong></span>
+          <span>Rapport JSON : <strong>${escapeHtml(job.report_json_filename || "—")}</strong></span>
+        </div>
+      ` : ""}
+    </section>
+  `;
+}
+
+function renderAdministrationReportsList(data) {
+  const reports = Array.isArray(data?.reports) ? data.reports : [];
+
+  if (!reports.length) {
+    return `
+      <section class="card">
+        <p class="info-view-kicker">Historique</p>
+        <h3>Aucun rapport d’intégrité listé</h3>
+        <p>Les futurs audits apparaîtront ici.</p>
+      </section>
+    `;
+  }
+
+  return `
+    <section class="card">
+      <div class="ticket-filter-header">
+        <div>
+          <p class="info-view-kicker">Historique</p>
+          <h3>Rapports d’intégrité disponibles</h3>
+        </div>
+        <div class="ticket-results-count">
+          ${reports.length.toLocaleString("fr-FR")} rapport${reports.length > 1 ? "s" : ""}
+        </div>
+      </div>
+
+      <div id="administrationReportsList" class="ticket-list-grid">
+        ${reports.map((report) => `
+          <article class="ticket-list-card">
+            <div class="ticket-card-badges">
+              <span class="ticket-badge ticket-category-badge">
+                ${escapeHtml(report.level || "audit")}
+              </span>
+              <span class="ticket-badge ticket-status-badge">
+                ${escapeHtml(report.status || "unknown")}
+              </span>
+            </div>
+
+            <h4>${escapeHtml(report.filename || "Rapport")}</h4>
+
+            <div class="ticket-card-meta">
+              <span>${formatAdministrationDate(report.generated_at)}</span>
+              <span>${Number(report.warnings_count || 0).toLocaleString("fr-FR")} avertissement${Number(report.warnings_count || 0) > 1 ? "s" : ""}</span>
+              <span>${Number(report.errors_count || 0).toLocaleString("fr-FR")} erreur${Number(report.errors_count || 0) > 1 ? "s" : ""}</span>
+            </div>
+
+            <div class="ticket-card-actions">
+              <button
+                type="button"
+                class="secondary-btn"
+                data-administration-report-json="${escapeHtml(report.filename || "")}"
+              >
+                Voir JSON
+              </button>
+
+              ${report.text_filename ? `
+                <button
+                  type="button"
+                  class="secondary-btn"
+                  data-administration-report-text="${escapeHtml(report.filename || "")}"
+                >
+                  Voir TXT
+                </button>
+              ` : ""}
+            </div>
+          </article>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderAdministrationIntegrityControls() {
+  return `
+    <section class="card">
+      <p class="info-view-kicker">Contrôle manuel</p>
+      <h3>Lancer un audit d’intégrité</h3>
+      <p>
+        Le contrôle rapide exécute les vérifications essentielles. Le contrôle complet
+        ajoute notamment <code>PRAGMA integrity_check</code> et produit lui aussi
+        un rapport TXT + JSON dans <code>_audits/</code>.
+      </p>
+
+      <div class="ticket-form-actions">
+        <button id="administrationRunQuickAuditButton" class="secondary-btn" type="button">
+          Lancer un audit rapide
+        </button>
+        <button id="administrationRunFullAuditButton" class="primary-btn" type="button">
+          Lancer un audit complet
+        </button>
+        <button id="administrationRefreshIntegrityButton" class="secondary-btn" type="button">
+          Actualiser l’état
+        </button>
+      </div>
+    </section>
+  `;
+}
+
+function renderAdministrationReportViewerPlaceholder() {
+  return `
+    <section class="card">
+      <p class="info-view-kicker">Lecture de rapport</p>
+      <h3>Détail d’un rapport</h3>
+      <p>Sélectionnez un rapport JSON ou TXT dans l’historique.</p>
+      <pre id="administrationReportViewer" class="ticket-message-markdown"></pre>
+    </section>
+  `;
+}
+
+function scheduleAdministrationIntegrityRefresh(job) {
+  if (administrationIntegrityPollTimer) {
+    clearTimeout(administrationIntegrityPollTimer);
+    administrationIntegrityPollTimer = null;
+  }
+
+  if (!job?.running || appState.currentView !== "admin") {
+    return;
+  }
+
+  administrationIntegrityPollTimer = window.setTimeout(() => {
+    void refreshAdministrationIntegrityPanels();
+  }, 3000);
+}
+
+async function refreshAdministrationIntegrityPanels() {
+  const panelsHost = document.getElementById("administrationIntegrityPanels");
+  const reportsHost = document.getElementById("administrationReportsHost");
+
+  if (!panelsHost || !reportsHost) {
+    return;
+  }
+
+  if (!getAdministrationToken()) {
+    panelsHost.innerHTML = renderAdministrationLockedIntegrityCard();
+    reportsHost.innerHTML = "";
+    return;
+  }
+
+  panelsHost.innerHTML = `
+    <section class="card">
+      <h3>Chargement de l’état d’intégrité…</h3>
+    </section>
+  `;
+
+  reportsHost.innerHTML = "";
+
+  try {
+    const [latestData, jobData, reportsData] = await Promise.all([
+      administrationApiJson("/api/admin/integrity/latest"),
+      administrationApiJson("/api/admin/integrity/job"),
+      administrationApiJson("/api/admin/integrity/reports")
+    ]);
+
+    panelsHost.innerHTML = `
+      ${renderAdministrationLatestReport(latestData)}
+      ${renderAdministrationJobCard(jobData)}
+    `;
+
+    reportsHost.innerHTML = renderAdministrationReportsList(reportsData);
+    scheduleAdministrationIntegrityRefresh(jobData?.job || null);
+  } catch (err) {
+    panelsHost.innerHTML = renderAdministrationLockedIntegrityCard(err.message);
+    reportsHost.innerHTML = "";
+    setAdministrationFeedback(`Impossible de charger l’administration : ${err.message}`, true);
+  }
+}
+
+async function testAdministrationTokenAccess() {
+  try {
+    await administrationApiJson("/api/admin/integrity/latest");
+    setAdministrationFeedback("Jeton accepté. Les routes d’administration sont accessibles.");
+    await refreshAdministrationIntegrityPanels();
+  } catch (err) {
+    setAdministrationFeedback(`Accès refusé : ${err.message}`, true);
+  }
+}
+
+async function runAdministrationIntegrityAudit(level) {
+  const normalizedLevel = level === "quick" ? "quick" : "full";
+
+  try {
+    setAdministrationFeedback(`Lancement de l’audit ${normalizedLevel}…`);
+    const result = await administrationApiJson("/api/admin/integrity/run", {
+      method: "POST",
+      body: JSON.stringify({
+        level: normalizedLevel,
+        prefix: "DBINTEGRITY002"
+      })
+    });
+
+    setAdministrationFeedback(result.message || "Audit d’intégrité lancé.");
+    await refreshAdministrationIntegrityPanels();
+  } catch (err) {
+    setAdministrationFeedback(`Impossible de lancer l’audit : ${err.message}`, true);
+  }
+}
+
+async function openAdministrationJsonReport(filename) {
+  const viewer = document.getElementById("administrationReportViewer");
+  if (!viewer || !filename) return;
+
+  viewer.textContent = "Chargement du rapport JSON…";
+
+  try {
+    const data = await administrationApiJson(
+      `/api/admin/integrity/reports/${encodeURIComponent(filename)}`
+    );
+
+    viewer.textContent = JSON.stringify(data.report || data, null, 2);
+  } catch (err) {
+    viewer.textContent = `Erreur : ${err.message}`;
+  }
+}
+
+async function openAdministrationTextReport(filename) {
+  const viewer = document.getElementById("administrationReportViewer");
+  if (!viewer || !filename) return;
+
+  viewer.textContent = "Chargement du rapport TXT…";
+
+  try {
+    viewer.textContent = await administrationApiText(
+      `/api/admin/integrity/reports/${encodeURIComponent(filename)}/text`
+    );
+  } catch (err) {
+    viewer.textContent = `Erreur : ${err.message}`;
+  }
+}
+
+function bindAdministrationViewInteractions() {
+  const tokenForm = document.getElementById("administrationTokenForm");
+  const tokenInput = document.getElementById("administrationTokenInput");
+  const testButton = document.getElementById("administrationTokenTestButton");
+  const clearButton = document.getElementById("administrationTokenClearButton");
+  const quickButton = document.getElementById("administrationRunQuickAuditButton");
+  const fullButton = document.getElementById("administrationRunFullAuditButton");
+  const refreshButton = document.getElementById("administrationRefreshIntegrityButton");
+  const reportsHost = document.getElementById("administrationReportsHost");
+
+  tokenForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    storeAdministrationToken(tokenInput?.value || "");
+    setAdministrationFeedback("Jeton conservé pour cette session.");
+    await refreshAdministrationIntegrityPanels();
+  });
+
+  testButton?.addEventListener("click", async () => {
+    storeAdministrationToken(tokenInput?.value || "");
+    await testAdministrationTokenAccess();
+  });
+
+  clearButton?.addEventListener("click", async () => {
+    clearAdministrationToken();
+    if (tokenInput) tokenInput.value = "";
+    setAdministrationFeedback("Jeton retiré de la session.");
+    await refreshAdministrationIntegrityPanels();
+  });
+
+  quickButton?.addEventListener("click", async () => {
+    await runAdministrationIntegrityAudit("quick");
+  });
+
+  fullButton?.addEventListener("click", async () => {
+    await runAdministrationIntegrityAudit("full");
+  });
+
+  refreshButton?.addEventListener("click", async () => {
+    await refreshAdministrationIntegrityPanels();
+  });
+
+  reportsHost?.addEventListener("click", async (event) => {
+    const jsonButton = event.target.closest("[data-administration-report-json]");
+    if (jsonButton) {
+      await openAdministrationJsonReport(jsonButton.dataset.administrationReportJson);
+      return;
+    }
+
+    const textButton = event.target.closest("[data-administration-report-text]");
+    if (textButton) {
+      await openAdministrationTextReport(textButton.dataset.administrationReportText);
+    }
+  });
+}
+
+async function renderAdministrationView() {
+  destroyCartographyMap();
+  appState.currentView = "admin";
+  syncSidebarView("admin");
+  setTitle("Administration & paramètres");
+
+  if (administrationIntegrityPollTimer) {
+    clearTimeout(administrationIntegrityPollTimer);
+    administrationIntegrityPollTimer = null;
+  }
+
+  content.innerHTML = `
+    <div class="tickets-view">
+      ${renderAdministrationAuthCard()}
+      ${renderAdministrationIntegrityControls()}
+
+      <section id="administrationIntegrityPanels" class="ticket-list-grid">
+        ${renderAdministrationLockedIntegrityCard()}
+      </section>
+
+      <section id="administrationReportsHost"></section>
+
+      ${renderAdministrationReportViewerPlaceholder()}
+    </div>
+  `;
+
+  bindAdministrationViewInteractions();
+  await refreshAdministrationIntegrityPanels();
 }
 
 
@@ -20367,6 +20981,7 @@ window.renderMonetaryPilotageView = renderMonetaryPilotageView;
 window.renderTicketsView = renderTicketsView;
 window.renderTicketDetail = renderTicketDetail;
 window.renderInfoView = renderInfoView;
+window.renderAdministrationView = renderAdministrationView;
 window.toggleProsSort = toggleProsSort;
 window.changeDetailTransactionPage = changeDetailTransactionPage;
 
