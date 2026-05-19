@@ -15,6 +15,11 @@ from server.services.monetary_holdings_analytics import (
     get_pilotage_holdings_summary,
     get_pilotage_holdings_timeseries,
 )
+from server.services.pilotage_yearly_cache import (
+    PILOTAGE_LM3_YEARLY_SERIES_KEY,
+    PILOTAGE_REUSE_YEARLY_SERIES_KEY,
+    load_pilotage_yearly_cache_items,
+)
 
 
 monetary_indicators_bp = Blueprint("monetary_indicators", __name__)
@@ -1536,6 +1541,53 @@ def monetary_indicators_pilotage_timeseries():
     })
 
 
+def _group_pilotage_transactions_by_year(rows):
+    rows_by_year = {}
+
+    for row in rows:
+        raw_date = str(row.get("date") or "")
+        year_token = raw_date[:4]
+
+        if not year_token.isdigit():
+            continue
+
+        rows_by_year.setdefault(int(year_token), []).append(row)
+
+    return rows_by_year
+
+
+def _build_pilotage_yearly_items(rows, metrics_builder):
+    rows_by_year = _group_pilotage_transactions_by_year(rows)
+
+    return [
+        {
+            "year": year,
+            **metrics_builder(rows_by_year[year]),
+        }
+        for year in sorted(rows_by_year)
+    ]
+
+
+def _build_pilotage_reuse_yearly_items(rows=None):
+    if rows is None:
+        rows = fetch_transactions()
+
+    return _build_pilotage_yearly_items(
+        rows,
+        _compute_internal_reuse_metrics,
+    )
+
+
+def _build_pilotage_lm3_yearly_items(rows=None):
+    if rows is None:
+        rows = fetch_transactions()
+
+    return _build_pilotage_yearly_items(
+        rows,
+        _compute_lm3_metrics,
+    )
+
+
 @monetary_indicators_bp.route(
     "/api/monetary-indicators/pilotage-reuse-yearly",
     methods=["GET"],
@@ -1550,28 +1602,14 @@ def monetary_indicators_pilotage_reuse_yearly():
     les bornes quotidiennes Odoo utilisées dans le pilotage monétaire
     stock ↔ flux.
     """
-    rows = fetch_transactions()
+    items = load_pilotage_yearly_cache_items(
+        PILOTAGE_REUSE_YEARLY_SERIES_KEY,
+    )
 
-    rows_by_year = {}
-
-    for row in rows:
-        raw_date = str(row.get("date") or "")
-        year_token = raw_date[:4]
-
-        if not year_token.isdigit():
-            continue
-
-        rows_by_year.setdefault(int(year_token), []).append(row)
-
-    items = []
-
-    for year in sorted(rows_by_year):
-        metrics = _compute_internal_reuse_metrics(rows_by_year[year])
-
-        items.append({
-            "year": year,
-            **metrics,
-        })
+    # Fallback résilient : une instance neuve ou mal bootstrapée
+    # continue de répondre juste, au prix du calcul historique live.
+    if not items:
+        items = _build_pilotage_reuse_yearly_items()
 
     return jsonify({
         "status": "ok",
@@ -1617,27 +1655,14 @@ def monetary_indicators_pilotage_lm3_yearly():
     ayant reçu une conversion / alimentation, selon une adaptation
     transactionnelle de la méthode LM3 documentée dans le chantier.
     """
-    rows = fetch_transactions()
-    rows_by_year = {}
+    items = load_pilotage_yearly_cache_items(
+        PILOTAGE_LM3_YEARLY_SERIES_KEY,
+    )
 
-    for row in rows:
-        raw_date = str(row.get("date") or "")
-        year_token = raw_date[:4]
-
-        if not year_token.isdigit():
-            continue
-
-        rows_by_year.setdefault(int(year_token), []).append(row)
-
-    items = []
-
-    for year in sorted(rows_by_year):
-        metrics = _compute_lm3_metrics(rows_by_year[year])
-
-        items.append({
-            "year": year,
-            **metrics,
-        })
+    # Fallback résilient : une instance neuve ou mal bootstrapée
+    # continue de répondre juste, au prix du calcul historique live.
+    if not items:
+        items = _build_pilotage_lm3_yearly_items()
 
     return jsonify({
         "status": "ok",
