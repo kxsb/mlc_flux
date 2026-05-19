@@ -23,6 +23,8 @@ const appState = {
   comparisonPeriod: null,
 
   statsCache: {},
+  monetaryPilotageCache: {},
+  monetaryPilotageCacheOrder: [],
   dailyChartMetric: "count",
   dailyChartHiddenDatasets: {},
 
@@ -3361,6 +3363,63 @@ function getPeriodQueryParam() {
 function getPeriodCacheKey() {
   const { preset, start, end } = appState.analysisPeriod;
   return `${preset || "custom"}|${start || "none"}|${end || "none"}`;
+}
+
+const MONETARY_PILOTAGE_CACHE_MAX_PERIODS = 3;
+
+function touchMonetaryPilotageCacheKey(cacheKey) {
+  const order = Array.isArray(appState.monetaryPilotageCacheOrder)
+    ? appState.monetaryPilotageCacheOrder
+    : [];
+
+  const existingIndex = order.indexOf(cacheKey);
+
+  if (existingIndex >= 0) {
+    order.splice(existingIndex, 1);
+  }
+
+  order.push(cacheKey);
+  appState.monetaryPilotageCacheOrder = order;
+}
+
+function getMonetaryPilotageCachedPayloads(cacheKey) {
+  const cache = appState.monetaryPilotageCache || {};
+  const cached = cache[cacheKey] || null;
+
+  if (!cached) {
+    return null;
+  }
+
+  touchMonetaryPilotageCacheKey(cacheKey);
+  return cached;
+}
+
+function setMonetaryPilotageCachedPayloads(cacheKey, payloads) {
+  if (!cacheKey || !payloads) {
+    return;
+  }
+
+  const cache = appState.monetaryPilotageCache || {};
+  cache[cacheKey] = payloads;
+  appState.monetaryPilotageCache = cache;
+
+  touchMonetaryPilotageCacheKey(cacheKey);
+
+  while (
+    appState.monetaryPilotageCacheOrder.length >
+    MONETARY_PILOTAGE_CACHE_MAX_PERIODS
+  ) {
+    const evictedKey = appState.monetaryPilotageCacheOrder.shift();
+
+    if (evictedKey) {
+      delete appState.monetaryPilotageCache[evictedKey];
+    }
+  }
+}
+
+function clearMonetaryPilotageCache() {
+  appState.monetaryPilotageCache = {};
+  appState.monetaryPilotageCacheOrder = [];
 }
 
 function shiftIsoDate(dateString, days) {
@@ -10630,26 +10689,55 @@ async function renderMonetaryPilotageView(forceReload = false) {
   syncSidebarView("monetary-pilotage");
   setTitle("Pilotage monétaire");
 
-  if (!preserveVisibleView) {
+  const cacheKey = getPeriodCacheKey();
+  const cachedPilotagePayloads = !forceReload
+    ? getMonetaryPilotageCachedPayloads(cacheKey)
+    : null;
+
+  if (!preserveVisibleView && !cachedPilotagePayloads) {
     content.innerHTML = `<div class="card">Chargement du pilotage monétaire...</div>`;
   }
 
   try {
-    const [
+    let pilotagePayloads = cachedPilotagePayloads;
+
+    if (!pilotagePayloads) {
+      const [
+        data,
+        timeseries,
+        reuseYearly,
+        lm3Yearly,
+        holdingsSummary,
+        holdingsTimeseries
+      ] = await Promise.all([
+        apiGet(`/api/monetary-indicators/pilotage-summary${getPeriodQueryParam()}`),
+        apiGet(`/api/monetary-indicators/pilotage-timeseries${getPeriodQueryParam()}`),
+        apiGet("/api/monetary-indicators/pilotage-reuse-yearly"),
+        apiGet("/api/monetary-indicators/pilotage-lm3-yearly"),
+        apiGet(`/api/monetary-indicators/pilotage-holdings-summary${getPeriodQueryParam()}`),
+        apiGet(`/api/monetary-indicators/pilotage-holdings-timeseries${getPeriodQueryParam()}`)
+      ]);
+
+      pilotagePayloads = {
+        data,
+        timeseries,
+        reuseYearly,
+        lm3Yearly,
+        holdingsSummary,
+        holdingsTimeseries
+      };
+
+      setMonetaryPilotageCachedPayloads(cacheKey, pilotagePayloads);
+    }
+
+    const {
       data,
       timeseries,
       reuseYearly,
       lm3Yearly,
       holdingsSummary,
       holdingsTimeseries
-    ] = await Promise.all([
-      apiGet(`/api/monetary-indicators/pilotage-summary${getPeriodQueryParam()}`),
-      apiGet(`/api/monetary-indicators/pilotage-timeseries${getPeriodQueryParam()}`),
-      apiGet("/api/monetary-indicators/pilotage-reuse-yearly"),
-      apiGet("/api/monetary-indicators/pilotage-lm3-yearly"),
-      apiGet(`/api/monetary-indicators/pilotage-holdings-summary${getPeriodQueryParam()}`),
-      apiGet(`/api/monetary-indicators/pilotage-holdings-timeseries${getPeriodQueryParam()}`)
-    ]);
+    } = pilotagePayloads;
 
     const effectivePeriod = (
       data?.effective_period?.start && data?.effective_period?.end
@@ -20936,6 +21024,8 @@ if (reloadButton) {
       appState.prosData = [];
       appState.detailData = null;
       appState.currentPro = null;
+      appState.statsCache = {};
+      clearMonetaryPilotageCache();
 
       if (appState.currentView === "pros") {
         await renderProsView(true);

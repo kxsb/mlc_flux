@@ -59,11 +59,28 @@ def _empty_bounds():
 
 
 def _get_source_bounds(cur) -> dict:
-    individual_row = cur.execute("""
-        SELECT
-            MIN(balance_date) AS min_date,
-            MAX(balance_date) AS max_date
+    """
+    Bornes disponibles pour les analyses Détention & ancrage.
+
+    Les bornes des soldes particuliers étaient auparavant obtenues via
+    MIN/MAX sur 2,2 M de lignes, ce qui forçait un scan d'index coûteux
+    à chaque chargement des endpoints holdings.
+
+    Les deux lectures ORDER BY ... LIMIT 1 exploitent directement
+    l'index sur balance_date et restituent exactement les mêmes dates.
+    """
+    individual_min_row = cur.execute("""
+        SELECT balance_date AS min_date
         FROM cyclos_individual_daily_balances
+        ORDER BY balance_date ASC
+        LIMIT 1
+    """).fetchone()
+
+    individual_max_row = cur.execute("""
+        SELECT balance_date AS max_date
+        FROM cyclos_individual_daily_balances
+        ORDER BY balance_date DESC
+        LIMIT 1
     """).fetchone()
 
     monetary_row = cur.execute("""
@@ -74,47 +91,42 @@ def _get_source_bounds(cur) -> dict:
     """).fetchone()
 
     if (
-        individual_row is None
-        or individual_row["min_date"] is None
-        or individual_row["max_date"] is None
+        individual_min_row is None
+        or individual_min_row["min_date"] is None
+        or individual_max_row is None
+        or individual_max_row["max_date"] is None
         or monetary_row is None
         or monetary_row["min_date"] is None
         or monetary_row["max_date"] is None
     ):
         return _empty_bounds()
 
-    individual_bounds = {
-        "min_date": individual_row["min_date"],
-        "max_date": individual_row["max_date"],
-    }
+    individual_min_date = individual_min_row["min_date"]
+    individual_max_date = individual_max_row["max_date"]
+    monetary_min_date = monetary_row["min_date"]
+    monetary_max_date = monetary_row["max_date"]
 
-    monetary_bounds = {
-        "min_date": monetary_row["min_date"],
-        "max_date": monetary_row["max_date"],
-    }
-
-    common_min = max(
-        _date_value(individual_bounds["min_date"]),
-        _date_value(monetary_bounds["min_date"]),
-    )
-    common_max = min(
-        _date_value(individual_bounds["max_date"]),
-        _date_value(monetary_bounds["max_date"]),
-    )
+    common_min_date = max(individual_min_date, monetary_min_date)
+    common_max_date = min(individual_max_date, monetary_max_date)
 
     common_bounds = None
-    if common_min <= common_max:
+    if common_min_date <= common_max_date:
         common_bounds = {
-            "min_date": common_min.isoformat(),
-            "max_date": common_max.isoformat(),
+            "min_date": common_min_date,
+            "max_date": common_max_date,
         }
 
     return {
-        "individual_balances": individual_bounds,
-        "monetary_daily": monetary_bounds,
+        "individual_balances": {
+            "min_date": individual_min_date,
+            "max_date": individual_max_date,
+        },
+        "monetary_daily": {
+            "min_date": monetary_min_date,
+            "max_date": monetary_max_date,
+        },
         "common": common_bounds,
     }
-
 
 def _resolve_holdings_period(cur, requested_start, requested_end) -> dict:
     bounds = _get_source_bounds(cur)
@@ -156,7 +168,7 @@ def _resolve_holdings_period(cur, requested_start, requested_end) -> dict:
     }
 
 
-def _fetch_aligned_period_averages(cur, effective_start: str, effective_end: str) -> dict:
+def _fetch_aligned_period_averages_live(cur, effective_start: str, effective_end: str) -> dict:
     row = cur.execute("""
         WITH daily_user_stock AS (
             SELECT
@@ -373,6 +385,200 @@ def _fetch_aligned_period_averages(cur, effective_start: str, effective_end: str
         ),
     }
 
+
+def _holdings_daily_cache_covers_period(
+    cur,
+    effective_start: str,
+    effective_end: str,
+) -> bool:
+    row = cur.execute("""
+        SELECT
+            MIN(day) AS min_day,
+            MAX(day) AS max_day
+        FROM pilotage_holdings_daily_cache
+    """).fetchone()
+
+    if row is None or row["min_day"] is None or row["max_day"] is None:
+        return False
+
+    return (
+        row["min_day"] <= effective_start
+        and row["max_day"] >= effective_end
+    )
+
+
+def _fetch_aligned_period_averages(
+    cur,
+    effective_start: str,
+    effective_end: str,
+) -> dict:
+    if not _holdings_daily_cache_covers_period(
+        cur,
+        effective_start,
+        effective_end,
+    ):
+        return _fetch_aligned_period_averages_live(
+            cur,
+            effective_start,
+            effective_end,
+        )
+
+    row = cur.execute("""
+        SELECT
+            COUNT(*) AS aligned_day_count,
+            AVG(positive_user_stock) AS average_positive_user_stock,
+            AVG(positive_professional_network_stock)
+                AS average_positive_professional_network_stock,
+            AVG(positive_gonette_business_accounts_stock)
+                AS average_positive_gonette_business_accounts_stock,
+            AVG(positive_professional_total_stock)
+                AS average_positive_professional_total_stock,
+            AVG(numeric_mass) AS average_numeric_mass,
+
+            AVG(
+                CASE
+                    WHEN numeric_mass > 0
+                    THEN positive_user_stock / numeric_mass
+                    ELSE NULL
+                END
+            ) AS average_daily_user_stock_share_of_numeric_mass,
+
+            AVG(
+                CASE
+                    WHEN numeric_mass > 0
+                    THEN positive_professional_network_stock / numeric_mass
+                    ELSE NULL
+                END
+            ) AS average_daily_professional_network_stock_share_of_numeric_mass,
+
+            AVG(
+                CASE
+                    WHEN numeric_mass > 0
+                    THEN positive_gonette_business_accounts_stock / numeric_mass
+                    ELSE NULL
+                END
+            ) AS average_daily_gonette_business_accounts_stock_share_of_numeric_mass,
+
+            AVG(
+                CASE
+                    WHEN numeric_mass > 0
+                    THEN positive_professional_total_stock / numeric_mass
+                    ELSE NULL
+                END
+            ) AS average_daily_professional_total_stock_share_of_numeric_mass
+
+        FROM pilotage_holdings_daily_cache
+        WHERE day BETWEEN ? AND ?
+    """, (
+        effective_start,
+        effective_end,
+    )).fetchone()
+
+    if row is None or int(row["aligned_day_count"] or 0) == 0:
+        return _fetch_aligned_period_averages_live(
+            cur,
+            effective_start,
+            effective_end,
+        )
+
+    average_positive_user_stock = _money2(
+        row["average_positive_user_stock"]
+    )
+    average_positive_professional_network_stock = _money2(
+        row["average_positive_professional_network_stock"]
+    )
+    average_positive_gonette_business_accounts_stock = _money2(
+        row["average_positive_gonette_business_accounts_stock"]
+    )
+    average_positive_professional_total_stock = _money2(
+        row["average_positive_professional_total_stock"]
+    )
+    average_numeric_mass = _money2(
+        row["average_numeric_mass"]
+    )
+
+    return {
+        "aligned_day_count": int(row["aligned_day_count"] or 0),
+        "average_positive_user_stock": average_positive_user_stock,
+        "average_positive_professional_network_stock": (
+            average_positive_professional_network_stock
+        ),
+        "average_positive_gonette_business_accounts_stock": (
+            average_positive_gonette_business_accounts_stock
+        ),
+        "average_positive_professional_total_stock": (
+            average_positive_professional_total_stock
+        ),
+        "average_numeric_mass": average_numeric_mass,
+
+        "average_user_stock_share_of_numeric_mass": _ratio(
+            average_positive_user_stock,
+            average_numeric_mass,
+        ),
+        "average_professional_network_stock_share_of_numeric_mass": _ratio(
+            average_positive_professional_network_stock,
+            average_numeric_mass,
+        ),
+        "average_gonette_business_accounts_stock_share_of_numeric_mass": _ratio(
+            average_positive_gonette_business_accounts_stock,
+            average_numeric_mass,
+        ),
+        "average_professional_total_stock_share_of_numeric_mass": _ratio(
+            average_positive_professional_total_stock,
+            average_numeric_mass,
+        ),
+
+        "average_daily_user_stock_share_of_numeric_mass": (
+            round(
+                float(row["average_daily_user_stock_share_of_numeric_mass"]),
+                6,
+            )
+            if row["average_daily_user_stock_share_of_numeric_mass"] is not None
+            else None
+        ),
+        "average_daily_professional_network_stock_share_of_numeric_mass": (
+            round(
+                float(
+                    row[
+                        "average_daily_professional_network_stock_share_of_numeric_mass"
+                    ]
+                ),
+                6,
+            )
+            if row[
+                "average_daily_professional_network_stock_share_of_numeric_mass"
+            ] is not None
+            else None
+        ),
+        "average_daily_gonette_business_accounts_stock_share_of_numeric_mass": (
+            round(
+                float(
+                    row[
+                        "average_daily_gonette_business_accounts_stock_share_of_numeric_mass"
+                    ]
+                ),
+                6,
+            )
+            if row[
+                "average_daily_gonette_business_accounts_stock_share_of_numeric_mass"
+            ] is not None
+            else None
+        ),
+        "average_daily_professional_total_stock_share_of_numeric_mass": (
+            round(
+                float(
+                    row[
+                        "average_daily_professional_total_stock_share_of_numeric_mass"
+                    ]
+                ),
+                6,
+            )
+            if row[
+                "average_daily_professional_total_stock_share_of_numeric_mass"
+            ] is not None
+            else None
+        ),
+    }
 
 def _fetch_closing_snapshot(cur, snapshot_day: str) -> dict | None:
     row = cur.execute("""
@@ -1077,7 +1283,7 @@ def get_pilotage_holdings_summary(requested_start, requested_end) -> dict:
     }
 
 
-def _fetch_monthly_aligned_rows(cur, effective_start: str, effective_end: str):
+def _fetch_monthly_aligned_rows_live(cur, effective_start: str, effective_end: str):
     return cur.execute("""
         WITH daily_user_stock AS (
             SELECT
@@ -1207,6 +1413,85 @@ def _fetch_monthly_aligned_rows(cur, effective_start: str, effective_end: str):
         effective_end,
     )).fetchall()
 
+
+def _fetch_monthly_aligned_rows(
+    cur,
+    effective_start: str,
+    effective_end: str,
+):
+    if not _holdings_daily_cache_covers_period(
+        cur,
+        effective_start,
+        effective_end,
+    ):
+        return _fetch_monthly_aligned_rows_live(
+            cur,
+            effective_start,
+            effective_end,
+        )
+
+    return cur.execute("""
+        SELECT
+            substr(day, 1, 7) AS month_key,
+            CAST(substr(day, 1, 4) AS INTEGER) AS year,
+            CAST(substr(day, 6, 2) AS INTEGER) AS month,
+
+            COUNT(*) AS aligned_day_count,
+
+            AVG(positive_user_stock) AS average_positive_user_stock,
+            AVG(positive_professional_network_stock)
+                AS average_positive_professional_network_stock,
+            AVG(positive_gonette_business_accounts_stock)
+                AS average_positive_gonette_business_accounts_stock,
+            AVG(positive_professional_total_stock)
+                AS average_positive_professional_total_stock,
+            AVG(numeric_mass) AS average_numeric_mass,
+
+            AVG(
+                CASE
+                    WHEN numeric_mass > 0
+                    THEN positive_user_stock / numeric_mass
+                    ELSE NULL
+                END
+            ) AS average_daily_user_stock_share_of_numeric_mass,
+
+            AVG(
+                CASE
+                    WHEN numeric_mass > 0
+                    THEN positive_professional_network_stock / numeric_mass
+                    ELSE NULL
+                END
+            ) AS average_daily_professional_network_stock_share_of_numeric_mass,
+
+            AVG(
+                CASE
+                    WHEN numeric_mass > 0
+                    THEN positive_gonette_business_accounts_stock / numeric_mass
+                    ELSE NULL
+                END
+            ) AS average_daily_gonette_business_accounts_stock_share_of_numeric_mass,
+
+            AVG(
+                CASE
+                    WHEN numeric_mass > 0
+                    THEN positive_professional_total_stock / numeric_mass
+                    ELSE NULL
+                END
+            ) AS average_daily_professional_total_stock_share_of_numeric_mass,
+
+            MAX(day) AS closing_snapshot_date
+
+        FROM pilotage_holdings_daily_cache
+        WHERE day BETWEEN ? AND ?
+        GROUP BY
+            substr(day, 1, 7),
+            CAST(substr(day, 1, 4) AS INTEGER),
+            CAST(substr(day, 6, 2) AS INTEGER)
+        ORDER BY month_key ASC
+    """, (
+        effective_start,
+        effective_end,
+    )).fetchall()
 
 def get_pilotage_holdings_timeseries(requested_start, requested_end) -> dict:
     conn = get_connection()

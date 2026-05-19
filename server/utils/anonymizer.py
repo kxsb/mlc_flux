@@ -1,12 +1,17 @@
+import fcntl
 import json
+import os
 import re
 import secrets
+import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 PRENOMS_FILE = DATA_DIR / "prenoms.csv"
 MAPPING_FILE = DATA_DIR / "user_mapping.json"
+MAPPING_LOCK_FILE = DATA_DIR / "user_mapping.json.lock"
 DEVICE_PRIVATE_ACTOR_REGISTRY_FILE = DATA_DIR / "device_private_actor_registry.json"
 _DEVICE_PRIVATE_ACTOR_IDS_CACHE = None
 
@@ -56,17 +61,71 @@ def load_prenoms():
     return _PRENOMS_CACHE
 
 
-def load_mapping():
+@contextmanager
+def _mapping_file_lock():
+    """
+    Verrou inter-processus pour user_mapping.json.
+
+    La stabilité des pseudonymes doit être protégée entre syncs ordinaires
+    d'une même instance, y compris si deux traitements se chevauchent.
+    """
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    with open(MAPPING_LOCK_FILE, "a+", encoding="utf-8") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+def _load_mapping_unlocked():
     if not MAPPING_FILE.exists():
         return {}
 
     with open(MAPPING_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
+        mapping = json.load(f)
+
+    if not isinstance(mapping, dict):
+        raise ValueError("user_mapping.json doit contenir un objet JSON.")
+
+    return mapping
+
+
+def load_mapping():
+    with _mapping_file_lock():
+        return _load_mapping_unlocked()
+
+
+def _save_mapping_unlocked(mapping):
+    if not isinstance(mapping, dict):
+        raise ValueError("Le mapping d'anonymisation doit être un dictionnaire.")
+
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    fd, temp_path = tempfile.mkstemp(
+        prefix=f"{MAPPING_FILE.name}.",
+        suffix=".tmp",
+        dir=str(MAPPING_FILE.parent),
+    )
+
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(mapping, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+            f.flush()
+            os.fsync(f.fileno())
+
+        os.replace(temp_path, MAPPING_FILE)
+
+    finally:
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
 
 
 def save_mapping(mapping):
-    with open(MAPPING_FILE, "w", encoding="utf-8") as f:
-        json.dump(mapping, f, ensure_ascii=False, indent=2)
+    with _mapping_file_lock():
+        _save_mapping_unlocked(mapping)
 
 
 def normalize_spaces(value):
@@ -121,28 +180,33 @@ def get_or_create_private_pseudo(private_actor_key, *, prefix="U"):
     prefix = str(prefix or "U").strip() or "U"
 
     prenoms = load_prenoms()
-    mapping = load_mapping()
 
-    if private_actor_key in mapping:
-        return mapping[private_actor_key]
+    # Le verrou couvre tout le cycle lecture -> attribution -> écriture.
+    # Cela évite qu'un second processus lise un état périmé puis écrase
+    # la modification du premier.
+    with _mapping_file_lock():
+        mapping = _load_mapping_unlocked()
 
-    used_pseudos = set(mapping.values())
+        if private_actor_key in mapping:
+            return mapping[private_actor_key]
 
-    available = [
-        f"{prefix}_{prenom}"
-        for prenom in prenoms
-        if f"{prefix}_{prenom}" not in used_pseudos
-    ]
+        used_pseudos = set(mapping.values())
 
-    if available:
-        pseudo = secrets.choice(available)
-    else:
-        pseudo = f"{prefix}_user_{len(mapping) + 1}"
+        available = [
+            f"{prefix}_{prenom}"
+            for prenom in prenoms
+            if f"{prefix}_{prenom}" not in used_pseudos
+        ]
 
-    mapping[private_actor_key] = pseudo
-    save_mapping(mapping)
+        if available:
+            pseudo = secrets.choice(available)
+        else:
+            pseudo = f"{prefix}_user_{len(mapping) + 1}"
 
-    return pseudo
+        mapping[private_actor_key] = pseudo
+        _save_mapping_unlocked(mapping)
+
+        return pseudo
 
 def is_conversion_label(display):
     lowered = display.lower()

@@ -11,6 +11,16 @@ LOG_FILE="/opt/mlcflux-dev/logs/daily_sync.log"
   /opt/mlcflux-dev/venv/bin/python -m server.sync_transactions
   TRANSACTIONS_STATUS=$?
 
+  if [ "$TRANSACTIONS_STATUS" -eq 0 ]; then
+    echo "=== $(date -u +%Y-%m-%dT%H:%M:%SZ) PILOTAGE YEARLY CACHE REFRESH ==="
+
+    /opt/mlcflux-dev/venv/bin/python -m server.refresh_pilotage_yearly_cache
+    PILOTAGE_YEARLY_CACHE_STATUS=$?
+  else
+    PILOTAGE_YEARLY_CACHE_STATUS=99
+    echo "=== $(date -u +%Y-%m-%dT%H:%M:%SZ) PILOTAGE YEARLY CACHE REFRESH SKIPPED - transaction sync failed ==="
+  fi
+
   /opt/mlcflux-dev/venv/bin/python -m server.sync_odoo_professional_enrichment
   ODOO_ENRICHMENT_STATUS=$?
 
@@ -38,9 +48,19 @@ LOG_FILE="/opt/mlcflux-dev/logs/daily_sync.log"
     --date-to "$BALANCES_DATE_TO"
   PROFESSIONAL_BALANCES_STATUS=$?
 
-  echo "=== $(date -u +%Y-%m-%dT%H:%M:%SZ) DAILY SYNC END - transactions=${TRANSACTIONS_STATUS} odoo_enrichment=${ODOO_ENRICHMENT_STATUS} professional_links=${PROFESSIONAL_LINKS_STATUS} individual_balances=${INDIVIDUAL_BALANCES_STATUS} professional_balances=${PROFESSIONAL_BALANCES_STATUS} ==="
+  if [ "$INDIVIDUAL_BALANCES_STATUS" -eq 0 ] && [ "$PROFESSIONAL_BALANCES_STATUS" -eq 0 ]; then
+    echo "=== $(date -u +%Y-%m-%dT%H:%M:%SZ) PILOTAGE HOLDINGS DAILY CACHE REFRESH ==="
 
-  if [ "$TRANSACTIONS_STATUS" -ne 0 ] || [ "$ODOO_ENRICHMENT_STATUS" -ne 0 ] || [ "$PROFESSIONAL_LINKS_STATUS" -ne 0 ] || [ "$INDIVIDUAL_BALANCES_STATUS" -ne 0 ] || [ "$PROFESSIONAL_BALANCES_STATUS" -ne 0 ]; then
+    /opt/mlcflux-dev/venv/bin/python -m server.refresh_pilotage_holdings_daily_cache
+    PILOTAGE_HOLDINGS_DAILY_CACHE_STATUS=$?
+  else
+    PILOTAGE_HOLDINGS_DAILY_CACHE_STATUS=99
+    echo "=== $(date -u +%Y-%m-%dT%H:%M:%SZ) PILOTAGE HOLDINGS DAILY CACHE REFRESH SKIPPED - balance sync failed ==="
+  fi
+
+  echo "=== $(date -u +%Y-%m-%dT%H:%M:%SZ) DAILY SYNC END - transactions=${TRANSACTIONS_STATUS} pilotage_yearly_cache=${PILOTAGE_YEARLY_CACHE_STATUS} odoo_enrichment=${ODOO_ENRICHMENT_STATUS} professional_links=${PROFESSIONAL_LINKS_STATUS} individual_balances=${INDIVIDUAL_BALANCES_STATUS} professional_balances=${PROFESSIONAL_BALANCES_STATUS} pilotage_holdings_daily_cache=${PILOTAGE_HOLDINGS_DAILY_CACHE_STATUS} ==="
+
+  if [ "$TRANSACTIONS_STATUS" -ne 0 ] || [ "$PILOTAGE_YEARLY_CACHE_STATUS" -ne 0 ] || [ "$ODOO_ENRICHMENT_STATUS" -ne 0 ] || [ "$PROFESSIONAL_LINKS_STATUS" -ne 0 ] || [ "$INDIVIDUAL_BALANCES_STATUS" -ne 0 ] || [ "$PROFESSIONAL_BALANCES_STATUS" -ne 0 ] || [ "$PILOTAGE_HOLDINGS_DAILY_CACHE_STATUS" -ne 0 ]; then
     exit 1
   fi
 } >> "$LOG_FILE" 2>&1

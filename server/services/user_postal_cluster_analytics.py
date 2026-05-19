@@ -318,17 +318,29 @@ def _table_rows(
            AND substr(t.date, 1, 10) <= ?
           GROUP BY iz.postal_code
         ),
+        professional_transaction_emissions AS (
+          SELECT
+            substr(t.from_label, 1, 5) AS professional_ref,
+            COUNT(t.cyclos_id) AS professional_emitted_tx_count,
+            COALESCE(SUM(t.amount), 0) AS professional_emitted_volume
+          FROM transactions t
+          WHERE substr(t.date, 1, 10) >= ?
+            AND substr(t.date, 1, 10) <= ?
+            AND substr(t.from_label, 1, 5) LIKE 'P____'
+          GROUP BY substr(t.from_label, 1, 5)
+        ),
         professional_emissions AS (
           SELECT
             pz.postal_code,
-            COUNT(DISTINCT CASE WHEN t.cyclos_id IS NOT NULL THEN pz.professional_ref END) AS professional_distinct_emitters,
-            COUNT(t.cyclos_id) AS professional_emitted_tx_count,
-            COALESCE(SUM(t.amount), 0) AS professional_emitted_volume
+            COUNT(DISTINCT CASE
+              WHEN pte.professional_emitted_tx_count > 0
+              THEN pz.professional_ref
+            END) AS professional_distinct_emitters,
+            COALESCE(SUM(pte.professional_emitted_tx_count), 0) AS professional_emitted_tx_count,
+            COALESCE(SUM(pte.professional_emitted_volume), 0) AS professional_emitted_volume
           FROM professional_zip pz
-          LEFT JOIN transactions t
-            ON substr(t.from_label, 1, 5) = pz.professional_ref
-           AND substr(t.date, 1, 10) >= ?
-           AND substr(t.date, 1, 10) <= ?
+          LEFT JOIN professional_transaction_emissions pte
+            ON pte.professional_ref = pz.professional_ref
           GROUP BY pz.postal_code
         )
         SELECT

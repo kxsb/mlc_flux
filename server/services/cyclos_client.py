@@ -102,7 +102,7 @@ def _extract_transaction_items(data):
     return []
 
 
-def get_transactions(days=None, date_from=None, date_to=None):
+def get_transactions(days=None, date_from=None, date_to=None, *, max_period_days=None):
     """
     Récupère les transactions Cyclos sur une période donnée, avec pagination complète.
 
@@ -110,6 +110,7 @@ def get_transactions(days=None, date_from=None, date_to=None):
     - days=N : période glissante de N jours
     - date_from=YYYY-MM-DD ou ISO
     - date_to=YYYY-MM-DD ou ISO
+    - max_period_days=N : garde-fou optionnel utilisé par les routes publiques
 
     Paramètres utilisés côté Cyclos :
     - datePeriod : filtre temporel
@@ -117,7 +118,6 @@ def get_transactions(days=None, date_from=None, date_to=None):
     - orderBy=dateDesc : transactions les plus récentes d'abord
     """
     base_url = current_app.config["CYCLOS_BASE_URL"]
-    session_token = create_session_token()
 
     now = datetime.now(UTC)
 
@@ -150,6 +150,28 @@ def get_transactions(days=None, date_from=None, date_to=None):
 
     if end_date and end_date < start_date:
         raise ValueError("date_to doit être postérieure ou égale à date_from")
+
+    if max_period_days is not None:
+        try:
+            normalized_max_period_days = int(max_period_days)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("max_period_days doit être un entier positif.") from exc
+
+        if normalized_max_period_days <= 0:
+            raise ValueError("max_period_days doit être un entier positif.")
+
+        effective_end_date = end_date or now
+        max_period = timedelta(days=normalized_max_period_days)
+
+        if effective_end_date - start_date > max_period:
+            raise ValueError(
+                "Période trop large : "
+                f"{normalized_max_period_days} jours maximum pour cette route."
+            )
+
+    # Le token Cyclos n'est demandé qu'après validation complète de la période.
+    # Une requête publique invalide ne doit pas déclencher d'appel externe inutile.
+    session_token = create_session_token()
 
     url = f"{base_url}/transactions"
 

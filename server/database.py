@@ -1,3 +1,4 @@
+import re
 import sqlite3
 from pathlib import Path
 
@@ -7,23 +8,71 @@ DB_PATH = Path(__file__).resolve().parent / "data" / "mlcflux.db"
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+
+    # WAL améliore la coexistence entre lectures HTTP et écritures de sync.
+    # Le mode est persistant au niveau de la base SQLite.
+    conn.execute("PRAGMA journal_mode = WAL")
+
+    # Les contraintes FOREIGN KEY sont désactivées par défaut dans SQLite
+    # et doivent être réactivées pour chaque nouvelle connexion.
+    conn.execute("PRAGMA foreign_keys = ON")
+
+    # Rend explicite l'attente en cas de verrou temporaire.
+    conn.execute("PRAGMA busy_timeout = 5000")
+
     return conn
 
+
+_SQL_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _validate_sql_identifier(value, *, field_name="identifiant SQL"):
+    """
+    Valide un identifiant SQL utilisé dans les fragments DDL internes.
+
+    Les valeurs autorisées sont volontairement strictes :
+    - lettres ASCII, chiffres et underscore uniquement ;
+    - pas de chiffre en premier caractère ;
+    - aucun espace, guillemet, séparateur ou fragment SQL.
+    """
+    normalized = str(value or "").strip()
+
+    if not _SQL_IDENTIFIER_RE.fullmatch(normalized):
+        raise ValueError(
+            f"{field_name} invalide : {value!r}"
+        )
+
+    return normalized
 
 
 def _ensure_column(cur, table_name, column_name, column_type):
     """
     Ajoute une colonne à une table SQLite si elle n'existe pas encore.
     Sert de migration légère pour les bases déjà initialisées.
+
+    Les noms de table et colonne sont construits dynamiquement à partir
+    de constantes internes, mais restent validés strictement par défense
+    en profondeur avant d'être injectés dans du DDL SQLite.
     """
+    table_name = _validate_sql_identifier(
+        table_name,
+        field_name="nom de table",
+    )
+    column_name = _validate_sql_identifier(
+        column_name,
+        field_name="nom de colonne",
+    )
+
     existing_columns = {
         row[1]
-        for row in cur.execute(f"PRAGMA table_info({table_name})").fetchall()
+        for row in cur.execute(
+            f'PRAGMA table_info("{table_name}")'
+        ).fetchall()
     }
 
     if column_name not in existing_columns:
         cur.execute(
-            f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"
+            f'ALTER TABLE "{table_name}" ADD COLUMN "{column_name}" {column_type}'
         )
 
 def init_db():
@@ -47,6 +96,20 @@ def init_db():
         CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_cyclos_id_unique
         ON transactions (cyclos_id)
         WHERE cyclos_id IS NOT NULL AND TRIM(cyclos_id) <> ''
+    """)
+
+    # Optimise les analyses territoriales et de bassins de flux
+    # qui croisent l'émetteur et le jour transactionnel.
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_transactions_from_label_day
+        ON transactions (from_label, substr(date, 1, 10))
+    """)
+
+    # Optimise les agrégations professionnelles fondées sur
+    # la référence Pxxxx extraite du libellé émetteur.
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_transactions_from_prof_ref_day
+        ON transactions (substr(from_label, 1, 5), substr(date, 1, 10))
     """)
 
     cur.execute("""
@@ -365,6 +428,28 @@ def init_db():
     cur.execute("""
         CREATE INDEX IF NOT EXISTS idx_transactions_year
         ON transactions(substr(date, 1, 4))
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS pilotage_yearly_cache (
+            series_key TEXT NOT NULL,
+            year INTEGER NOT NULL,
+            item_json TEXT NOT NULL,
+            computed_at TEXT NOT NULL,
+            PRIMARY KEY (series_key, year)
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS pilotage_holdings_daily_cache (
+            day TEXT PRIMARY KEY,
+            positive_user_stock REAL NOT NULL,
+            positive_professional_network_stock REAL NOT NULL,
+            positive_gonette_business_accounts_stock REAL NOT NULL,
+            positive_professional_total_stock REAL NOT NULL,
+            numeric_mass REAL NOT NULL,
+            computed_at TEXT NOT NULL
+        )
     """)
 
     conn.commit()
