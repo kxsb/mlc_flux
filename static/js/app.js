@@ -28,7 +28,7 @@ const appState = {
 
   prosSearch: "",
   prosSearchDebounce: null,
-  prosSortBy: "Total Reçu",
+  prosSortBy: "Total reçu",
   prosSortDir: "desc",
   prosData: [],
 
@@ -2857,30 +2857,208 @@ function computeStatsFromTransactions(allTx, numProf) {
   };
 }
 
-function transactionTable(rows) {
-  const sortedRows = sortRows(rows);
 
-  const body = sortedRows.map(row => `
-    <tr>
-      <td>${escapeHtml(formatDateFr(row.Date))}</td>
-      <td>${renderActorLink(row["Réalisé par"])}</td>
-      <td>${renderActorLink(row["Vers"])}</td>
-      <td class="num">${euro(row["Montant"])}</td>
-    </tr>
-  `).join("");
+const DETAIL_TRANSACTION_COLUMN_STORAGE_KEY = "mlcflux_detail_transaction_columns_v1";
+
+const DETAIL_TRANSACTION_COLUMNS = [
+  {
+    key: "Date",
+    label: "Date",
+    required: true,
+    defaultVisible: true,
+    className: "",
+    render: row => escapeHtml(formatDateFr(row.Date))
+  },
+  {
+    key: "Réalisé par",
+    label: "Réalisé par",
+    required: false,
+    defaultVisible: true,
+    className: "",
+    render: row => renderActorLink(row["Réalisé par"])
+  },
+  {
+    key: "Vers",
+    label: "Vers",
+    required: false,
+    defaultVisible: true,
+    className: "",
+    render: row => renderActorLink(row["Vers"])
+  },
+  {
+    key: "Montant",
+    label: "Montant",
+    required: false,
+    defaultVisible: true,
+    className: "num",
+    render: row => euro(row["Montant"])
+  }
+];
+
+function getVisibleDetailTransactionColumnKeys() {
+  const allKeys = DETAIL_TRANSACTION_COLUMNS.map(column => column.key);
+  const requiredKeys = DETAIL_TRANSACTION_COLUMNS
+    .filter(column => column.required)
+    .map(column => column.key);
+  const defaultKeys = DETAIL_TRANSACTION_COLUMNS
+    .filter(column => column.required || column.defaultVisible)
+    .map(column => column.key);
+
+  let storedKeys = null;
+
+  try {
+    const raw = localStorage.getItem(DETAIL_TRANSACTION_COLUMN_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+
+    if (Array.isArray(parsed)) {
+      storedKeys = parsed.filter(key => allKeys.includes(key));
+    }
+  } catch (_error) {
+    storedKeys = null;
+  }
+
+  if (!storedKeys) {
+    return defaultKeys;
+  }
+
+  const visibleKeys = new Set(storedKeys);
+  requiredKeys.forEach(key => visibleKeys.add(key));
+
+  return allKeys.filter(key => visibleKeys.has(key));
+}
+
+function getVisibleDetailTransactionColumnSet() {
+  return new Set(getVisibleDetailTransactionColumnKeys());
+}
+
+function persistVisibleDetailTransactionColumnKeys(keys) {
+  try {
+    localStorage.setItem(
+      DETAIL_TRANSACTION_COLUMN_STORAGE_KEY,
+      JSON.stringify(keys)
+    );
+  } catch (_error) {
+    // La persistance est utile mais non bloquante.
+  }
+}
+
+function toggleDetailTransactionColumn(columnKey, checked) {
+  const allKeys = DETAIL_TRANSACTION_COLUMNS.map(column => column.key);
+  const column = DETAIL_TRANSACTION_COLUMNS.find(item => item.key === columnKey);
+
+  if (!column || column.required) {
+    return;
+  }
+
+  const visibleKeys = new Set(getVisibleDetailTransactionColumnKeys());
+
+  if (checked) {
+    visibleKeys.add(columnKey);
+  } else {
+    visibleKeys.delete(columnKey);
+  }
+
+  DETAIL_TRANSACTION_COLUMNS
+    .filter(item => item.required)
+    .forEach(item => visibleKeys.add(item.key));
+
+  persistVisibleDetailTransactionColumnKeys(
+    allKeys.filter(key => visibleKeys.has(key))
+  );
+
+  drawDetailSection();
+}
+
+function renderDetailTransactionColumnPicker() {
+  const visibleKeys = getVisibleDetailTransactionColumnSet();
+
+  const options = DETAIL_TRANSACTION_COLUMNS.map(column => {
+    const checked = visibleKeys.has(column.key) ? "checked" : "";
+    const disabled = column.required ? "disabled" : "";
+    const escapedColumnKey = String(column.key)
+      .replace(/\\/g, "\\\\")
+      .replace(/'/g, "\\'");
+
+    return `
+      <label class="detail-transaction-column-option">
+        <input
+          type="checkbox"
+          ${checked}
+          ${disabled}
+          onchange="toggleDetailTransactionColumn('${escapedColumnKey}', this.checked)"
+        >
+        <span>${escapeHtml(column.label)}</span>
+      </label>
+    `;
+  }).join("");
 
   return `
+    <details class="detail-transaction-columns-menu">
+      <summary class="secondary-btn">Colonnes affichées</summary>
+      <div class="detail-transaction-columns-panel">
+        <strong>Colonnes du tableau</strong>
+        <div class="detail-transaction-columns-options">
+          ${options}
+        </div>
+      </div>
+    </details>
+  `;
+}
+
+function renderDetailTransactionTableToolbar() {
+  return `
+    <div class="detail-transaction-table-toolbar">
+      ${renderDetailTransactionColumnPicker()}
+    </div>
+  `;
+}
+
+function renderDetailTransactionHeaderCells() {
+  const visibleKeys = getVisibleDetailTransactionColumnSet();
+
+  return DETAIL_TRANSACTION_COLUMNS
+    .filter(column => visibleKeys.has(column.key))
+    .map(column => {
+      const className = column.className ? ` class="${column.className}"` : "";
+      return `<th${className}>${detailSortableHeader(column.label, column.key)}</th>`;
+    })
+    .join("");
+}
+
+function renderDetailTransactionRow(row) {
+  const visibleKeys = getVisibleDetailTransactionColumnSet();
+
+  return `
+    <tr>
+      ${DETAIL_TRANSACTION_COLUMNS
+        .filter(column => visibleKeys.has(column.key))
+        .map(column => {
+          const className = column.className ? ` class="${column.className}"` : "";
+          return `<td${className}>${column.render(row)}</td>`;
+        })
+        .join("")}
+    </tr>
+  `;
+}
+
+function transactionTable(rows) {
+  const sortedRows = sortRows(rows);
+  const visibleColumnCount = getVisibleDetailTransactionColumnKeys().length;
+
+  const body = sortedRows
+    .map(row => renderDetailTransactionRow(row))
+    .join("");
+
+  return `
+    ${renderDetailTransactionTableToolbar()}
     <table>
       <thead>
         <tr>
-          <th>${detailSortableHeader("Date", "Date")}</th>
-          <th>${detailSortableHeader("Réalisé par", "Réalisé par")}</th>
-          <th>${detailSortableHeader("Vers", "Vers")}</th>
-          <th class="num">${detailSortableHeader("Montant", "Montant")}</th>
+          ${renderDetailTransactionHeaderCells()}
         </tr>
       </thead>
       <tbody>
-        ${body || `<tr><td colspan="4">Aucune ligne</td></tr>`}
+        ${body || `<tr><td colspan="${visibleColumnCount}">Aucune ligne</td></tr>`}
       </tbody>
     </table>
   `;
@@ -2901,15 +3079,11 @@ function paginatedTransactionTable(rows) {
 
   const startDisplay = totalRows ? startIndex + 1 : 0;
   const endDisplay = totalRows ? Math.min(startIndex + pageRows.length, totalRows) : 0;
+  const visibleColumnCount = getVisibleDetailTransactionColumnKeys().length;
 
-  const body = pageRows.map(row => `
-    <tr>
-      <td>${escapeHtml(formatDateFr(row.Date))}</td>
-      <td>${renderActorLink(row["Réalisé par"])}</td>
-      <td>${renderActorLink(row["Vers"])}</td>
-      <td class="num">${euro(row["Montant"])}</td>
-    </tr>
-  `).join("");
+  const body = pageRows
+    .map(row => renderDetailTransactionRow(row))
+    .join("");
 
   const pagination = totalRows ? `
     <div class="detail-pagination">
@@ -2944,17 +3118,15 @@ function paginatedTransactionTable(rows) {
   ` : "";
 
   return `
+    ${renderDetailTransactionTableToolbar()}
     <table>
       <thead>
         <tr>
-          <th>${detailSortableHeader("Date", "Date")}</th>
-          <th>${detailSortableHeader("Réalisé par", "Réalisé par")}</th>
-          <th>${detailSortableHeader("Vers", "Vers")}</th>
-          <th class="num">${detailSortableHeader("Montant", "Montant")}</th>
+          ${renderDetailTransactionHeaderCells()}
         </tr>
       </thead>
       <tbody>
-        ${body || `<tr><td colspan="4">Aucune ligne</td></tr>`}
+        ${body || `<tr><td colspan="${visibleColumnCount}">Aucune ligne</td></tr>`}
       </tbody>
     </table>
     ${pagination}
@@ -15728,44 +15900,290 @@ function renderGlobalStatsChartsFromSeries(charts) {
   bindStatsChartTools(charts);
 }
 
+const PROFESSIONAL_DIRECTORY_COLUMN_STORAGE_KEY = "mlcflux_professional_directory_columns_v1";
+
+const PROFESSIONAL_DIRECTORY_COLUMNS = [
+  {
+    key: "Professionnel",
+    label: "Professionnel",
+    required: true,
+    defaultVisible: true,
+    className: "",
+    render: row => `
+      <button class="linkish" onclick="renderProDetail('${String(row.Professionnel || "").split(" - ")[0]}')">
+        ${escapeHtml(row.Professionnel || "—")}
+      </button>
+    `
+  },
+  {
+    key: "Secteur d’activité",
+    label: "Secteur d’activité",
+    required: false,
+    defaultVisible: true,
+    className: "",
+    render: row => escapeHtml(row["Secteur d’activité"] || "—")
+  },
+  {
+    key: "Code postal",
+    label: "Code postal",
+    required: false,
+    defaultVisible: true,
+    className: "",
+    render: row => escapeHtml(row["Code postal"] || "—")
+  },
+  {
+    key: "Reçu des professionnels",
+    label: "Reçu des professionnels",
+    required: false,
+    defaultVisible: false,
+    className: "num",
+    render: row => euro(row["Reçu des professionnels"])
+  },
+  {
+    key: "Reçu des particuliers",
+    label: "Reçu des particuliers",
+    required: false,
+    defaultVisible: false,
+    className: "num",
+    render: row => euro(row["Reçu des particuliers"])
+  },
+  {
+    key: "Total reçu",
+    label: "Total reçu",
+    required: false,
+    defaultVisible: true,
+    className: "num",
+    render: row => euro(row["Total reçu"])
+  },
+  {
+    key: "Émis vers les professionnels",
+    label: "Émis vers les professionnels",
+    required: false,
+    defaultVisible: false,
+    className: "num",
+    render: row => euro(row["Émis vers les professionnels"])
+  },
+  {
+    key: "Émis vers les particuliers",
+    label: "Émis vers les particuliers",
+    required: false,
+    defaultVisible: false,
+    className: "num",
+    render: row => euro(row["Émis vers les particuliers"])
+  },
+  {
+    key: "Total émis",
+    label: "Total émis",
+    required: false,
+    defaultVisible: false,
+    className: "num",
+    render: row => euro(row["Total émis"])
+  },
+  {
+    key: "Total converti",
+    label: "Total converti",
+    required: false,
+    defaultVisible: true,
+    className: "num",
+    render: row => euro(row["Total converti"])
+  },
+  {
+    key: "Total reconverti",
+    label: "Total reconverti",
+    required: false,
+    defaultVisible: true,
+    className: "num",
+    render: row => euro(row["Total reconverti"])
+  },
+  {
+    key: "Taux de réutilisation",
+    label: "Taux de réutilisation",
+    required: false,
+    defaultVisible: false,
+    className: "num",
+    render: row => formatProfessionalDirectoryReuseRate(row["Taux de réutilisation"])
+  }
+];
+
+function formatProfessionalDirectoryReuseRate(value) {
+  const numeric = Number(value);
+
+  if (!Number.isFinite(numeric)) {
+    return "—";
+  }
+
+  return percent(numeric);
+}
+
+function getVisibleProfessionalDirectoryColumnKeys() {
+  const allKeys = PROFESSIONAL_DIRECTORY_COLUMNS.map(column => column.key);
+  const requiredKeys = PROFESSIONAL_DIRECTORY_COLUMNS
+    .filter(column => column.required)
+    .map(column => column.key);
+  const defaultKeys = PROFESSIONAL_DIRECTORY_COLUMNS
+    .filter(column => column.required || column.defaultVisible)
+    .map(column => column.key);
+
+  let storedKeys = null;
+
+  try {
+    const raw = localStorage.getItem(PROFESSIONAL_DIRECTORY_COLUMN_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+
+    if (Array.isArray(parsed)) {
+      storedKeys = parsed.filter(key => allKeys.includes(key));
+    }
+  } catch (_error) {
+    storedKeys = null;
+  }
+
+  if (!storedKeys) {
+    return defaultKeys;
+  }
+
+  const visibleKeys = new Set(storedKeys);
+  requiredKeys.forEach(key => visibleKeys.add(key));
+
+  return allKeys.filter(key => visibleKeys.has(key));
+}
+
+function getVisibleProfessionalDirectoryColumnSet() {
+  return new Set(getVisibleProfessionalDirectoryColumnKeys());
+}
+
+function persistVisibleProfessionalDirectoryColumnKeys(keys) {
+  try {
+    localStorage.setItem(
+      PROFESSIONAL_DIRECTORY_COLUMN_STORAGE_KEY,
+      JSON.stringify(keys)
+    );
+  } catch (_error) {
+    // La persistance est utile mais non bloquante.
+  }
+}
+
+function toggleProfessionalDirectoryColumn(columnKey, checked) {
+  const allKeys = PROFESSIONAL_DIRECTORY_COLUMNS.map(column => column.key);
+  const column = PROFESSIONAL_DIRECTORY_COLUMNS.find(item => item.key === columnKey);
+
+  if (!column || column.required) {
+    return;
+  }
+
+  const visibleKeys = new Set(getVisibleProfessionalDirectoryColumnKeys());
+
+  if (checked) {
+    visibleKeys.add(columnKey);
+  } else {
+    visibleKeys.delete(columnKey);
+  }
+
+  PROFESSIONAL_DIRECTORY_COLUMNS
+    .filter(item => item.required)
+    .forEach(item => visibleKeys.add(item.key));
+
+  persistVisibleProfessionalDirectoryColumnKeys(
+    allKeys.filter(key => visibleKeys.has(key))
+  );
+
+  drawProsTable();
+}
+
+function renderProfessionalDirectoryColumnPicker() {
+  const visibleKeys = getVisibleProfessionalDirectoryColumnSet();
+
+  const options = PROFESSIONAL_DIRECTORY_COLUMNS.map(column => {
+    const checked = visibleKeys.has(column.key) ? "checked" : "";
+    const disabled = column.required ? "disabled" : "";
+    const escapedColumnKey = String(column.key)
+      .replace(/\\/g, "\\\\")
+      .replace(/'/g, "\\'");
+
+    return `
+      <label class="professional-directory-column-option">
+        <input
+          type="checkbox"
+          ${checked}
+          ${disabled}
+          onchange="toggleProfessionalDirectoryColumn('${escapedColumnKey}', this.checked)"
+        >
+        <span>${escapeHtml(column.label)}</span>
+      </label>
+    `;
+  }).join("");
+
+  return `
+    <details class="professional-directory-columns-menu">
+      <summary class="secondary-btn">Colonnes affichées</summary>
+      <div class="professional-directory-columns-panel">
+        <strong>Colonnes du tableau</strong>
+        <div class="professional-directory-columns-options">
+          ${options}
+        </div>
+      </div>
+    </details>
+  `;
+}
+
+function renderProfessionalDirectoryHeaderCells() {
+  const visibleKeys = getVisibleProfessionalDirectoryColumnSet();
+
+  return PROFESSIONAL_DIRECTORY_COLUMNS
+    .filter(column => visibleKeys.has(column.key))
+    .map(column => {
+      const className = column.className ? ` class="${column.className}"` : "";
+      return `<th${className}>${sortableHeader(column.label, column.key)}</th>`;
+    })
+    .join("");
+}
+
+function renderProfessionalDirectoryRow(row) {
+  const visibleKeys = getVisibleProfessionalDirectoryColumnSet();
+
+  return `
+    <tr>
+      ${PROFESSIONAL_DIRECTORY_COLUMNS
+        .filter(column => visibleKeys.has(column.key))
+        .map(column => {
+          const className = column.className ? ` class="${column.className}"` : "";
+          return `<td${className}>${column.render(row)}</td>`;
+        })
+        .join("")}
+    </tr>
+  `;
+}
+
 function drawProsTable() {
   const filtered = getSortedAndFilteredPros();
+  const visibleColumnCount = getVisibleProfessionalDirectoryColumnKeys().length;
 
-  const tableRows = filtered.map(row => `
-    <tr>
-      <td>
-        <button class="linkish" onclick="renderProDetail('${String(row.Professionnel).split(' - ')[0]}')">
-          ${escapeHtml(row.Professionnel)}
-        </button>
-      </td>
-      <td class="num">${euro(row["B2B Reçu"])}</td>
-      <td class="num">${euro(row["B2B Emis"])}</td>
-      <td class="num">${euro(row["B2C"])}</td>
-      <td class="num">${euro(row["Rémunération"])}</td>
-      <td class="num">${euro(row["Total Reçu"])}</td>
-    </tr>
-  `).join("");
+  const tableRows = filtered
+    .map(row => renderProfessionalDirectoryRow(row))
+    .join("");
 
-  const professionalsDirectoryTarget = document.getElementById("professionalsDirectoryPanel") || content;
+  const professionalsDirectoryTarget =
+    document.getElementById("professionalsDirectoryPanel") || content;
+
   professionalsDirectoryTarget.innerHTML = `
-    <div class="topbar">
-      <input type="text" id="searchPros" placeholder="Recherche rapide..." value="${escapeHtml(appState.prosSearch)}">
-      <span>${filtered.length} résultat(s)</span>
+    <div class="topbar professionals-directory-toolbar">
+      <input
+        type="text"
+        id="searchPros"
+        placeholder="Recherche rapide..."
+        value="${escapeHtml(appState.prosSearch)}"
+      >
+      <span class="professionals-directory-results-count">${filtered.length} résultat(s)</span>
+      ${renderProfessionalDirectoryColumnPicker()}
     </div>
 
     <table>
       <thead>
         <tr>
-          <th>${sortableHeader("Professionnel", "Professionnel")}</th>
-          <th>${sortableHeader("B2B Reçu", "B2B Reçu")}</th>
-          <th>${sortableHeader("B2B Emis", "B2B Emis")}</th>
-          <th>${sortableHeader("B2C", "B2C")}</th>
-          <th>${sortableHeader("Rémunération", "Rémunération")}</th>
-          <th>${sortableHeader("Total Reçu", "Total Reçu")}</th>
+          ${renderProfessionalDirectoryHeaderCells()}
         </tr>
       </thead>
       <tbody>
-        ${tableRows || `<tr><td colspan="6">Aucun résultat</td></tr>`}
+        ${tableRows || `<tr><td colspan="${visibleColumnCount}">Aucun résultat</td></tr>`}
       </tbody>
     </table>
   `;

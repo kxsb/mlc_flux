@@ -10264,3 +10264,165 @@ body.dark-mode .pro-detail-payment-basin-postal-chip {
   }
 }
 
+
+/* PROSCOLS-RESTORE001 — menu de colonnes du tableau des professionnels */
+.professionals-directory-toolbar {
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.professionals-directory-toolbar #searchPros {
+  flex: 1 1 260px;
+  min-width: 220px;
+}
+
+.professionals-directory-results-count {
+  white-space: nowrap;
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.professional-directory-columns-menu {
+  position: relative;
+  z-index: 30;
+  flex: 0 0 auto;
+}
+
+.professional-directory-columns-menu > summary {
+  list-style: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.professional-directory-columns-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.professional-directory-columns-menu > summary::after {
+  content: "⌄";
+  font-size: 0.85em;
+  opacity: 0.8;
+}
+
+.professional-directory-columns-menu[open] > summary::after {
+  content: "⌃";
+}
+
+.professional-directory-columns-panel {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  right: 0;
+  z-index: 40;
+  min-width: 255px;
+  padding: 0.95rem 1rem;
+  border-radius: 14px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: var(--card-bg, var(--panel-bg, #ffffff));
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.16);
+}
+
+.professional-directory-columns-panel strong {
+  display: block;
+  margin-bottom: 0.75rem;
+  font-size: 0.95rem;
+}
+
+.professional-directory-columns-options {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.professional-directory-column-option {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+
+.professional-directory-column-option input[disabled] {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.professional-directory-column-option:has(input[disabled]) {
+  cursor: default;
+}
+
+/* DATACOLS004 — menu de colonnes du tableau des transactions */
+.detail-transaction-table-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0.25rem 0 0.9rem;
+}
+
+.detail-transaction-columns-menu {
+  position: relative;
+  z-index: 30;
+}
+
+.detail-transaction-columns-menu > summary {
+  list-style: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.detail-transaction-columns-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.detail-transaction-columns-menu > summary::after {
+  content: "⌄";
+  font-size: 0.85em;
+  opacity: 0.8;
+}
+
+.detail-transaction-columns-menu[open] > summary::after {
+  content: "⌃";
+}
+
+.detail-transaction-columns-panel {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  right: 0;
+  z-index: 40;
+  min-width: 250px;
+  padding: 0.95rem 1rem;
+  border-radius: 14px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: var(--card-bg, var(--panel-bg, #ffffff));
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.16);
+}
+
+.detail-transaction-columns-panel strong {
+  display: block;
+  margin-bottom: 0.75rem;
+  font-size: 0.95rem;
+}
+
+.detail-transaction-columns-options {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.detail-transaction-column-option {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+
+.detail-transaction-column-option input[disabled] {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.detail-transaction-column-option:has(input[disabled]) {
+  cursor: default;
+}
+
