@@ -11521,3 +11521,145 @@ body.dark-mode .pro-detail-payment-basin-postal-chip {
   max-width: none;
 }
 
+
+
+/* PRODETAIL_FONDCOMMERCE006 — Tooltips carte bassin de paiement */
+
+.pro-detail-payment-basin-postal-breakdown-compact {
+  padding: 0.9rem 1rem;
+}
+
+.pro-detail-payment-basin-postal-breakdown-compact .pro-detail-payment-basin-postal-breakdown-heading {
+  align-items: center;
+}
+
+.pro-detail-payment-basin-postal-breakdown-compact .pro-detail-payment-basin-postal-breakdown-heading small {
+  max-width: none;
+  text-align: right;
+}
+
+.pro-detail-payment-basin-tooltip {
+  position: absolute;
+  z-index: 8;
+  display: grid;
+  gap: 0.38rem;
+  min-width: 220px;
+  max-width: min(320px, calc(100% - 24px));
+  padding: 0.78rem 0.88rem;
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  border-radius: 0.9rem;
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--text);
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+}
+
+.pro-detail-payment-basin-tooltip.hidden {
+  display: none;
+}
+
+.pro-detail-payment-basin-tooltip-title {
+  font-weight: 850;
+  line-height: 1.25;
+  color: var(--text);
+}
+
+.pro-detail-payment-basin-tooltip-row {
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.32;
+}
+
+.pro-detail-payment-basin-tooltip-row strong {
+  color: var(--text);
+  font-weight: 800;
+}
+
+body.dark-mode .pro-detail-payment-basin-tooltip {
+  border-color: rgba(148, 163, 184, 0.28);
+  background: rgba(15, 23, 42, 0.94);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.34);
+}
+
+@media (max-width: 720px) {
+  .pro-detail-payment-basin-postal-breakdown-compact .pro-detail-payment-basin-postal-breakdown-heading {
+    align-items: flex-start;
+  }
+
+  .pro-detail-payment-basin-postal-breakdown-compact .pro-detail-payment-basin-postal-breakdown-heading small {
+    text-align: left;
+  }
+}
+
+
+
+/* PRODETAIL_FONDCOMMERCE006A — Tooltips et hors territoire */
+
+.pro-detail-payment-basin-postal-breakdown-compact {
+  padding: 0.9rem 1rem;
+}
+
+.pro-detail-payment-basin-postal-breakdown-compact .pro-detail-payment-basin-postal-breakdown-heading {
+  align-items: center;
+}
+
+.pro-detail-payment-basin-postal-breakdown-compact .pro-detail-payment-basin-postal-breakdown-heading small {
+  max-width: none;
+  text-align: right;
+}
+
+.pro-detail-payment-basin-tooltip {
+  position: absolute;
+  z-index: 8;
+  display: grid;
+  gap: 0.38rem;
+  min-width: 220px;
+  max-width: min(340px, calc(100% - 24px));
+  padding: 0.78rem 0.88rem;
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  border-radius: 0.9rem;
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--text);
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+}
+
+.pro-detail-payment-basin-tooltip.hidden {
+  display: none;
+}
+
+.pro-detail-payment-basin-tooltip-title {
+  font-weight: 850;
+  line-height: 1.25;
+  color: var(--text);
+}
+
+.pro-detail-payment-basin-tooltip-row {
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.32;
+}
+
+.pro-detail-payment-basin-tooltip-row strong {
+  color: var(--text);
+  font-weight: 800;
+}
+
+body.dark-mode .pro-detail-payment-basin-tooltip {
+  border-color: rgba(148, 163, 184, 0.28);
+  background: rgba(15, 23, 42, 0.94);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.34);
+}
+
+@media (max-width: 720px) {
+  .pro-detail-payment-basin-postal-breakdown-compact .pro-detail-payment-basin-postal-breakdown-heading {
+    align-items: flex-start;
+  }
+
+  .pro-detail-payment-basin-postal-breakdown-compact .pro-detail-payment-basin-postal-breakdown-heading small {
+    text-align: left;
+  }
+}
+

@@ -20862,8 +20862,8 @@ function buildProfessionalCustomerLoyaltySectionHtml(loyalty = {}) {
 function getProfessionalPaymentBasinMapRequest(numProf) {
   const periodQuery = getPeriodQueryParam();
   const basinQuery = periodQuery
-    ? `${periodQuery}&min_users=5`
-    : "?min_users=5";
+    ? `${periodQuery}&min_users=1`
+    : "?min_users=1";
 
   return {
     url: `/api/pro/${encodeURIComponent(numProf)}/payment-basin-map${basinQuery}`,
@@ -20915,6 +20915,10 @@ function collectProfessionalPaymentBasinCoordinates(payload = {}) {
   }
 
   (payload?.routes || []).forEach(route => {
+    if (route?.kind === "individual_outside_territory") {
+      return;
+    }
+
     const source = route?.source || {};
     if (
       Number.isFinite(Number(source.longitude))
@@ -21006,8 +21010,11 @@ function buildProfessionalPaymentBasinProjection(payload, width, height) {
 
 
 function drawProfessionalPaymentBasinPostalLabel(ctx, point, route, radius = 8) {
-  const postalCode = String(route?.source?.postal_code || "").trim();
-  if (!postalCode) {
+  const label = route?.kind === "individual_outside_territory"
+    ? "Hors territoire"
+    : String(route?.source?.postal_code || "").trim();
+
+  if (!label) {
     return;
   }
 
@@ -21027,8 +21034,8 @@ function drawProfessionalPaymentBasinPostalLabel(ctx, point, route, radius = 8) 
     ? "rgba(226, 232, 240, 0.92)"
     : "rgba(30, 41, 59, 0.90)";
 
-  ctx.strokeText(postalCode, point.x, labelY);
-  ctx.fillText(postalCode, point.x, labelY);
+  ctx.strokeText(label, point.x, labelY);
+  ctx.fillText(label, point.x, labelY);
   ctx.restore();
 }
 
@@ -21132,6 +21139,14 @@ function getProfessionalPaymentBasinThemePalette() {
   };
 }
 
+
+function isProfessionalPaymentBasinIndividualRoute(route = {}) {
+  return (
+    route?.kind === "individual_postal"
+    || route?.kind === "individual_outside_territory"
+  );
+}
+
 function drawProfessionalPaymentBasinGeoJson(ctx, projection, featureCollection) {
   const drawRing = ring => {
     if (!Array.isArray(ring) || !ring.length) return;
@@ -21171,6 +21186,40 @@ function drawProfessionalPaymentBasinGeoJson(ctx, projection, featureCollection)
 
   ctx.fill("evenodd");
   ctx.stroke();
+}
+
+
+
+function getProfessionalPaymentBasinOutsideTerritoryPoint(projection, payload = {}) {
+  const center = payload?.center || {};
+  const centerPoint = projection.project(center.longitude, center.latitude);
+
+  const width = Number(projection?.width || 960);
+  const height = Number(projection?.height || 560);
+
+  return {
+    x: Math.max(76, width * 0.10),
+    y: Math.max(
+      78,
+      Math.min(
+        height - 78,
+        centerPoint.y - Math.max(52, height * 0.12)
+      )
+    ),
+  };
+}
+
+function getProfessionalPaymentBasinRouteSourcePoint(
+  projection,
+  payload = {},
+  route = {}
+) {
+  if (route?.kind === "individual_outside_territory") {
+    return getProfessionalPaymentBasinOutsideTerritoryPoint(projection, payload);
+  }
+
+  const source = route?.source || {};
+  return projection.project(source.longitude, source.latitude);
 }
 
 function getProfessionalPaymentBasinQuadraticControl(source, destination, routeId) {
@@ -21267,8 +21316,11 @@ function drawProfessionalPaymentBasinRoutes(ctx, projection, payload, timestamp)
   const destination = projection.project(center.longitude, center.latitude);
 
   routes.forEach(route => {
-    const sourceData = route?.source || {};
-    const source = projection.project(sourceData.longitude, sourceData.latitude);
+    const source = getProfessionalPaymentBasinRouteSourcePoint(
+      projection,
+      payload,
+      route
+    );
     const control = getProfessionalPaymentBasinQuadraticControl(
       source,
       destination,
@@ -21277,7 +21329,7 @@ function drawProfessionalPaymentBasinRoutes(ctx, projection, payload, timestamp)
 
     const volumeRatio = Math.sqrt(Number(route.volume || 0) / maxVolume);
     const width = 1.5 + volumeRatio * 4.6;
-    const isIndividual = route.kind === "individual_postal";
+    const isIndividual = isProfessionalPaymentBasinIndividualRoute(route);
     const lineColor = isIndividual ? palette.individualRoute : palette.professionalRoute;
     const glowColor = isIndividual ? palette.individualGlow : palette.professionalGlow;
 
@@ -21334,14 +21386,17 @@ function drawProfessionalPaymentBasinRoutes(ctx, projection, payload, timestamp)
   });
 }
 
-function drawProfessionalPaymentBasinSources(ctx, projection, payload) {
-  const palette = getProfessionalPaymentBasinThemePalette();
+function getProfessionalPaymentBasinSourceVisuals(projection, payload = {}) {
   const routes = Array.isArray(payload?.routes) ? payload.routes : [];
 
-  routes.forEach(route => {
+  return routes.map(route => {
     const sourceData = route?.source || {};
-    const point = projection.project(sourceData.longitude, sourceData.latitude);
-    const isIndividual = route.kind === "individual_postal";
+    const point = getProfessionalPaymentBasinRouteSourcePoint(
+      projection,
+      payload,
+      route
+    );
+    const isIndividual = isProfessionalPaymentBasinIndividualRoute(route);
     const magnitude = isIndividual
       ? Math.sqrt(Number(route.payer_count || 0))
       : Math.sqrt(Number(route.volume || 0) / 100);
@@ -21349,6 +21404,29 @@ function drawProfessionalPaymentBasinSources(ctx, projection, payload) {
     const radius = isIndividual
       ? 5 + Math.min(12, magnitude * 1.5)
       : 5 + Math.min(11, magnitude);
+
+    return {
+      route,
+      sourceData,
+      point,
+      isIndividual,
+      radius,
+      hitRadius: Math.max(18, radius + 10),
+    };
+  });
+}
+
+function drawProfessionalPaymentBasinSources(ctx, projection, payload) {
+  const palette = getProfessionalPaymentBasinThemePalette();
+  const visuals = getProfessionalPaymentBasinSourceVisuals(projection, payload);
+
+  visuals.forEach(visual => {
+    const {
+      route,
+      point,
+      isIndividual,
+      radius,
+    } = visual;
 
     const core = isIndividual ? palette.individualRoute : palette.professionalRoute;
     const glow = isIndividual ? palette.individualGlow : palette.professionalGlow;
@@ -21422,9 +21500,152 @@ function drawProfessionalPaymentBasinCenter(ctx, projection, payload) {
   ctx.restore();
 }
 
+
+
+function buildProfessionalPaymentBasinTooltipHtml(route = {}) {
+  const source = route?.source || {};
+  const txCount = formatProfessionalNetworkCount(route?.tx_count || source?.tx_count || 0);
+  const volume = euro(route?.volume || source?.volume || 0);
+
+  if (route?.kind === "individual_outside_territory") {
+    const payerCount = formatProfessionalNetworkCount(route?.payer_count || source?.payer_count || 0);
+    const postalSourceCount = formatProfessionalNetworkCount(source?.postal_source_count || 0);
+
+    return `
+      <div class="pro-detail-payment-basin-tooltip-title">
+        Hors territoire
+      </div>
+      <div class="pro-detail-payment-basin-tooltip-row">
+        <strong>${payerCount}</strong> payeur(s) particulier(s)
+      </div>
+      <div class="pro-detail-payment-basin-tooltip-row">
+        <strong>${postalSourceCount}</strong> code(s) postal(aux) hors 69xxx agrégé(s)
+      </div>
+      <div class="pro-detail-payment-basin-tooltip-row">
+        <strong>${txCount}</strong> transaction(s)
+      </div>
+      <div class="pro-detail-payment-basin-tooltip-row">
+        <strong>${volume}</strong> reçus
+      </div>
+    `;
+  }
+
+  if (route?.kind === "individual_postal") {
+    const postalCode = escapeHtml(source?.postal_code || "Code postal");
+    const payerCount = formatProfessionalNetworkCount(route?.payer_count || source?.payer_count || 0);
+
+    return `
+      <div class="pro-detail-payment-basin-tooltip-title">
+        ${postalCode}
+      </div>
+      <div class="pro-detail-payment-basin-tooltip-row">
+        <strong>${payerCount}</strong> payeur(s) particulier(s)
+      </div>
+      <div class="pro-detail-payment-basin-tooltip-row">
+        <strong>${txCount}</strong> transaction(s)
+      </div>
+      <div class="pro-detail-payment-basin-tooltip-row">
+        <strong>${volume}</strong> reçus
+      </div>
+    `;
+  }
+
+  const professionalRef = escapeHtml(source?.professional_ref || "Professionnel");
+  const professionalName = escapeHtml(source?.name || "");
+
+  return `
+    <div class="pro-detail-payment-basin-tooltip-title">
+      ${professionalRef}${professionalName ? ` — ${professionalName}` : ""}
+    </div>
+    <div class="pro-detail-payment-basin-tooltip-row">
+      <strong>${txCount}</strong> transaction(s)
+    </div>
+    <div class="pro-detail-payment-basin-tooltip-row">
+      <strong>${volume}</strong> reçus
+    </div>
+  `;
+}
+
+function findProfessionalPaymentBasinHoveredSource(
+  canvas,
+  projection,
+  payload,
+  event
+) {
+  const rect = canvas.getBoundingClientRect();
+  const mouseX = event.clientX - rect.left;
+  const mouseY = event.clientY - rect.top;
+  const visuals = getProfessionalPaymentBasinSourceVisuals(projection, payload);
+
+  for (let index = visuals.length - 1; index >= 0; index -= 1) {
+    const visual = visuals[index];
+    const distance = Math.hypot(
+      mouseX - visual.point.x,
+      mouseY - visual.point.y
+    );
+
+    if (distance <= visual.hitRadius) {
+      return {
+        visual,
+        mouseX,
+        mouseY,
+      };
+    }
+  }
+
+  return {
+    visual: null,
+    mouseX,
+    mouseY,
+  };
+}
+
+function positionProfessionalPaymentBasinTooltip(
+  tooltip,
+  frame,
+  mouseX,
+  mouseY
+) {
+  const frameWidth = frame.clientWidth || 0;
+  const frameHeight = frame.clientHeight || 0;
+
+  tooltip.classList.remove("hidden");
+  tooltip.setAttribute("aria-hidden", "false");
+
+  const tooltipWidth = tooltip.offsetWidth || 260;
+  const tooltipHeight = tooltip.offsetHeight || 110;
+
+  const preferredLeft = mouseX + 18;
+  const preferredTop = mouseY + 18;
+
+  const left = Math.max(
+    12,
+    Math.min(frameWidth - tooltipWidth - 12, preferredLeft)
+  );
+
+  const top = Math.max(
+    12,
+    Math.min(frameHeight - tooltipHeight - 12, preferredTop)
+  );
+
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${top}px`;
+}
+
+function hideProfessionalPaymentBasinTooltip(tooltip) {
+  if (!tooltip) {
+    return;
+  }
+
+  tooltip.classList.add("hidden");
+  tooltip.setAttribute("aria-hidden", "true");
+  tooltip.innerHTML = "";
+}
+
 function renderProfessionalPaymentBasinMapCanvas(payload = {}) {
   const canvas = document.getElementById("proDetailPaymentBasinCanvas");
   const frame = canvas?.closest(".pro-detail-payment-basin-map-frame");
+  const tooltip = document.getElementById("proDetailPaymentBasinTooltip");
 
   if (!canvas || !frame) {
     return;
@@ -21443,6 +21664,7 @@ function renderProfessionalPaymentBasinMapCanvas(payload = {}) {
   canvas.height = Math.round(height * dpr);
   canvas.style.width = `${width}px`;
   canvas.style.height = `${height}px`;
+  canvas.style.cursor = "default";
 
   const ctx = canvas.getContext("2d");
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -21452,8 +21674,44 @@ function renderProfessionalPaymentBasinMapCanvas(payload = {}) {
 
   if (!projection || !payload?.center?.has_coordinates || !(payload?.routes || []).length) {
     ctx.clearRect(0, 0, width, height);
+    hideProfessionalPaymentBasinTooltip(tooltip);
+    canvas.onmousemove = null;
+    canvas.onmouseleave = null;
     return;
   }
+
+  canvas.onmousemove = event => {
+    if (!tooltip) {
+      return;
+    }
+
+    const { visual, mouseX, mouseY } = findProfessionalPaymentBasinHoveredSource(
+      canvas,
+      projection,
+      payload,
+      event
+    );
+
+    if (!visual) {
+      canvas.style.cursor = "default";
+      hideProfessionalPaymentBasinTooltip(tooltip);
+      return;
+    }
+
+    canvas.style.cursor = "help";
+    tooltip.innerHTML = buildProfessionalPaymentBasinTooltipHtml(visual.route);
+    positionProfessionalPaymentBasinTooltip(
+      tooltip,
+      frame,
+      mouseX,
+      mouseY
+    );
+  };
+
+  canvas.onmouseleave = () => {
+    canvas.style.cursor = "default";
+    hideProfessionalPaymentBasinTooltip(tooltip);
+  };
 
   const draw = timestamp => {
     if (
@@ -21478,39 +21736,35 @@ function renderProfessionalPaymentBasinMapCanvas(payload = {}) {
 
 
 function buildProfessionalPaymentBasinPostalBreakdownHtml(payload = {}) {
-  const sources = Array.isArray(payload?.individual_sources)
-    ? [...payload.individual_sources]
-    : [];
+  const coverage = payload?.coverage || {};
+  const visibleSourceCount = Number(
+    coverage.individual_visible_postal_source_count || 0
+  );
+  const outsideTerritory = coverage.individual_outside_territory || {};
+  const outsideSourceCount = Number(outsideTerritory.postal_source_count || 0);
 
-  if (!sources.length) {
+  if (visibleSourceCount <= 0) {
     return "";
   }
 
-  sources.sort((a, b) => {
-    const payerDiff = Number(b?.payer_count || 0) - Number(a?.payer_count || 0);
-    if (payerDiff !== 0) return payerDiff;
-
-    const volumeDiff = Number(b?.volume || 0) - Number(a?.volume || 0);
-    if (volumeDiff !== 0) return volumeDiff;
-
-    return String(a?.postal_code || "").localeCompare(String(b?.postal_code || ""), "fr");
-  });
+  const sourceLabel = visibleSourceCount > 1
+    ? "foyers U cartographiés"
+    : "foyer U cartographié";
 
   return `
-    <div class="pro-detail-payment-basin-postal-breakdown">
+    <div class="pro-detail-payment-basin-postal-breakdown pro-detail-payment-basin-postal-breakdown-compact">
       <div class="pro-detail-payment-basin-postal-breakdown-heading">
-        <span>Répartition des payeurs U représentés</span>
-        <small>par code postal franchissant le seuil d’affichage</small>
-      </div>
-
-      <div class="pro-detail-payment-basin-postal-chips">
-        ${sources.map(source => `
-          <div class="pro-detail-payment-basin-postal-chip">
-            <strong>${escapeHtml(source.postal_code || "—")}</strong>
-            <span>${formatProfessionalNetworkCount(source.payer_count || 0)} payeur(s)</span>
-            <small>${euro(source.volume || 0)}</small>
-          </div>
-        `).join("")}
+        <span>
+          ${formatProfessionalNetworkCount(visibleSourceCount)} ${sourceLabel}
+        </span>
+        <small>
+          Survolez les points de la carte pour afficher le détail.
+          ${
+            outsideSourceCount > 0
+              ? ` Les ${formatProfessionalNetworkCount(outsideSourceCount)} foyer(s) hors 69xxx sont regroupés en un seul vecteur « Hors territoire ».`
+              : ""
+          }
+        </small>
       </div>
     </div>
   `;
@@ -21528,6 +21782,8 @@ function buildProfessionalPaymentBasinSectionHtml(payload = {}) {
   );
   const visiblePCount = Number(coverage.professional_visible_source_count || 0);
   const hiddenU = coverage.individual_hidden_below_threshold || {};
+  const missingUPostalData = coverage.individual_missing_postal_data || {};
+  const missingUGeometry = coverage.individual_missing_postal_geometry || {};
   const missingPros = Number(coverage.professional_missing_geometry_source_count || 0);
 
   return `
@@ -21538,8 +21794,10 @@ function buildProfessionalPaymentBasinSectionHtml(payload = {}) {
           <h3>D’où viennent les Gonettes reçues par ce professionnel ?</h3>
           <p>
             Cette carte met en scène les flux entrants :
-            les foyers de particuliers <strong>U→P</strong> sont agrégés par code postal,
-            tandis que les professionnels payeurs <strong>P→P</strong> apparaissent
+            les foyers de particuliers <strong>U→P</strong> sont agrégés par code postal
+            sur le territoire 69xxx, tandis que les origines extérieures sont regroupées
+            dans un vecteur <strong>Hors territoire</strong>.
+            Les professionnels payeurs <strong>P→P</strong> apparaissent
             individuellement lorsqu’ils sont géolocalisables.
           </p>
         </div>
@@ -21573,6 +21831,12 @@ function buildProfessionalPaymentBasinSectionHtml(payload = {}) {
               <canvas id="proDetailPaymentBasinCanvas"></canvas>
 
               <div
+                id="proDetailPaymentBasinTooltip"
+                class="pro-detail-payment-basin-tooltip hidden"
+                aria-hidden="true"
+              ></div>
+
+              <div
                 id="proDetailPaymentBasinScale"
                 class="pro-detail-payment-basin-scale"
                 hidden
@@ -21604,6 +21868,16 @@ function buildProfessionalPaymentBasinSectionHtml(payload = {}) {
         ${
           Number(hiddenU.payer_count || 0) > 0
             ? ` ${formatProfessionalNetworkCount(hiddenU.payer_count || 0)} payeur(s) U restent hors carte car leur code postal ne franchit pas ce seuil.`
+            : ""
+        }
+        ${
+          Number(missingUPostalData.payer_count || 0) > 0
+            ? ` ${formatProfessionalNetworkCount(missingUPostalData.payer_count || 0)} payeur(s) U ne sont pas cartographiables faute de donnée postale exploitable.`
+            : ""
+        }
+        ${
+          Number(missingUGeometry.payer_count || 0) > 0
+            ? ` ${formatProfessionalNetworkCount(missingUGeometry.payer_count || 0)} payeur(s) U restent hors carte : leur code postal atteint le seuil, mais sa géométrie cartographique n’est pas disponible.`
             : ""
         }
         ${

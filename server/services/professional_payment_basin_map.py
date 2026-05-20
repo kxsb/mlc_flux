@@ -13,7 +13,7 @@ from server.database import DB_PATH
 
 
 PROFESSIONAL_REF_RE = re.compile(r"^P\d{4}$")
-DEFAULT_MIN_USERS = 5
+DEFAULT_MIN_USERS = 1
 MAX_MIN_USERS = 50
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
@@ -475,6 +475,23 @@ def get_professional_payment_basin_map(
         "volume": 0.0,
         "postal_codes": [],
     }
+    missing_postal_data = {
+        "payer_count": max(
+            0,
+            individual_totals["payer_count"]
+            - sum(row["payer_count"] for row in individual_postal_rows),
+        ),
+        "tx_count": max(
+            0,
+            individual_totals["tx_count"]
+            - sum(row["tx_count"] for row in individual_postal_rows),
+        ),
+        "volume": max(
+            0.0,
+            individual_totals["volume"]
+            - sum(row["volume"] for row in individual_postal_rows),
+        ),
+    }
 
     for row in individual_postal_rows:
         postal_code = row["postal_code"]
@@ -502,6 +519,65 @@ def get_professional_payment_basin_map(
             "latitude": area["latitude"],
         })
 
+
+    territory_individual_sources = []
+    outside_territory_individual_sources = []
+
+    for source in visible_individual_sources:
+        postal_code = str(source.get("postal_code") or "").strip()
+
+        if postal_code.startswith("69"):
+            territory_individual_sources.append(source)
+        else:
+            outside_territory_individual_sources.append(source)
+
+    outside_territory_route_source = None
+
+    if outside_territory_individual_sources:
+        payer_weight_total = sum(
+            max(1, _safe_int(source.get("payer_count"), 0))
+            for source in outside_territory_individual_sources
+        ) or len(outside_territory_individual_sources)
+
+        outside_territory_route_source = {
+            "postal_code": None,
+            "display_label": "Hors territoire",
+            "city_label": "Hors territoire",
+            "longitude": sum(
+                _safe_float(source.get("longitude"))
+                * max(1, _safe_int(source.get("payer_count"), 0))
+                for source in outside_territory_individual_sources
+            ) / payer_weight_total,
+            "latitude": sum(
+                _safe_float(source.get("latitude"))
+                * max(1, _safe_int(source.get("payer_count"), 0))
+                for source in outside_territory_individual_sources
+            ) / payer_weight_total,
+            "payer_count": sum(
+                _safe_int(source.get("payer_count"), 0)
+                for source in outside_territory_individual_sources
+            ),
+            "tx_count": sum(
+                _safe_int(source.get("tx_count"), 0)
+                for source in outside_territory_individual_sources
+            ),
+            "volume": sum(
+                _safe_float(source.get("volume"))
+                for source in outside_territory_individual_sources
+            ),
+            "postal_source_count": len(outside_territory_individual_sources),
+            "is_outside_territory": True,
+        }
+
+    mapped_individual_route_sources = [
+        *territory_individual_sources,
+        *(
+            [outside_territory_route_source]
+            if outside_territory_route_source
+            else []
+        ),
+    ]
+
     visible_professional_sources = [
         row for row in professional_rows if row["has_coordinates"]
     ]
@@ -513,10 +589,20 @@ def get_professional_payment_basin_map(
     routes: list[dict[str, Any]] = []
 
     if center["has_coordinates"]:
-        for source in visible_individual_sources:
+        for source in mapped_individual_route_sources:
+            is_outside_territory = bool(source.get("is_outside_territory"))
+
             routes.append({
-                "id": f"u-postal:{source['postal_code']}",
-                "kind": "individual_postal",
+                "id": (
+                    "u-outside-territory"
+                    if is_outside_territory
+                    else f"u-postal:{source['postal_code']}"
+                ),
+                "kind": (
+                    "individual_outside_territory"
+                    if is_outside_territory
+                    else "individual_postal"
+                ),
                 "source": source,
                 "destination": center,
                 "tx_count": source["tx_count"],
@@ -557,7 +643,7 @@ def get_professional_payment_basin_map(
 
     visible_source_area_geojson = {
         source["postal_code"]: postal_areas[source["postal_code"]]["feature_collection"]
-        for source in visible_individual_sources
+        for source in territory_individual_sources
         if source["postal_code"] in postal_areas
     }
 
@@ -584,6 +670,23 @@ def get_professional_payment_basin_map(
 
         "individual_hidden_below_threshold": hidden_below_threshold,
         "individual_missing_postal_geometry": missing_postal_geometry,
+        "individual_missing_postal_data": missing_postal_data,
+        "individual_outside_territory": {
+            "postal_source_count": len(outside_territory_individual_sources),
+            "payer_count": sum(
+                _safe_int(source.get("payer_count"), 0)
+                for source in outside_territory_individual_sources
+            ),
+            "tx_count": sum(
+                _safe_int(source.get("tx_count"), 0)
+                for source in outside_territory_individual_sources
+            ),
+            "volume": sum(
+                _safe_float(source.get("volume"))
+                for source in outside_territory_individual_sources
+            ),
+            "aggregated_into_single_route": bool(outside_territory_route_source),
+        },
 
         "professional_total_source_count": len(professional_rows),
         "professional_total_tx_count": professional_total_tx_count,
