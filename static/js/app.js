@@ -2350,8 +2350,12 @@ function renderActorLink(value) {
   return escapeHtml(text);
 }
 
-function isConversion(value) {
-  return String(value || "").toLowerCase().includes("conversion");
+function isConversionSourceLabel(value) {
+  return String(value || "").trim() === "T_Émission";
+}
+
+function isReconversionTargetLabel(value) {
+  return String(value || "").trim() === "T_Conversion";
 }
 
 
@@ -2753,19 +2757,19 @@ function computeStatsFromTransactions(allTx, numProf) {
 
   const received = tx.filter(row =>
     String(row["Vers"] || "").includes(numProf) &&
-    !isConversion(row["Réalisé par"])
+    !isConversionSourceLabel(row["Réalisé par"])
   );
 
   const particuliersPayeurs = tx.filter(row =>
     String(row["Vers"] || "").includes(numProf) &&
     isUser(row["Réalisé par"]) &&
-    !isConversion(row["Réalisé par"])
+    !isConversionSourceLabel(row["Réalisé par"])
   );
 
   const professionnelsPayeurs = tx.filter(row =>
     String(row["Vers"] || "").includes(numProf) &&
     isPro(row["Réalisé par"]) &&
-    !isConversion(row["Réalisé par"])
+    !isConversionSourceLabel(row["Réalisé par"])
   );
 
   const emisVersPro = tx.filter(row =>
@@ -2780,12 +2784,12 @@ function computeStatsFromTransactions(allTx, numProf) {
 
   const reconverti = tx.filter(row =>
     String(row["Réalisé par"] || "").includes(numProf) &&
-    isConversion(row["Vers"])
+    isReconversionTargetLabel(row["Vers"])
   );
 
   const converti = tx.filter(row =>
     String(row["Vers"] || "").includes(numProf) &&
-    isConversion(row["Réalisé par"])
+    isConversionSourceLabel(row["Réalisé par"])
   );
 
   const montantRecuParticuliers = particuliersPayeurs.reduce(
@@ -3188,7 +3192,7 @@ function buildDetailSection(numProf, allTx, mode) {
   if (mode === "recues") {
     const rows = filteredTx.filter(row =>
       String(row["Vers"] || "").includes(numProf) &&
-      !isConversion(row["Réalisé par"])
+      !isConversionSourceLabel(row["Réalisé par"])
     );
     title = `Transactions reçues (${rows.length})`;
     html = paginatedTransactionTable(rows);
@@ -3197,7 +3201,7 @@ function buildDetailSection(numProf, allTx, mode) {
   if (mode === "somme_recue") {
     const rows = filteredTx.filter(row =>
       String(row["Vers"] || "").includes(numProf) &&
-      !isConversion(row["Réalisé par"])
+      !isConversionSourceLabel(row["Réalisé par"])
     );
     title = "Acheteurs / payeurs";
     html = aggregateTable(rows, "Réalisé par", "Acheteur");
@@ -3207,7 +3211,7 @@ function buildDetailSection(numProf, allTx, mode) {
     const rows = filteredTx.filter(row =>
       String(row["Vers"] || "").includes(numProf) &&
       isUser(row["Réalisé par"]) &&
-      !isConversion(row["Réalisé par"])
+      !isConversionSourceLabel(row["Réalisé par"])
     );
     title = "Particuliers payeurs";
     html = aggregateTable(rows, "Réalisé par", "Particulier");
@@ -3217,7 +3221,7 @@ function buildDetailSection(numProf, allTx, mode) {
     const rows = filteredTx.filter(row =>
       String(row["Vers"] || "").includes(numProf) &&
       isPro(row["Réalisé par"]) &&
-      !isConversion(row["Réalisé par"])
+      !isConversionSourceLabel(row["Réalisé par"])
     );
     title = "Professionnels payeurs";
     html = aggregateTable(rows, "Réalisé par", "Professionnel");
@@ -3256,7 +3260,7 @@ function buildDetailSection(numProf, allTx, mode) {
   if (mode === "reconverti") {
     const rows = filteredTx.filter(row =>
       String(row["Réalisé par"] || "").includes(numProf) &&
-      isConversion(row["Vers"])
+      isReconversionTargetLabel(row["Vers"])
     );
     title = "Opérations de reconversion";
     html = paginatedTransactionTable(rows);
@@ -3265,7 +3269,7 @@ function buildDetailSection(numProf, allTx, mode) {
   if (mode === "converti") {
     const rows = filteredTx.filter(row =>
       String(row["Vers"] || "").includes(numProf) &&
-      isConversion(row["Réalisé par"])
+      isConversionSourceLabel(row["Réalisé par"])
     );
     title = "Opérations de conversion reçues";
     html = paginatedTransactionTable(rows);
@@ -18177,16 +18181,16 @@ function buildDailyActivitySeries(transactions, numProf) {
     const bucket = ensureDay(day);
 
     const isReceived =
-      to.includes(numProf) && !isConversion(from);
+      to.includes(numProf) && !isConversionSourceLabel(from);
 
     const isEmitted =
       from.includes(numProf) &&
-      !isConversion(to) &&
+      !isReconversionTargetLabel(to) &&
       (isPro(to) || isUser(to));
 
     const isConv =
-      (from.includes(numProf) && isConversion(to)) ||
-      (to.includes(numProf) && isConversion(from));
+      (from.includes(numProf) && isReconversionTargetLabel(to)) ||
+      (to.includes(numProf) && isConversionSourceLabel(from));
 
     if (isReceived) bucket.recu += amount;
     if (isEmitted) bucket.emis += amount;
@@ -18214,11 +18218,11 @@ function buildBalanceData(transactions, numProf) {
     const to = String(row["Vers"] || "");
 
     const isReceived =
-      to.includes(numProf) && !isConversion(from);
+      to.includes(numProf) && !isConversionSourceLabel(from);
 
     const isEmitted =
       from.includes(numProf) &&
-      !isConversion(to) &&
+      !isReconversionTargetLabel(to) &&
       (isPro(to) || isUser(to));
 
     if (isReceived) recu += amount;

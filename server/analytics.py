@@ -794,6 +794,65 @@ def compute_network_data(start=None, end=None, year=None, include_operators=Fals
         "edges": edges,
     }
 
+def _get_odoo_professional_enrichment_index(professional_refs):
+    refs = sorted({ref for ref in professional_refs if ref})
+    if not refs:
+        return {}
+
+    placeholders = ", ".join("?" for _ in refs)
+    conn = get_connection()
+    cur = conn.cursor()
+
+    rows = cur.execute(f"""
+        SELECT
+            professional_ref,
+            odoo_name,
+            industry_name,
+            detailed_activity,
+            COALESCE(
+                NULLIF(TRIM(zip), ''),
+                NULLIF(TRIM(cyclos_zip), '')
+            ) AS postal_code
+        FROM odoo_professional_enrichment
+        WHERE professional_ref IN ({placeholders})
+    """, refs).fetchall()
+
+    conn.close()
+    return {
+        row["professional_ref"]: dict(row)
+        for row in rows
+    }
+
+
+def _format_professional_directory_label(professional_ref, observed_labels, enrichment):
+    observed_label = str(observed_labels.get(professional_ref) or "").strip()
+    if observed_label:
+        return observed_label
+
+    odoo_name = str((enrichment or {}).get("odoo_name") or "").strip()
+    if odoo_name:
+        return f"{professional_ref} - {odoo_name}"
+
+    return professional_ref
+
+
+
+def _is_conversion_source_label(label):
+    """
+    Identifie la source technique d'une conversion / alimentation
+    vers un compte utilisateur ou professionnel.
+    """
+    return str(label or "").strip() == "T_Émission"
+
+
+def _is_reconversion_target_label(label):
+    """
+    Identifie la cible technique d'une reconversion / sortie
+    depuis un compte utilisateur ou professionnel.
+    """
+    return str(label or "").strip() == "T_Conversion"
+
+
 def compute_professionals_ranking(start=None, end=None, year=None):
     rows = fetch_transactions(start=start, end=end, year=year)
 
@@ -805,38 +864,80 @@ def compute_professionals_ranking(start=None, end=None, year=None):
     b2c = {}
     remuneration = {}
     pros = set()
+    observed_labels = {}
+    converted = {}
+    reconverted = {}
 
     for row in rows:
         from_label = str(row.get("from_label", "")).strip()
         to_label = str(row.get("to_label", "")).strip()
         amount = float(row.get("amount", 0) or 0)
 
-        from_is_pro = from_label.startswith("P")
-        to_is_pro = to_label.startswith("P")
+        from_ref = _extract_professional_ref(from_label)
+        to_ref = _extract_professional_ref(to_label)
+
+        from_is_pro = from_ref is not None
+        to_is_pro = to_ref is not None
         from_is_user = from_label.startswith("U")
         to_is_user = to_label.startswith("U")
+        from_is_conversion = _is_conversion_source_label(from_label)
+        to_is_reconversion = _is_reconversion_target_label(to_label)
 
         if from_is_pro:
-            pros.add(from_label)
+            pros.add(from_ref)
+            observed_labels.setdefault(from_ref, from_label)
         if to_is_pro:
-            pros.add(to_label)
+            pros.add(to_ref)
+            observed_labels.setdefault(to_ref, to_label)
 
         if from_is_pro and to_is_pro:
-            b2b_recu[to_label] = b2b_recu.get(to_label, 0.0) + amount
-            b2b_emis[from_label] = b2b_emis.get(from_label, 0.0) + amount
+            b2b_recu[to_ref] = b2b_recu.get(to_ref, 0.0) + amount
+            b2b_emis[from_ref] = b2b_emis.get(from_ref, 0.0) + amount
 
-        if from_is_user and to_is_pro:
-            b2c[to_label] = b2c.get(to_label, 0.0) + amount
+        if from_is_user and to_is_pro and not from_is_conversion:
+            b2c[to_ref] = b2c.get(to_ref, 0.0) + amount
 
         if from_is_pro and to_is_user:
-            remuneration[from_label] = remuneration.get(from_label, 0.0) + amount
+            remuneration[from_ref] = remuneration.get(from_ref, 0.0) + amount
 
+        if to_is_pro and from_is_conversion:
+            converted[to_ref] = converted.get(to_ref, 0.0) + amount
+
+        if from_is_pro and to_is_reconversion:
+            reconverted[from_ref] = reconverted.get(from_ref, 0.0) + amount
+
+    enrichment_by_ref = _get_odoo_professional_enrichment_index(pros)
     ranking = []
     for pro in pros:
+        enrichment = enrichment_by_ref.get(pro, {})
         total_recu = b2b_recu.get(pro, 0.0) + b2c.get(pro, 0.0)
+        total_emis = b2b_emis.get(pro, 0.0) + remuneration.get(pro, 0.0)
+        total_converti = converted.get(pro, 0.0)
+        total_reconverti = reconverted.get(pro, 0.0)
+        reuse_base = total_recu + total_converti
+        reuse_rate = (total_emis / reuse_base) * 100 if reuse_base > 0 else 0.0
+        industry_name = str(enrichment.get("industry_name") or "").strip()
+        detailed_activity = str(enrichment.get("detailed_activity") or "").strip()
 
         ranking.append({
-            "Professionnel": pro,
+            "Professionnel": _format_professional_directory_label(
+                pro,
+                observed_labels,
+                enrichment,
+            ),
+            "Secteur d’activité": industry_name or detailed_activity,
+            "Code postal": enrichment.get("postal_code") or "",
+            "Reçu des professionnels": round(b2b_recu.get(pro, 0.0), 2),
+            "Reçu des particuliers": round(b2c.get(pro, 0.0), 2),
+            "Total reçu": round(total_recu, 2),
+            "Émis vers les professionnels": round(b2b_emis.get(pro, 0.0), 2),
+            "Émis vers les particuliers": round(remuneration.get(pro, 0.0), 2),
+            "Total émis": round(total_emis, 2),
+            "Total converti": round(total_converti, 2),
+            "Total reconverti": round(total_reconverti, 2),
+            "Taux de réutilisation": round(reuse_rate, 2),
+
+            # Clés historiques conservées pour les anciens clients.
             "B2B Reçu": round(b2b_recu.get(pro, 0.0), 2),
             "B2B Emis": round(b2b_emis.get(pro, 0.0), 2),
             "B2C": round(b2c.get(pro, 0.0), 2),
@@ -845,7 +946,7 @@ def compute_professionals_ranking(start=None, end=None, year=None):
             "Total Reçu": round(total_recu, 2),
         })
 
-    ranking.sort(key=lambda x: x["Total Reçu"], reverse=True)
+    ranking.sort(key=lambda x: x["Total reçu"], reverse=True)
     return ranking
 
 
@@ -928,7 +1029,7 @@ def get_professional_detail(num_professionnel, start=None, end=None, year=None):
     received = [
         row for row in related
         if num_professionnel in str(row.get("to_label", ""))
-        and "conversion" not in str(row.get("from_label", "")).lower()
+        and not _is_conversion_source_label(row.get("from_label", ""))
     ]
 
     particuliers = {
@@ -963,14 +1064,14 @@ def get_professional_detail(num_professionnel, start=None, end=None, year=None):
         float(row.get("amount", 0) or 0)
         for row in related
         if num_professionnel in str(row.get("from_label", ""))
-        and "conversion" in str(row.get("to_label", "")).lower()
+        and _is_reconversion_target_label(row.get("to_label", ""))
     )
 
     montant_converti = sum(
         float(row.get("amount", 0) or 0)
         for row in related
         if num_professionnel in str(row.get("to_label", ""))
-        and "conversion" in str(row.get("from_label", "")).lower()
+        and _is_conversion_source_label(row.get("from_label", ""))
     )
 
     dates = [row["date"] for row in related if row.get("date")]
@@ -1080,7 +1181,7 @@ def _compute_map_activity_scores(professionals, rows):
         # Reçu par un professionnel cartographiable, hors conversions reçues.
         if (
             to_ref in by_ref
-            and "conversion" not in from_label.lower()
+            and not _is_conversion_source_label(from_label)
         ):
             professional = by_ref[to_ref]
             professional["received_volume"] += amount
@@ -1591,7 +1692,7 @@ def compute_sector_activity(start=None, end=None, year=None):
         if to_ref not in ref_to_sector_label:
             continue
 
-        if "conversion" in from_label.lower():
+        if _is_conversion_source_label(from_label):
             continue
 
         sector_label = ref_to_sector_label[to_ref]
