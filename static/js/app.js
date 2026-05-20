@@ -2949,6 +2949,10 @@ function persistVisibleDetailTransactionColumnKeys(keys) {
 }
 
 function toggleDetailTransactionColumn(columnKey, checked) {
+  const columnMenuWasOpen = Boolean(
+    document.querySelector(".detail-transaction-columns-menu")?.open
+  );
+
   const allKeys = DETAIL_TRANSACTION_COLUMNS.map(column => column.key);
   const column = DETAIL_TRANSACTION_COLUMNS.find(item => item.key === columnKey);
 
@@ -2973,6 +2977,13 @@ function toggleDetailTransactionColumn(columnKey, checked) {
   );
 
   drawDetailSection();
+
+  if (columnMenuWasOpen) {
+    const reopenedMenu = document.querySelector(".detail-transaction-columns-menu");
+    if (reopenedMenu) {
+      reopenedMenu.open = true;
+    }
+  }
 }
 
 function renderDetailTransactionColumnPicker() {
@@ -16860,6 +16871,10 @@ function persistVisibleProfessionalDirectoryColumnKeys(keys) {
 }
 
 function toggleProfessionalDirectoryColumn(columnKey, checked) {
+  const columnMenuWasOpen = Boolean(
+    document.querySelector(".professional-directory-columns-menu")?.open
+  );
+
   const allKeys = PROFESSIONAL_DIRECTORY_COLUMNS.map(column => column.key);
   const column = PROFESSIONAL_DIRECTORY_COLUMNS.find(item => item.key === columnKey);
 
@@ -16884,6 +16899,13 @@ function toggleProfessionalDirectoryColumn(columnKey, checked) {
   );
 
   drawProsTable();
+
+  if (columnMenuWasOpen) {
+    const reopenedMenu = document.querySelector(".professional-directory-columns-menu");
+    if (reopenedMenu) {
+      reopenedMenu.open = true;
+    }
+  }
 }
 
 function renderProfessionalDirectoryColumnPicker() {
