@@ -8,6 +8,8 @@ from server.services.tickets import (
     create_ticket,
     get_public_ticket,
     list_public_tickets,
+    list_ticket_roadmap_items,
+    update_ticket_status,
 )
 
 
@@ -69,6 +71,19 @@ def public_tickets_create():
         return jsonify({"error": "Erreur serveur interne."}), 500
 
 
+
+
+@tickets_bp.route("/api/tickets/roadmap", methods=["GET"])
+def public_tickets_roadmap():
+    try:
+        return jsonify(list_ticket_roadmap_items())
+
+    except Exception:
+        current_app.logger.exception(
+            "Erreur inattendue lors de la récupération de la roadmap tickets."
+        )
+        return jsonify({"error": "Erreur serveur interne."}), 500
+
 @tickets_bp.route("/api/tickets/<slug>", methods=["GET"])
 def public_ticket_detail(slug):
     try:
@@ -120,3 +135,34 @@ def public_ticket_add_message(slug):
             "Erreur inattendue lors de la publication d'une réponse publique."
         )
         return jsonify({"error": "Erreur serveur interne."}), 500
+
+@tickets_bp.route("/api/tickets/<slug>/status", methods=["POST"])
+def public_ticket_update_status(slug):
+    payload = request.get_json(silent=True)
+
+    if not isinstance(payload, dict):
+        return jsonify({"error": "Corps JSON invalide."}), 400
+
+    try:
+        result = update_ticket_status(
+            slug=slug,
+            status=payload.get("status"),
+            implementation_target_date=payload.get("implementation_target_date"),
+        )
+        return jsonify({
+            "status": "updated" if result.get("changed") else "unchanged",
+            **result,
+        })
+
+    except TicketValidationError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    except TicketNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 404
+
+    except Exception:
+        current_app.logger.exception(
+            "Erreur inattendue lors de la mise à jour du statut d'un ticket."
+        )
+        return jsonify({"error": "Erreur serveur interne."}), 500
+

@@ -1,7 +1,7 @@
 import json
 import re
 import unicodedata
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from server.database import get_connection
 
@@ -16,12 +16,12 @@ CATEGORY_LABELS = {
 }
 
 STATUS_LABELS = {
-    "new": "Nouveau",
-    "acknowledged": "Pris en compte",
-    "in_progress": "En cours",
-    "needs_clarification": "Besoin de précision",
-    "resolved": "Résolu",
-    "closed": "Clos",
+    "new": "Nouveau ticket déposé",
+    "read_pending_analysis": "Lu, en attente d’analyse",
+    "analysis_validated": "Analysé et validé sur le fond",
+    "pending_implementation": "En attente d’implémentation",
+    "implemented_pending_feedback": "Implémenté, en attente de retour",
+    "validated": "Validé",
 }
 
 ALLOWED_CATEGORIES = set(CATEGORY_LABELS)
@@ -45,7 +45,7 @@ class TicketNotFoundError(LookupError):
 
 
 class TicketClosedError(ValueError):
-    """Impossible de répondre à un ticket clos."""
+    """Impossible de répondre à un ticket finalisé."""
 
 
 def _now_iso():
@@ -127,6 +127,27 @@ def _clean_optional_email(value):
 
     return email
 
+
+
+
+def _clean_optional_iso_date(value, *, field_label):
+    cleaned = _clean_optional_text(
+        value,
+        field_label=field_label,
+        max_length=10,
+    )
+
+    if cleaned is None:
+        return None
+
+    try:
+        parsed = date.fromisoformat(cleaned)
+    except ValueError as exc:
+        raise TicketValidationError(
+            f"Le champ '{field_label}' doit être une date ISO valide au format YYYY-MM-DD."
+        ) from exc
+
+    return parsed.isoformat()
 
 def _clean_category(value):
     category = _clean_required_text(
@@ -220,6 +241,11 @@ def _public_ticket_from_row(row, *, opening_message=None):
         "author_name": row["author_name"],
         "source_page": row["source_page"],
         "context": _deserialize_context(row["context_json"]),
+        "implementation_target_date": (
+            row["implementation_target_date"]
+            if "implementation_target_date" in row.keys()
+            else None
+        ),
         "official_message_id": row["official_message_id"],
         "message_count": row["message_count"] if "message_count" in row.keys() else None,
         "team_reply_count": row["team_reply_count"] if "team_reply_count" in row.keys() else None,
@@ -397,7 +423,8 @@ def list_public_tickets(
         )
 
         if clean_status == "open":
-            where_clauses.append("t.status NOT IN ('resolved', 'closed')")
+            where_clauses.append("t.status != ?")
+            params.append("validated")
         elif clean_status in ALLOWED_STATUSES:
             where_clauses.append("t.status = ?")
             params.append(clean_status)
@@ -645,9 +672,9 @@ def add_public_message(
         if ticket_row is None:
             raise TicketNotFoundError("Ticket public introuvable.")
 
-        if ticket_row["status"] == "closed":
+        if ticket_row["status"] == "validated":
             raise TicketClosedError(
-                "Ce ticket est clos et ne peut plus recevoir de réponse publique."
+                "Ce ticket est validé et ne peut plus recevoir de réponse publique."
             )
 
         cur.execute("""
@@ -686,3 +713,223 @@ def add_public_message(
         conn.close()
 
     return get_public_ticket(clean_slug)
+
+
+
+def list_ticket_roadmap_items():
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+        rows = cur.execute("""
+            SELECT
+                t.public_ref,
+                t.slug,
+                t.title,
+                t.category,
+                t.status,
+                t.created_at,
+                t.updated_at,
+                t.last_activity_at,
+                t.implementation_target_date,
+
+                (
+                    SELECT MIN(e.created_at)
+                    FROM ticket_events e
+                    WHERE e.ticket_id = t.id
+                      AND e.event_type = 'status_changed'
+                      AND e.new_value = 'pending_implementation'
+                ) AS planning_started_at,
+
+                (
+                    SELECT MIN(e.created_at)
+                    FROM ticket_events e
+                    WHERE e.ticket_id = t.id
+                      AND e.event_type = 'status_changed'
+                      AND e.new_value = 'implemented_pending_feedback'
+                ) AS implemented_at,
+
+                (
+                    SELECT MIN(e.created_at)
+                    FROM ticket_events e
+                    WHERE e.ticket_id = t.id
+                      AND e.event_type = 'status_changed'
+                      AND e.new_value = 'validated'
+                ) AS validated_at
+
+            FROM tickets t
+            WHERE t.visibility = 'public'
+              AND t.implementation_target_date IS NOT NULL
+            ORDER BY
+                t.implementation_target_date ASC,
+                t.public_ref ASC
+        """).fetchall()
+    finally:
+        conn.close()
+
+    items = [
+        {
+            "public_ref": row["public_ref"],
+            "slug": row["slug"],
+            "title": row["title"],
+            "category": row["category"],
+            "category_label": CATEGORY_LABELS.get(row["category"], row["category"]),
+            "status": row["status"],
+            "status_label": STATUS_LABELS.get(row["status"], row["status"]),
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+            "last_activity_at": row["last_activity_at"],
+            "implementation_target_date": row["implementation_target_date"],
+            "planning_started_at": row["planning_started_at"],
+            "implemented_at": row["implemented_at"],
+            "validated_at": row["validated_at"],
+        }
+        for row in rows
+    ]
+
+    return {
+        "items": items,
+        "available_statuses": STATUS_LABELS,
+        "available_categories": CATEGORY_LABELS,
+        "generated_at": _now_iso(),
+    }
+
+def update_ticket_status(
+    *,
+    slug,
+    status,
+    implementation_target_date=None,
+):
+    clean_slug = _clean_required_text(
+        slug,
+        field_label="slug",
+        max_length=255,
+    )
+    clean_status = _clean_required_text(
+        status,
+        field_label="status",
+        max_length=80,
+    )
+
+    if clean_status not in ALLOWED_STATUSES:
+        allowed = ", ".join(sorted(ALLOWED_STATUSES))
+        raise TicketValidationError(
+            f"Statut inconnu. Valeurs possibles : {allowed}."
+        )
+
+    clean_target_date = _clean_optional_iso_date(
+        implementation_target_date,
+        field_label="implementation_target_date",
+    )
+
+    if clean_status == "pending_implementation" and not clean_target_date:
+        raise TicketValidationError(
+            "Le champ 'implementation_target_date' est obligatoire "
+            "pour un ticket placé en attente d’implémentation."
+        )
+
+    now = _now_iso()
+    changed = False
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+        ticket_row = cur.execute("""
+            SELECT
+                id,
+                status,
+                implementation_target_date
+            FROM tickets
+            WHERE slug = ?
+              AND visibility = 'public'
+            LIMIT 1
+        """, (
+            clean_slug,
+        )).fetchone()
+
+        if ticket_row is None:
+            raise TicketNotFoundError("Ticket public introuvable.")
+
+        old_status = ticket_row["status"]
+        old_target_date = ticket_row["implementation_target_date"]
+
+        target_date_to_store = (
+            clean_target_date
+            if clean_target_date is not None
+            else old_target_date
+        )
+
+        status_changed = old_status != clean_status
+        target_date_changed = old_target_date != target_date_to_store
+
+        if not status_changed and not target_date_changed:
+            changed = False
+        else:
+            cur.execute("""
+                UPDATE tickets
+                SET status = ?,
+                    implementation_target_date = ?,
+                    updated_at = ?,
+                    last_activity_at = ?
+                WHERE id = ?
+            """, (
+                clean_status,
+                target_date_to_store,
+                now,
+                now,
+                ticket_row["id"],
+            ))
+
+            if status_changed:
+                cur.execute("""
+                    INSERT INTO ticket_events (
+                        ticket_id,
+                        event_type,
+                        actor_role,
+                        old_value,
+                        new_value,
+                        created_at
+                    )
+                    VALUES (?, 'status_changed', 'workflow_ui', ?, ?, ?)
+                """, (
+                    ticket_row["id"],
+                    old_status,
+                    clean_status,
+                    now,
+                ))
+
+            if target_date_changed:
+                cur.execute("""
+                    INSERT INTO ticket_events (
+                        ticket_id,
+                        event_type,
+                        actor_role,
+                        old_value,
+                        new_value,
+                        created_at
+                    )
+                    VALUES (
+                        ?,
+                        'implementation_target_date_changed',
+                        'workflow_ui',
+                        ?,
+                        ?,
+                        ?
+                    )
+                """, (
+                    ticket_row["id"],
+                    old_target_date,
+                    target_date_to_store,
+                    now,
+                ))
+
+            conn.commit()
+            changed = True
+    finally:
+        conn.close()
+
+    return {
+        "changed": changed,
+        **get_public_ticket(clean_slug),
+    }

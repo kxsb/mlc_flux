@@ -347,6 +347,7 @@ def init_db():
             author_email TEXT NOT NULL,
             source_page TEXT,
             context_json TEXT,
+            implementation_target_date TEXT,
             official_message_id INTEGER
         )
     """)
@@ -398,6 +399,8 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_ticket_events_ticket_created
         ON ticket_events (ticket_id, created_at)
     """)
+
+    _ensure_column(cur, "tickets", "implementation_target_date", "TEXT")
 
     _ensure_column(cur, "odoo_professional_enrichment", "cyclos_address_id", "TEXT")
     _ensure_column(cur, "odoo_professional_enrichment", "cyclos_address_line1", "TEXT")

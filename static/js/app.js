@@ -109,6 +109,11 @@ const appState = {
       sort: "last_activity"
     },
     createFormOpen: false,
+    activeTab: "kanban",
+    viewMode: "kanban",
+    reorderMode: false,
+    roadmapData: null,
+    roadmapLoading: false,
     lastList: null,
     currentSlug: null,
     currentDetail: null
@@ -5963,6 +5968,236 @@ function renderTicketTeamBadge(ticket) {
   `;
 }
 
+
+const TICKET_KANBAN_STATUS_ORDER = [
+  "new",
+  "read_pending_analysis",
+  "analysis_validated",
+  "pending_implementation",
+  "implemented_pending_feedback",
+  "validated",
+];
+
+const TICKET_KANBAN_STATUS_FALLBACK_LABELS = {
+  new: "Nouveau ticket déposé",
+  read_pending_analysis: "Lu, en attente d’analyse",
+  analysis_validated: "Analysé et validé sur le fond",
+  pending_implementation: "En attente d’implémentation",
+  implemented_pending_feedback: "Implémenté, en attente de retour",
+  validated: "Validé",
+};
+
+function getTicketKanbanStatusLabel(status, availableStatuses = {}) {
+  return (
+    availableStatuses?.[status]
+    || TICKET_KANBAN_STATUS_FALLBACK_LABELS[status]
+    || status
+    || "Statut inconnu"
+  );
+}
+
+
+
+function formatTicketTargetDate(value) {
+  const raw = String(value || "").trim();
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return raw || "—";
+  }
+
+  const [year, month, day] = raw.split("-").map(Number);
+  const dateValue = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+
+  return new Intl.DateTimeFormat("fr-FR", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(dateValue);
+}
+
+function renderTicketImplementationDateModal() {
+  return `
+    <div
+      id="ticketImplementationDateModal"
+      class="ticket-implementation-date-modal-backdrop hidden"
+      aria-hidden="true"
+    >
+      <section
+        class="ticket-implementation-date-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ticketImplementationDateModalTitle"
+      >
+        <div class="ticket-implementation-date-modal-header">
+          <div>
+            <p class="tickets-kicker">Roadmap</p>
+            <h3 id="ticketImplementationDateModalTitle">
+              Choisir une date d’implémentation
+            </h3>
+          </div>
+        </div>
+
+        <p class="ticket-implementation-date-modal-copy">
+          Cette date servira à organiser la future roadmap de développement.
+        </p>
+
+        <div id="ticketImplementationDateFeedback" class="ticket-feedback hidden"></div>
+
+        <form id="ticketImplementationDateForm" class="ticket-implementation-date-form">
+          <div class="ticket-form-field">
+            <label for="ticketImplementationDateInput">
+              Date cible d’implémentation *
+            </label>
+            <input
+              id="ticketImplementationDateInput"
+              name="implementation_target_date"
+              type="date"
+              required
+            />
+          </div>
+
+          <div class="ticket-form-actions">
+            <button id="ticketImplementationDateConfirm" class="primary-btn" type="submit">
+              Confirmer
+            </button>
+            <button id="ticketImplementationDateCancel" class="secondary-btn" type="button">
+              Annuler le déplacement
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  `;
+}
+
+function renderTicketKanbanCard(ticket) {
+  const reorderMode = appState.tickets.reorderMode === true;
+  const status = String(ticket?.status || "new");
+  const slug = escapeHtml(ticket.slug);
+  const clickableAttributes = reorderMode
+    ? ""
+    : `data-ticket-kanban-open="${slug}" role="button" tabindex="0"`;
+  const implementationDate = ticket?.implementation_target_date
+    ? `
+      <div class="ticket-kanban-target-date">
+        Implémentation prévue :
+        <strong>${escapeHtml(formatTicketTargetDate(ticket.implementation_target_date))}</strong>
+      </div>
+    `
+    : "";
+
+  return `
+    <article
+      class="ticket-kanban-card ${reorderMode ? "is-draggable" : "is-clickable"}"
+      data-ticket-kanban-card
+      data-ticket-slug="${slug}"
+      data-ticket-status="${escapeHtml(status)}"
+      draggable="${reorderMode ? "true" : "false"}"
+      ${clickableAttributes}
+    >
+      <div class="ticket-card-badges">
+        <span class="ticket-badge ticket-category-badge">
+          ${escapeHtml(ticket.category_label || ticket.category || "Ticket")}
+        </span>
+        ${renderTicketTeamBadge(ticket)}
+      </div>
+
+      <div class="ticket-kanban-title">
+        <span>${escapeHtml(ticket.public_ref || "")}</span>
+        ${escapeHtml(ticket.title || "Ticket sans titre")}
+      </div>
+
+      <p class="ticket-kanban-excerpt">
+        ${escapeHtml(ticket.opening_excerpt || "Aucun aperçu disponible.")}
+      </p>
+
+      ${implementationDate}
+
+      <div class="ticket-kanban-meta">
+        <span>${ticketReplyCountLabel(ticket.message_count)}</span>
+        <span>${formatTicketDate(ticket.last_activity_at)}</span>
+      </div>
+    </article>
+  `;
+}
+
+function renderTicketKanbanBoard(items, availableStatuses = {}) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return `
+      <section class="ticket-empty-state">
+        <h3>Aucun ticket ne correspond à ces filtres.</h3>
+        <p>
+          Modifiez les filtres ou déposez un nouveau ticket.
+        </p>
+      </section>
+    `;
+  }
+
+  const grouped = new Map(
+    TICKET_KANBAN_STATUS_ORDER.map(status => [status, []])
+  );
+
+  items.forEach(ticket => {
+    const status = String(ticket?.status || "new");
+    if (!grouped.has(status)) {
+      grouped.set(status, []);
+    }
+    grouped.get(status).push(ticket);
+  });
+
+  const reorderMode = appState.tickets.reorderMode === true;
+
+  return `
+    <section class="ticket-kanban-workflow-toolbar">
+      <div class="ticket-kanban-workflow-copy">
+        <strong>Organisation du flux de travail</strong>
+        <span>
+          ${reorderMode
+            ? "Mode réorganisation actif : déplacez les cartes entre les colonnes."
+            : "Activez la réorganisation pour déplacer les cartes entre les étapes."}
+        </span>
+      </div>
+
+      <button
+        id="ticketKanbanReorderToggle"
+        type="button"
+        class="${reorderMode ? "secondary-btn" : "primary-btn"}"
+      >
+        ${reorderMode ? "Désactiver la réorganisation" : "Activer la réorganisation"}
+      </button>
+    </section>
+
+    <section class="ticket-kanban-board ${reorderMode ? "is-reorder-enabled" : ""}">
+      ${TICKET_KANBAN_STATUS_ORDER.map(status => {
+        const tickets = grouped.get(status) || [];
+        const label = getTicketKanbanStatusLabel(status, availableStatuses);
+
+        return `
+          <section class="ticket-kanban-column ticket-kanban-column-${escapeHtml(status)}">
+            <div class="ticket-kanban-column-header">
+              <h4>${escapeHtml(label)}</h4>
+              <span class="ticket-kanban-count">${tickets.length}</span>
+            </div>
+
+            <div
+              class="ticket-kanban-column-cards"
+              data-ticket-kanban-dropzone
+              data-ticket-status="${escapeHtml(status)}"
+            >
+              ${
+                tickets.length
+                  ? tickets.map(renderTicketKanbanCard).join("")
+                  : `<p class="ticket-kanban-column-empty">Aucun ticket</p>`
+              }
+            </div>
+          </section>
+        `;
+      }).join("")}
+    </section>
+  `;
+}
+
 function renderTicketCards(items) {
   if (!Array.isArray(items) || items.length === 0) {
     return `
@@ -6035,189 +6270,1034 @@ function setTicketDetailFeedback(message, isError = false) {
   feedback.classList.toggle("is-success", Boolean(message) && !isError);
 }
 
-function renderTicketsViewMarkup(data) {
-  const filters = appState.tickets.filters;
-  const total = data?.pagination?.total ?? 0;
-  const returned = data?.pagination?.returned ?? 0;
-  const createHiddenClass = appState.tickets.createFormOpen ? "" : "hidden";
+
+
+function ticketRoadmapDateOnly(value) {
+  const raw = String(value || "").trim();
+
+  if (!raw) {
+    return null;
+  }
+
+  const datePart = raw.slice(0, 10);
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+    return null;
+  }
+
+  const [year, month, day] = datePart.split("-").map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function ticketRoadmapFormatDate(value) {
+  const dateValue = ticketRoadmapDateOnly(value);
+
+  if (!dateValue) {
+    return "—";
+  }
+
+  return new Intl.DateTimeFormat("fr-FR", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(dateValue);
+}
+
+function ticketRoadmapMonthLabel(dateValue) {
+  return new Intl.DateTimeFormat("fr-FR", {
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(dateValue);
+}
+
+function ticketRoadmapStartOfMonth(dateValue) {
+  return new Date(Date.UTC(
+    dateValue.getUTCFullYear(),
+    dateValue.getUTCMonth(),
+    1,
+    12,
+    0,
+    0
+  ));
+}
+
+function ticketRoadmapEndOfMonth(dateValue) {
+  return new Date(Date.UTC(
+    dateValue.getUTCFullYear(),
+    dateValue.getUTCMonth() + 1,
+    0,
+    12,
+    0,
+    0
+  ));
+}
+
+function ticketRoadmapAddMonths(dateValue, count) {
+  return new Date(Date.UTC(
+    dateValue.getUTCFullYear(),
+    dateValue.getUTCMonth() + count,
+    1,
+    12,
+    0,
+    0
+  ));
+}
+
+function ticketRoadmapDiffDays(start, end) {
+  return Math.round((end.getTime() - start.getTime()) / 86400000);
+}
+
+function ticketRoadmapClampPercent(value) {
+  return Math.min(100, Math.max(0, value));
+}
+
+function buildTicketRoadmapTimeline(items) {
+  const normalized = (items || [])
+    .map((item) => {
+      const targetDate = ticketRoadmapDateOnly(item.implementation_target_date);
+      const planningStart =
+        ticketRoadmapDateOnly(item.planning_started_at)
+        || ticketRoadmapDateOnly(item.created_at)
+        || targetDate;
+      const implementedAt = ticketRoadmapDateOnly(item.implemented_at);
+      const validatedAt = ticketRoadmapDateOnly(item.validated_at);
+
+      if (!targetDate || !planningStart) {
+        return null;
+      }
+
+      const startDate = planningStart.getTime() <= targetDate.getTime()
+        ? planningStart
+        : targetDate;
+
+      return {
+        ...item,
+        _startDate: startDate,
+        _targetDate: targetDate,
+        _implementedDate: implementedAt,
+        _validatedDate: validatedAt,
+      };
+    })
+    .filter(Boolean);
+
+  if (!normalized.length) {
+    return {
+      items: [],
+      domainStart: null,
+      domainEnd: null,
+      months: [],
+      today: null,
+      totalDays: 1,
+    };
+  }
+
+  const dateCandidates = [];
+
+  normalized.forEach((item) => {
+    dateCandidates.push(item._startDate, item._targetDate);
+
+    if (item._implementedDate) {
+      dateCandidates.push(item._implementedDate);
+    }
+
+    if (item._validatedDate) {
+      dateCandidates.push(item._validatedDate);
+    }
+  });
+
+  const minDate = new Date(Math.min(...dateCandidates.map(date => date.getTime())));
+  const maxDate = new Date(Math.max(...dateCandidates.map(date => date.getTime())));
+
+  const domainStart = ticketRoadmapStartOfMonth(minDate);
+  const domainEnd = ticketRoadmapEndOfMonth(maxDate);
+  const totalDays = Math.max(1, ticketRoadmapDiffDays(domainStart, domainEnd) + 1);
+
+  const months = [];
+  let cursor = ticketRoadmapStartOfMonth(domainStart);
+
+  while (cursor.getTime() <= domainEnd.getTime()) {
+    const monthStart = new Date(cursor);
+    const monthEnd = ticketRoadmapEndOfMonth(monthStart);
+    const startOffset = ticketRoadmapDiffDays(domainStart, monthStart);
+    const duration = ticketRoadmapDiffDays(monthStart, monthEnd) + 1;
+
+    months.push({
+      label: ticketRoadmapMonthLabel(monthStart),
+      left: ticketRoadmapClampPercent((startOffset / totalDays) * 100),
+      width: ticketRoadmapClampPercent((duration / totalDays) * 100),
+    });
+
+    cursor = ticketRoadmapAddMonths(cursor, 1);
+  }
+
+  const today = ticketRoadmapDateOnly(new Date().toISOString());
+
+  return {
+    items: normalized,
+    domainStart,
+    domainEnd,
+    months,
+    today,
+    totalDays,
+  };
+}
+
+function ticketRoadmapPositionPercent(domainStart, totalDays, dateValue) {
+  const offset = ticketRoadmapDiffDays(domainStart, dateValue);
+  return ticketRoadmapClampPercent((offset / totalDays) * 100);
+}
+
+function ticketRoadmapWidthPercent(totalDays, startDate, endDate) {
+  const duration = Math.max(1, ticketRoadmapDiffDays(startDate, endDate) + 1);
+  return Math.max(1.2, ticketRoadmapClampPercent((duration / totalDays) * 100));
+}
+
+function renderTicketRoadmapStatusPill(item) {
+  return `
+    <span class="ticket-roadmap-status-pill">
+      ${escapeHtml(item.status_label || item.status || "Statut")}
+    </span>
+  `;
+}
+
+function renderTicketRoadmapRow(item, timeline) {
+  const barLeft = ticketRoadmapPositionPercent(
+    timeline.domainStart,
+    timeline.totalDays,
+    item._startDate
+  );
+
+  const barWidth = ticketRoadmapWidthPercent(
+    timeline.totalDays,
+    item._startDate,
+    item._targetDate
+  );
+
+  const targetLeft = ticketRoadmapPositionPercent(
+    timeline.domainStart,
+    timeline.totalDays,
+    item._targetDate
+  );
+
+  const implementedLeft = item._implementedDate
+    ? ticketRoadmapPositionPercent(
+        timeline.domainStart,
+        timeline.totalDays,
+        item._implementedDate
+      )
+    : null;
+
+  const validatedLeft = item._validatedDate
+    ? ticketRoadmapPositionPercent(
+        timeline.domainStart,
+        timeline.totalDays,
+        item._validatedDate
+      )
+    : null;
+
+  const todayValue = ticketRoadmapDateOnly(new Date().toISOString());
+  const isOverdue =
+    todayValue
+    && item._targetDate.getTime() < todayValue.getTime()
+    && !["implemented_pending_feedback", "validated"].includes(item.status);
 
   return `
-    <div class="tickets-view">
-      <section class="card tickets-hero-card">
-        <div class="tickets-hero-header">
-          <div>
-            <p class="tickets-kicker">Retours publics</p>
-            <h2>Tickets & discussions</h2>
-            <p class="tickets-intro">
-              Signalez un bug, posez une question, suggérez une amélioration
-              ou contribuez à un ticket existant.
-            </p>
-          </div>
+    <div class="ticket-roadmap-row ${isOverdue ? "is-overdue" : ""}">
+      <div class="ticket-roadmap-ticket">
+        <button
+          type="button"
+          class="ticket-roadmap-ticket-title"
+          data-ticket-open="${escapeHtml(item.slug)}"
+        >
+          <span>${escapeHtml(item.public_ref || "")}</span>
+          ${escapeHtml(item.title || "Ticket sans titre")}
+        </button>
 
-          <button id="ticketCreateToggle" class="primary-btn" type="button">
-            ${appState.tickets.createFormOpen ? "Fermer le formulaire" : "Ouvrir un ticket"}
-          </button>
+        <div class="ticket-roadmap-ticket-meta">
+          ${renderTicketRoadmapStatusPill(item)}
+          <span>Date cible : ${escapeHtml(ticketRoadmapFormatDate(item.implementation_target_date))}</span>
         </div>
+      </div>
 
-        <div class="tickets-public-notice">
-          <strong>Les tickets et les réponses sont publics.</strong>
-          N’indiquez pas d’informations personnelles, confidentielles ou sensibles.
-        </div>
-      </section>
+      <div class="ticket-roadmap-track">
+        <span
+          class="ticket-roadmap-bar"
+          style="left: ${barLeft}%; width: ${barWidth}%;"
+          title="Planification : ${escapeHtml(ticketRoadmapFormatDate(item.planning_started_at || item.created_at))} → ${escapeHtml(ticketRoadmapFormatDate(item.implementation_target_date))}"
+        ></span>
 
-      <section id="ticketCreatePanel" class="card ticket-create-card ${createHiddenClass}">
-        <div class="ticket-section-header">
-          <div>
-            <p class="tickets-kicker">Nouveau ticket</p>
-            <h3>Déposer un retour</h3>
-          </div>
-        </div>
+        <span
+          class="ticket-roadmap-target-marker"
+          style="left: ${targetLeft}%;"
+          title="Date cible : ${escapeHtml(ticketRoadmapFormatDate(item.implementation_target_date))}"
+        ></span>
 
-        <div id="ticketCreateFeedback" class="ticket-feedback hidden"></div>
+        ${
+          implementedLeft !== null
+            ? `
+              <span
+                class="ticket-roadmap-implemented-marker"
+                style="left: ${implementedLeft}%;"
+                title="Implémenté : ${escapeHtml(ticketRoadmapFormatDate(item.implemented_at))}"
+              ></span>
+            `
+            : ""
+        }
 
-        <form id="ticketCreateForm" class="ticket-form">
-          <div class="ticket-form-grid">
-            <div class="ticket-form-field">
-              <label for="ticketCreateName">Nom ou pseudo *</label>
-              <input id="ticketCreateName" name="author_name" type="text" maxlength="120" required />
-            </div>
-
-            <div class="ticket-form-field">
-              <label for="ticketCreateEmail">Adresse email — facultative</label>
-              <input id="ticketCreateEmail" name="author_email" type="email" maxlength="254" />
-              <small>Elle n’est jamais affichée publiquement.</small>
-            </div>
-
-            <div class="ticket-form-field">
-              <label for="ticketCreateCategory">Catégorie *</label>
-              <select id="ticketCreateCategory" name="category" required>
-                ${renderTicketSelectOptions(data.available_categories, "", "Choisir une catégorie")}
-              </select>
-            </div>
-
-            <div class="ticket-form-field ticket-form-field-wide">
-              <label for="ticketCreateTitle">Titre *</label>
-              <input
-                id="ticketCreateTitle"
-                name="title"
-                type="text"
-                maxlength="180"
-                placeholder="Résumez votre demande en une phrase"
-                required
-              />
-            </div>
-
-            <div class="ticket-form-field ticket-form-field-full">
-              <label for="ticketCreateBody">Description *</label>
-              <textarea
-                id="ticketCreateBody"
-                name="body_markdown"
-                maxlength="20000"
-                placeholder="Décrivez le problème, la question ou la suggestion…"
-                required
-              ></textarea>
-            </div>
-          </div>
-
-          <div class="ticket-form-actions">
-            <button id="ticketCreateSubmit" class="primary-btn" type="submit">
-              Publier le ticket
-            </button>
-            <button id="ticketCreateCancel" class="secondary-btn" type="button">
-              Annuler
-            </button>
-          </div>
-        </form>
-      </section>
-
-      <section class="card ticket-filter-card">
-        <div class="ticket-filter-header">
-          <div>
-            <p class="tickets-kicker">Explorer</p>
-            <h3>Tickets publiés</h3>
-          </div>
-          <div class="ticket-results-count">
-            ${returned} affiché${returned > 1 ? "s" : ""} · ${total} résultat${total > 1 ? "s" : ""}
-          </div>
-        </div>
-
-        <form id="ticketFiltersForm" class="ticket-filters-form">
-          <div class="ticket-filters-grid">
-            <div class="ticket-form-field ticket-search-field">
-              <label for="ticketFilterSearch">Recherche</label>
-              <input
-                id="ticketFilterSearch"
-                type="search"
-                value="${escapeHtml(filters.q)}"
-                placeholder="Rechercher dans les titres ou messages…"
-              />
-            </div>
-
-            <div class="ticket-form-field">
-              <label for="ticketFilterCategory">Catégorie</label>
-              <select id="ticketFilterCategory">
-                ${renderTicketSelectOptions(data.available_categories, filters.category, "Toutes les catégories")}
-              </select>
-            </div>
-
-            <div class="ticket-form-field">
-              <label for="ticketFilterStatus">Statut</label>
-              <select id="ticketFilterStatus">
-                ${renderTicketStatusOptions(filters.status, data.available_statuses)}
-              </select>
-            </div>
-
-            <div class="ticket-form-field">
-              <label for="ticketFilterSort">Tri</label>
-              <select id="ticketFilterSort">
-                ${renderTicketSortOptions(filters.sort)}
-              </select>
-            </div>
-          </div>
-
-          <div class="ticket-filter-actions">
-            <button class="primary-btn" type="submit">Appliquer</button>
-            <button id="ticketFiltersReset" class="secondary-btn" type="button">Réinitialiser</button>
-          </div>
-        </form>
-      </section>
-
-      <section class="ticket-list-grid">
-        ${renderTicketCards(data.items)}
-      </section>
+        ${
+          validatedLeft !== null
+            ? `
+              <span
+                class="ticket-roadmap-validated-marker"
+                style="left: ${validatedLeft}%;"
+                title="Validé : ${escapeHtml(ticketRoadmapFormatDate(item.validated_at))}"
+              ></span>
+            `
+            : ""
+        }
+      </div>
     </div>
   `;
 }
 
-function bindTicketsViewInteractions() {
-  const toggleButton = document.getElementById("ticketCreateToggle");
-  const createPanel = document.getElementById("ticketCreatePanel");
-  const cancelButton = document.getElementById("ticketCreateCancel");
-  const createForm = document.getElementById("ticketCreateForm");
-  const filtersForm = document.getElementById("ticketFiltersForm");
-  const resetFiltersButton = document.getElementById("ticketFiltersReset");
+function renderTicketRoadmapGantt(data) {
+  const items = Array.isArray(data?.items) ? data.items : [];
+  const timeline = buildTicketRoadmapTimeline(items);
 
-  if (toggleButton && createPanel) {
-    toggleButton.addEventListener("click", () => {
-      appState.tickets.createFormOpen = !appState.tickets.createFormOpen;
-      createPanel.classList.toggle("hidden", !appState.tickets.createFormOpen);
-      toggleButton.textContent = appState.tickets.createFormOpen
-        ? "Fermer le formulaire"
-        : "Ouvrir un ticket";
+  if (!timeline.items.length) {
+    return `
+      <section class="card ticket-roadmap-empty-card">
+        <p class="tickets-kicker">Roadmap</p>
+        <h3>Aucune date cible d’implémentation</h3>
+        <p>
+          Déplacez un ticket dans « En attente d’implémentation »
+          puis renseignez une date pour l’ajouter à la roadmap.
+        </p>
+      </section>
+    `;
+  }
 
-      if (appState.tickets.createFormOpen) {
-        document.getElementById("ticketCreateName")?.focus();
+  const todayLeft = (
+    timeline.today
+    && timeline.today.getTime() >= timeline.domainStart.getTime()
+    && timeline.today.getTime() <= timeline.domainEnd.getTime()
+  )
+    ? ticketRoadmapPositionPercent(
+        timeline.domainStart,
+        timeline.totalDays,
+        timeline.today
+      )
+    : null;
+
+  const summary = {
+    total: timeline.items.length,
+    overdue: timeline.items.filter((item) => {
+      const todayValue = ticketRoadmapDateOnly(new Date().toISOString());
+      return (
+        todayValue
+        && item._targetDate.getTime() < todayValue.getTime()
+        && !["implemented_pending_feedback", "validated"].includes(item.status)
+      );
+    }).length,
+    implemented: timeline.items.filter(item =>
+      ["implemented_pending_feedback", "validated"].includes(item.status)
+    ).length,
+  };
+
+  return `
+    <section class="card ticket-roadmap-overview-card">
+      <div>
+        <p class="tickets-kicker">Roadmap</p>
+        <h3>Planification des implémentations</h3>
+        <p>
+          Les barres représentent la période entre l’entrée en planification
+          et la date cible d’implémentation.
+        </p>
+      </div>
+
+      <div class="ticket-roadmap-kpis">
+        <div>
+          <strong>${summary.total}</strong>
+          <span>ticket${summary.total > 1 ? "s" : ""} planifié${summary.total > 1 ? "s" : ""}</span>
+        </div>
+        <div>
+          <strong>${summary.implemented}</strong>
+          <span>implémenté${summary.implemented > 1 ? "s" : ""}</span>
+        </div>
+        <div class="${summary.overdue ? "is-alert" : ""}">
+          <strong>${summary.overdue}</strong>
+          <span>en retard</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="card ticket-roadmap-gantt-card">
+      <div class="ticket-roadmap-gantt-scroll">
+        <div class="ticket-roadmap-gantt">
+          <div class="ticket-roadmap-header-row">
+            <div class="ticket-roadmap-ticket-column-title">
+              Tickets planifiés
+            </div>
+
+            <div class="ticket-roadmap-axis">
+              ${timeline.months.map(month => `
+                <span
+                  class="ticket-roadmap-month"
+                  style="left: ${month.left}%; width: ${month.width}%;"
+                >
+                  ${escapeHtml(month.label)}
+                </span>
+              `).join("")}
+
+              ${
+                todayLeft !== null
+                  ? `<span class="ticket-roadmap-today-line" style="left: ${todayLeft}%;" title="Aujourd’hui"></span>`
+                  : ""
+              }
+            </div>
+          </div>
+
+          <div class="ticket-roadmap-rows">
+            ${timeline.items.map(item => renderTicketRoadmapRow(item, timeline)).join("")}
+          </div>
+        </div>
+      </div>
+
+      <div class="ticket-roadmap-legend">
+        <span><i class="ticket-roadmap-legend-bar"></i> Période planifiée</span>
+        <span><i class="ticket-roadmap-legend-target"></i> Date cible</span>
+        <span><i class="ticket-roadmap-legend-implemented"></i> Implémenté</span>
+        <span><i class="ticket-roadmap-legend-validated"></i> Validé</span>
+      </div>
+    </section>
+  `;
+}
+
+async function loadTicketRoadmapData(forceReload = false) {
+  if (appState.tickets.roadmapData && !forceReload) {
+    return appState.tickets.roadmapData;
+  }
+
+  appState.tickets.roadmapLoading = true;
+
+  try {
+    const data = await apiGet("/api/tickets/roadmap");
+    appState.tickets.roadmapData = data;
+    return data;
+  } finally {
+    appState.tickets.roadmapLoading = false;
+  }
+}
+
+function renderTicketsViewMarkup(data) {
+  const filters = appState.tickets.filters;
+  const total = data?.pagination?.total ?? 0;
+  const returned = data?.pagination?.returned ?? 0;
+  const activeTab = appState.tickets.activeTab || "kanban";
+  const roadmapDatedCount = (data?.items || [])
+    .filter(ticket => ticket?.implementation_target_date)
+    .length;
+
+  return `
+    <div class="tickets-view">
+      <nav class="tickets-main-tabs analysis-view-tabs" aria-label="Sections Tickets & retours">
+        <button
+          type="button"
+          class="tab-btn tickets-main-tab ${activeTab === "kanban" ? "tab-btn-active" : ""}"
+          data-ticket-main-tab="kanban"
+          aria-selected="${activeTab === "kanban" ? "true" : "false"}"
+        >
+          Kanban
+        </button>
+
+        <button
+          type="button"
+          class="tab-btn tickets-main-tab ${activeTab === "list" ? "tab-btn-active" : ""}"
+          data-ticket-main-tab="list"
+          aria-selected="${activeTab === "list" ? "true" : "false"}"
+        >
+          Liste
+        </button>
+
+        <button
+          type="button"
+          class="tab-btn tickets-main-tab ${activeTab === "roadmap" ? "tab-btn-active" : ""}"
+          data-ticket-main-tab="roadmap"
+          aria-selected="${activeTab === "roadmap" ? "true" : "false"}"
+        >
+          Roadmap
+        </button>
+
+        <button
+          type="button"
+          class="tab-btn tickets-main-tab ${activeTab === "new_ticket" ? "tab-btn-active" : ""}"
+          data-ticket-main-tab="new_ticket"
+          aria-selected="${activeTab === "new_ticket" ? "true" : "false"}"
+        >
+          Nouveau ticket
+        </button>
+      </nav>
+
+      ${
+        activeTab === "kanban" || activeTab === "list"
+          ? `
+            <section class="card ticket-filter-card">
+              <div class="ticket-filter-header">
+                <div>
+                  <p class="tickets-kicker">Explorer</p>
+                  <h3>Tickets publiés</h3>
+                </div>
+
+                <div class="ticket-results-count">
+                  ${returned} affiché${returned > 1 ? "s" : ""} · ${total} résultat${total > 1 ? "s" : ""}
+                </div>
+              </div>
+
+              <form id="ticketFiltersForm" class="ticket-filters-form">
+                <div class="ticket-filters-grid">
+                  <div class="ticket-form-field ticket-search-field">
+                    <label for="ticketFilterSearch">Recherche</label>
+                    <input
+                      id="ticketFilterSearch"
+                      type="search"
+                      value="${escapeHtml(filters.q)}"
+                      placeholder="Rechercher dans les titres ou messages…"
+                    />
+                  </div>
+
+                  <div class="ticket-form-field">
+                    <label for="ticketFilterCategory">Catégorie</label>
+                    <select id="ticketFilterCategory">
+                      ${renderTicketSelectOptions(data.available_categories, filters.category, "Toutes les catégories")}
+                    </select>
+                  </div>
+
+                  <div class="ticket-form-field">
+                    <label for="ticketFilterStatus">Statut</label>
+                    <select id="ticketFilterStatus">
+                      ${renderTicketStatusOptions(filters.status, data.available_statuses)}
+                    </select>
+                  </div>
+
+                  <div class="ticket-form-field">
+                    <label for="ticketFilterSort">Tri</label>
+                    <select id="ticketFilterSort">
+                      ${renderTicketSortOptions(filters.sort)}
+                    </select>
+                  </div>
+                </div>
+
+                <div class="ticket-filter-actions">
+                  <button class="primary-btn" type="submit">Appliquer</button>
+                  <button id="ticketFiltersReset" class="secondary-btn" type="button">Réinitialiser</button>
+                </div>
+              </form>
+            </section>
+          `
+          : ""
       }
+
+      ${
+        activeTab === "kanban"
+          ? renderTicketKanbanBoard(data.items, data.available_statuses)
+          : ""
+      }
+
+      ${
+        activeTab === "list"
+          ? `
+            <section class="ticket-list-grid">
+              ${renderTicketCards(data.items)}
+            </section>
+          `
+          : ""
+      }
+
+      ${
+        activeTab === "roadmap"
+          ? (
+              appState.tickets.roadmapData
+                ? renderTicketRoadmapGantt(appState.tickets.roadmapData)
+                : `
+                  <section class="card ticket-roadmap-loading-card">
+                    <p class="tickets-kicker">Roadmap</p>
+                    <h3>Chargement de la planification…</h3>
+                    <p>Préparation de la vue Gantt des tickets datés.</p>
+                  </section>
+                `
+            )
+          : ""
+      }
+
+      ${
+        activeTab === "new_ticket"
+          ? `
+            <section class="card tickets-public-notice-card">
+              <div class="tickets-public-notice">
+                <strong>Les tickets et les réponses sont publics.</strong>
+                N’indiquez pas d’informations personnelles, confidentielles ou sensibles.
+              </div>
+            </section>
+
+            <section id="ticketCreatePanel" class="card ticket-create-card">
+              <div class="ticket-section-header">
+                <div>
+                  <p class="tickets-kicker">Nouveau ticket</p>
+                  <h3>Déposer un retour</h3>
+                </div>
+              </div>
+
+              <div id="ticketCreateFeedback" class="ticket-feedback hidden"></div>
+
+              <form id="ticketCreateForm" class="ticket-form">
+                <div class="ticket-form-grid">
+                  <div class="ticket-form-field">
+                    <label for="ticketCreateName">Nom ou pseudo *</label>
+                    <input id="ticketCreateName" name="author_name" type="text" maxlength="120" required />
+                  </div>
+
+                  <div class="ticket-form-field">
+                    <label for="ticketCreateEmail">Adresse email — facultative</label>
+                    <input id="ticketCreateEmail" name="author_email" type="email" maxlength="254" />
+                    <small>Elle n’est jamais affichée publiquement.</small>
+                  </div>
+
+                  <div class="ticket-form-field">
+                    <label for="ticketCreateCategory">Catégorie *</label>
+                    <select id="ticketCreateCategory" name="category" required>
+                      ${renderTicketSelectOptions(data.available_categories, "", "Choisir une catégorie")}
+                    </select>
+                  </div>
+
+                  <div class="ticket-form-field ticket-form-field-wide">
+                    <label for="ticketCreateTitle">Titre *</label>
+                    <input
+                      id="ticketCreateTitle"
+                      name="title"
+                      type="text"
+                      maxlength="180"
+                      placeholder="Résumez votre demande en une phrase"
+                      required
+                    />
+                  </div>
+
+                  <div class="ticket-form-field ticket-form-field-full">
+                    <label for="ticketCreateBody">Description *</label>
+                    <textarea
+                      id="ticketCreateBody"
+                      name="body_markdown"
+                      maxlength="20000"
+                      placeholder="Décrivez le problème, la question ou la suggestion…"
+                      required
+                    ></textarea>
+                  </div>
+                </div>
+
+                <div class="ticket-form-actions">
+                  <button id="ticketCreateSubmit" class="primary-btn" type="submit">
+                    Publier le ticket
+                  </button>
+                  <button id="ticketCreateCancel" class="secondary-btn" type="button">
+                    Annuler
+                  </button>
+                </div>
+              </form>
+            </section>
+          `
+          : ""
+      }
+
+      ${
+        typeof renderTicketImplementationDateModal === "function"
+          ? renderTicketImplementationDateModal()
+          : ""
+      }
+    </div>
+  `;
+}
+
+
+
+function rerenderTicketsViewFromCache() {
+  if (!appState.tickets.lastList) {
+    return;
+  }
+
+  content.innerHTML = renderTicketsViewMarkup(appState.tickets.lastList);
+  bindTicketsViewInteractions();
+}
+
+
+
+function requestTicketImplementationTargetDate(ticket) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById("ticketImplementationDateModal");
+    const form = document.getElementById("ticketImplementationDateForm");
+    const input = document.getElementById("ticketImplementationDateInput");
+    const cancelButton = document.getElementById("ticketImplementationDateCancel");
+    const feedback = document.getElementById("ticketImplementationDateFeedback");
+
+    if (!modal || !form || !input || !cancelButton || !feedback) {
+      const fallback = window.prompt(
+        "Choisir une date d’implémentation au format YYYY-MM-DD.",
+        ticket?.implementation_target_date || ""
+      );
+      resolve(fallback ? fallback.trim() : null);
+      return;
+    }
+
+    const clearFeedback = () => {
+      feedback.textContent = "";
+      feedback.classList.add("hidden");
+      feedback.classList.remove("is-error");
+    };
+
+    const showFeedback = (message) => {
+      feedback.textContent = message;
+      feedback.classList.remove("hidden");
+      feedback.classList.add("is-error");
+    };
+
+    const cleanup = () => {
+      form.removeEventListener("submit", handleSubmit);
+      cancelButton.removeEventListener("click", handleCancel);
+      modal.removeEventListener("click", handleBackdropClick);
+      document.removeEventListener("keydown", handleEscape);
+    };
+
+    const closeModal = (value) => {
+      cleanup();
+      modal.classList.add("hidden");
+      modal.setAttribute("aria-hidden", "true");
+      clearFeedback();
+      resolve(value);
+    };
+
+    const handleSubmit = (event) => {
+      event.preventDefault();
+
+      const selectedDate = input.value.trim();
+
+      if (!selectedDate) {
+        showFeedback("Choisissez une date d’implémentation avant de confirmer.");
+        input.focus();
+        return;
+      }
+
+      closeModal(selectedDate);
+    };
+
+    const handleCancel = () => {
+      closeModal(null);
+    };
+
+    const handleBackdropClick = (event) => {
+      if (event.target === modal) {
+        closeModal(null);
+      }
+    };
+
+    const handleEscape = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeModal(null);
+      }
+    };
+
+    clearFeedback();
+    input.value = ticket?.implementation_target_date || "";
+    modal.classList.remove("hidden");
+    modal.setAttribute("aria-hidden", "false");
+
+    form.addEventListener("submit", handleSubmit);
+    cancelButton.addEventListener("click", handleCancel);
+    modal.addEventListener("click", handleBackdropClick);
+    document.addEventListener("keydown", handleEscape);
+
+    window.setTimeout(() => input.focus(), 0);
+  });
+}
+
+async function moveTicketKanbanStatus(slug, nextStatus) {
+  const list = appState.tickets.lastList;
+  const items = Array.isArray(list?.items) ? list.items : [];
+  const ticket = items.find(item => item.slug === slug);
+
+  if (!ticket || !nextStatus || ticket.status === nextStatus) {
+    rerenderTicketsViewFromCache();
+    return;
+  }
+
+  let implementationTargetDate = ticket.implementation_target_date || null;
+
+  if (nextStatus === "pending_implementation") {
+    const selectedDate = await requestTicketImplementationTargetDate(ticket);
+
+    if (!selectedDate) {
+      rerenderTicketsViewFromCache();
+      return;
+    }
+
+    implementationTargetDate = selectedDate;
+  }
+
+  const payload = {
+    status: nextStatus,
+  };
+
+  if (nextStatus === "pending_implementation") {
+    payload.implementation_target_date = implementationTargetDate;
+  }
+
+  const result = await apiPostJson(
+    `/api/tickets/${encodeURIComponent(slug)}/status`,
+    payload
+  );
+
+  const updatedTicket = result?.ticket || {};
+  const statusLabel = (
+    updatedTicket.status_label
+    || getTicketKanbanStatusLabel(nextStatus, list?.available_statuses || {})
+  );
+
+  appState.tickets.roadmapData = null;
+
+  Object.assign(ticket, {
+    status: updatedTicket.status || nextStatus,
+    status_label: statusLabel,
+    implementation_target_date:
+      updatedTicket.implementation_target_date
+      ?? implementationTargetDate
+      ?? ticket.implementation_target_date
+      ?? null,
+    updated_at: updatedTicket.updated_at || ticket.updated_at,
+    last_activity_at: updatedTicket.last_activity_at || ticket.last_activity_at,
+    resolved_at: updatedTicket.resolved_at ?? ticket.resolved_at,
+    closed_at: updatedTicket.closed_at ?? ticket.closed_at,
+  });
+
+  const ticketIsHiddenByCurrentOpenFilter =
+    appState.tickets.filters.status === "open"
+    && nextStatus === "validated";
+
+  if (ticketIsHiddenByCurrentOpenFilter) {
+    await renderTicketsView(true);
+    return;
+  }
+
+  rerenderTicketsViewFromCache();
+}
+
+
+
+function bindTicketKanbanCardOpenInteractions() {
+  if (
+    appState.tickets.viewMode !== "kanban"
+    || appState.tickets.reorderMode === true
+  ) {
+    return;
+  }
+
+  document.querySelectorAll("[data-ticket-kanban-open]").forEach((card) => {
+    const openTicket = async () => {
+      const slug = card.dataset.ticketKanbanOpen;
+      if (slug) {
+        await renderTicketDetail(slug);
+      }
+    };
+
+    card.addEventListener("click", async () => {
+      await openTicket();
+    });
+
+    card.addEventListener("keydown", async (event) => {
+      if (event.key !== "Enter" && event.key !== " ") {
+        return;
+      }
+
+      event.preventDefault();
+      await openTicket();
+    });
+  });
+}
+
+function bindTicketKanbanDragAndDrop() {
+  if (appState.tickets.viewMode !== "kanban") {
+    return;
+  }
+
+  const reorderToggle = document.getElementById("ticketKanbanReorderToggle");
+
+  if (reorderToggle) {
+    reorderToggle.addEventListener("click", () => {
+      if (!appState.tickets.reorderMode) {
+        const confirmed = window.confirm(
+          "Attention, si vous déplacez ce ticket vous modifiez l’architecture de travail des développeurs. Êtes-vous sûr de vouloir continuer ?"
+        );
+
+        if (!confirmed) {
+          return;
+        }
+
+        appState.tickets.reorderMode = true;
+      } else {
+        appState.tickets.reorderMode = false;
+      }
+
+      rerenderTicketsViewFromCache();
     });
   }
 
-  if (cancelButton && createPanel && toggleButton) {
+  if (!appState.tickets.reorderMode) {
+    return;
+  }
+
+  const cards = document.querySelectorAll("[data-ticket-kanban-card]");
+  const dropzones = document.querySelectorAll("[data-ticket-kanban-dropzone]");
+
+  cards.forEach((card) => {
+    card.addEventListener("dragstart", (event) => {
+      const slug = card.dataset.ticketSlug || "";
+      const status = card.dataset.ticketStatus || "";
+
+      if (!slug || !event.dataTransfer) {
+        event.preventDefault();
+        return;
+      }
+
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", slug);
+      event.dataTransfer.setData("application/x-mlcflux-ticket-status", status);
+
+      card.classList.add("is-dragging");
+    });
+
+    card.addEventListener("dragend", () => {
+      card.classList.remove("is-dragging");
+      dropzones.forEach(zone => zone.classList.remove("is-drop-target"));
+    });
+  });
+
+  dropzones.forEach((zone) => {
+    zone.addEventListener("dragover", (event) => {
+      event.preventDefault();
+
+      if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = "move";
+      }
+
+      zone.classList.add("is-drop-target");
+    });
+
+    zone.addEventListener("dragleave", (event) => {
+      if (!zone.contains(event.relatedTarget)) {
+        zone.classList.remove("is-drop-target");
+      }
+    });
+
+    zone.addEventListener("drop", async (event) => {
+      event.preventDefault();
+      zone.classList.remove("is-drop-target");
+
+      const slug = event.dataTransfer?.getData("text/plain") || "";
+      const previousStatus =
+        event.dataTransfer?.getData("application/x-mlcflux-ticket-status") || "";
+      const nextStatus = zone.dataset.ticketStatus || "";
+
+      if (!slug || !nextStatus || previousStatus === nextStatus) {
+        rerenderTicketsViewFromCache();
+        return;
+      }
+
+      try {
+        await moveTicketKanbanStatus(slug, nextStatus);
+      } catch (err) {
+        window.alert(`Impossible de déplacer le ticket : ${err.message}`);
+        rerenderTicketsViewFromCache();
+      }
+    });
+  });
+}
+function bindTicketsViewInteractions() {
+  const createForm = document.getElementById("ticketCreateForm");
+  const cancelButton = document.getElementById("ticketCreateCancel");
+  const filtersForm = document.getElementById("ticketFiltersForm");
+  const resetFiltersButton = document.getElementById("ticketFiltersReset");
+  const mainTabButtons = document.querySelectorAll("[data-ticket-main-tab]");
+
+  mainTabButtons.forEach((button) => {
+    button.addEventListener("click", async () => {
+      const nextTab = button.dataset.ticketMainTab || "kanban";
+
+      if (appState.tickets.activeTab === nextTab) {
+        return;
+      }
+
+      appState.tickets.activeTab = nextTab;
+      appState.tickets.viewMode =
+        nextTab === "list"
+          ? "list"
+          : nextTab === "kanban"
+            ? "kanban"
+            : nextTab;
+
+      if (nextTab !== "kanban") {
+        appState.tickets.reorderMode = false;
+      }
+
+      if (nextTab === "roadmap" && !appState.tickets.roadmapData) {
+        content.innerHTML = renderTicketsViewMarkup(appState.tickets.lastList || {
+          items: [],
+          pagination: { total: 0, returned: 0 },
+          available_categories: {},
+          available_statuses: {},
+        });
+        bindTicketsViewInteractions();
+
+        try {
+          await loadTicketRoadmapData();
+        } catch (err) {
+          content.innerHTML = `
+            <div class="card">
+              Impossible de charger la roadmap : ${escapeHtml(err.message)}
+            </div>
+          `;
+          return;
+        }
+      }
+
+      if (appState.tickets.lastList) {
+        content.innerHTML = renderTicketsViewMarkup(appState.tickets.lastList);
+        bindTicketsViewInteractions();
+
+        if (nextTab === "new_ticket") {
+          document.getElementById("ticketCreateName")?.focus();
+        }
+
+        return;
+      }
+
+      await renderTicketsView(true);
+    });
+  });
+
+  if (cancelButton) {
     cancelButton.addEventListener("click", () => {
-      appState.tickets.createFormOpen = false;
-      createPanel.classList.add("hidden");
-      toggleButton.textContent = "Ouvrir un ticket";
       createForm?.reset();
       setTicketCreateFeedback("");
+
+      appState.tickets.activeTab = "kanban";
+      appState.tickets.viewMode = "kanban";
+
+      rerenderTicketsViewFromCache();
     });
   }
 
@@ -6244,7 +7324,9 @@ function bindTicketsViewInteractions() {
         setTicketCreateFeedback("");
         const result = await apiPostJson("/api/tickets", payload);
 
-        appState.tickets.createFormOpen = false;
+        appState.tickets.activeTab = "kanban";
+        appState.tickets.viewMode = "kanban";
+
         await renderTicketDetail(
           result.ticket.slug,
           "Ticket publié. La discussion est désormais visible publiquement."
@@ -6294,6 +7376,14 @@ function bindTicketsViewInteractions() {
       }
     });
   });
+
+  if (typeof bindTicketKanbanCardOpenInteractions === "function") {
+    bindTicketKanbanCardOpenInteractions();
+  }
+
+  if (typeof bindTicketKanbanDragAndDrop === "function") {
+    bindTicketKanbanDragAndDrop();
+  }
 }
 
 async function renderTicketsView(forceReload = false) {
@@ -6373,7 +7463,7 @@ function renderTicketMessages(messages) {
 function renderTicketDetailMarkup(data) {
   const ticket = data.ticket;
   const messages = data.messages || [];
-  const isClosed = ticket.status === "closed";
+  const isClosed = ticket.status === "validated";
 
   return `
     <div class="ticket-detail-view">
@@ -6420,7 +7510,7 @@ function renderTicketDetailMarkup(data) {
         <div class="ticket-section-header">
           <div>
             <p class="tickets-kicker">Contribuer</p>
-            <h3>${isClosed ? "Ticket clos" : "Répondre à ce ticket"}</h3>
+            <h3>${isClosed ? "Ticket validé" : "Répondre à ce ticket"}</h3>
           </div>
         </div>
 
