@@ -2901,19 +2901,67 @@ const DETAIL_TRANSACTION_COLUMNS = [
   }
 ];
 
-function getVisibleDetailTransactionColumnKeys() {
-  const allKeys = DETAIL_TRANSACTION_COLUMNS.map(column => column.key);
-  const requiredKeys = DETAIL_TRANSACTION_COLUMNS
+const DETAIL_AGGREGATE_COLUMN_STORAGE_KEY = "mlcflux_detail_aggregate_columns_v1";
+
+const DETAIL_AGGREGATE_COLUMNS = [
+  {
+    key: "Libelle",
+    label: "Acteur",
+    required: true,
+    defaultVisible: true,
+    className: "",
+    render: row => renderActorLink(row.Libelle)
+  },
+  {
+    key: "Count",
+    label: "Nb opérations",
+    required: false,
+    defaultVisible: true,
+    className: "num",
+    render: row => row.Count
+  },
+  {
+    key: "Total",
+    label: "Montant total",
+    required: false,
+    defaultVisible: true,
+    className: "num",
+    render: row => euro(row.Total)
+  }
+];
+
+const DETAIL_COLUMN_CONTEXTS = {
+  transaction: {
+    storageKey: DETAIL_TRANSACTION_COLUMN_STORAGE_KEY,
+    columns: DETAIL_TRANSACTION_COLUMNS
+  },
+  aggregate: {
+    storageKey: DETAIL_AGGREGATE_COLUMN_STORAGE_KEY,
+    columns: DETAIL_AGGREGATE_COLUMNS
+  }
+};
+
+
+
+function getDetailColumnContext(contextKey) {
+  return DETAIL_COLUMN_CONTEXTS[contextKey] || DETAIL_COLUMN_CONTEXTS.transaction;
+}
+
+function getVisibleDetailColumnKeys(contextKey) {
+  const context = getDetailColumnContext(contextKey);
+  const columns = context.columns || [];
+  const allKeys = columns.map(column => column.key);
+  const requiredKeys = columns
     .filter(column => column.required)
     .map(column => column.key);
-  const defaultKeys = DETAIL_TRANSACTION_COLUMNS
+  const defaultKeys = columns
     .filter(column => column.required || column.defaultVisible)
     .map(column => column.key);
 
   let storedKeys = null;
 
   try {
-    const raw = localStorage.getItem(DETAIL_TRANSACTION_COLUMN_STORAGE_KEY);
+    const raw = localStorage.getItem(context.storageKey);
     const parsed = raw ? JSON.parse(raw) : null;
 
     if (Array.isArray(parsed)) {
@@ -2933,14 +2981,16 @@ function getVisibleDetailTransactionColumnKeys() {
   return allKeys.filter(key => visibleKeys.has(key));
 }
 
-function getVisibleDetailTransactionColumnSet() {
-  return new Set(getVisibleDetailTransactionColumnKeys());
+function getVisibleDetailColumnSet(contextKey) {
+  return new Set(getVisibleDetailColumnKeys(contextKey));
 }
 
-function persistVisibleDetailTransactionColumnKeys(keys) {
+function persistVisibleDetailColumnKeys(contextKey, keys) {
+  const context = getDetailColumnContext(contextKey);
+
   try {
     localStorage.setItem(
-      DETAIL_TRANSACTION_COLUMN_STORAGE_KEY,
+      context.storageKey,
       JSON.stringify(keys)
     );
   } catch (_error) {
@@ -2948,19 +2998,21 @@ function persistVisibleDetailTransactionColumnKeys(keys) {
   }
 }
 
-function toggleDetailTransactionColumn(columnKey, checked) {
+function toggleDetailTableColumn(contextKey, columnKey, checked) {
   const columnMenuWasOpen = Boolean(
     document.querySelector(".detail-transaction-columns-menu")?.open
   );
 
-  const allKeys = DETAIL_TRANSACTION_COLUMNS.map(column => column.key);
-  const column = DETAIL_TRANSACTION_COLUMNS.find(item => item.key === columnKey);
+  const context = getDetailColumnContext(contextKey);
+  const columns = context.columns || [];
+  const allKeys = columns.map(column => column.key);
+  const column = columns.find(item => item.key === columnKey);
 
   if (!column || column.required) {
     return;
   }
 
-  const visibleKeys = new Set(getVisibleDetailTransactionColumnKeys());
+  const visibleKeys = new Set(getVisibleDetailColumnKeys(contextKey));
 
   if (checked) {
     visibleKeys.add(columnKey);
@@ -2968,11 +3020,12 @@ function toggleDetailTransactionColumn(columnKey, checked) {
     visibleKeys.delete(columnKey);
   }
 
-  DETAIL_TRANSACTION_COLUMNS
+  columns
     .filter(item => item.required)
     .forEach(item => visibleKeys.add(item.key));
 
-  persistVisibleDetailTransactionColumnKeys(
+  persistVisibleDetailColumnKeys(
+    contextKey,
     allKeys.filter(key => visibleKeys.has(key))
   );
 
@@ -2986,15 +3039,18 @@ function toggleDetailTransactionColumn(columnKey, checked) {
   }
 }
 
-function renderDetailTransactionColumnPicker() {
-  const visibleKeys = getVisibleDetailTransactionColumnSet();
+function renderDetailColumnPicker(contextKey, labelOverrides = {}) {
+  const context = getDetailColumnContext(contextKey);
+  const columns = context.columns || [];
+  const visibleKeys = getVisibleDetailColumnSet(contextKey);
 
-  const options = DETAIL_TRANSACTION_COLUMNS.map(column => {
+  const options = columns.map(column => {
     const checked = visibleKeys.has(column.key) ? "checked" : "";
     const disabled = column.required ? "disabled" : "";
     const escapedColumnKey = String(column.key)
       .replace(/\\/g, "\\\\")
       .replace(/'/g, "\\'");
+    const pickerLabel = labelOverrides[column.key] || column.label;
 
     return `
       <label class="detail-transaction-column-option">
@@ -3002,9 +3058,9 @@ function renderDetailTransactionColumnPicker() {
           type="checkbox"
           ${checked}
           ${disabled}
-          onchange="toggleDetailTransactionColumn('${escapedColumnKey}', this.checked)"
+          onchange="toggleDetailTableColumn('${contextKey}', '${escapedColumnKey}', this.checked)"
         >
-        <span>${escapeHtml(column.label)}</span>
+        <span>${escapeHtml(pickerLabel)}</span>
       </label>
     `;
   }).join("");
@@ -3022,16 +3078,16 @@ function renderDetailTransactionColumnPicker() {
   `;
 }
 
-function renderDetailTransactionTableToolbar() {
+function renderDetailTableToolbar(contextKey, labelOverrides = {}) {
   return `
     <div class="detail-transaction-table-toolbar">
-      ${renderDetailTransactionColumnPicker()}
+      ${renderDetailColumnPicker(contextKey, labelOverrides)}
     </div>
   `;
 }
 
 function renderDetailTransactionHeaderCells() {
-  const visibleKeys = getVisibleDetailTransactionColumnSet();
+  const visibleKeys = getVisibleDetailColumnSet("transaction");
 
   return DETAIL_TRANSACTION_COLUMNS
     .filter(column => visibleKeys.has(column.key))
@@ -3043,7 +3099,7 @@ function renderDetailTransactionHeaderCells() {
 }
 
 function renderDetailTransactionRow(row) {
-  const visibleKeys = getVisibleDetailTransactionColumnSet();
+  const visibleKeys = getVisibleDetailColumnSet("transaction");
 
   return `
     <tr>
@@ -3096,7 +3152,7 @@ function paginatedTransactionTable(rows) {
 
   const startDisplay = totalRows ? startIndex + 1 : 0;
   const endDisplay = totalRows ? Math.min(startIndex + pageRows.length, totalRows) : 0;
-  const visibleColumnCount = getVisibleDetailTransactionColumnKeys().length;
+  const visibleColumnCount = getVisibleDetailColumnKeys("transaction").length;
 
   const body = pageRows
     .map(row => renderDetailTransactionRow(row))
@@ -3135,7 +3191,7 @@ function paginatedTransactionTable(rows) {
   ` : "";
 
   return `
-    ${renderDetailTransactionTableToolbar()}
+    ${renderDetailTableToolbar("transaction")}
     <table>
       <thead>
         <tr>
@@ -3147,6 +3203,35 @@ function paginatedTransactionTable(rows) {
       </tbody>
     </table>
     ${pagination}
+  `;
+}
+
+function renderDetailAggregateHeaderCells(primaryLabel) {
+  const visibleKeys = getVisibleDetailColumnSet("aggregate");
+
+  return DETAIL_AGGREGATE_COLUMNS
+    .filter(column => visibleKeys.has(column.key))
+    .map(column => {
+      const className = column.className ? ` class="${column.className}"` : "";
+      const label = column.key === "Libelle" ? primaryLabel : column.label;
+      return `<th${className}>${detailSortableHeader(label, column.key)}</th>`;
+    })
+    .join("");
+}
+
+function renderDetailAggregateRow(item) {
+  const visibleKeys = getVisibleDetailColumnSet("aggregate");
+
+  return `
+    <tr>
+      ${DETAIL_AGGREGATE_COLUMNS
+        .filter(column => visibleKeys.has(column.key))
+        .map(column => {
+          const className = column.className ? ` class="${column.className}"` : "";
+          return `<td${className}>${column.render(item)}</td>`;
+        })
+        .join("")}
+    </tr>
   `;
 }
 
@@ -3170,25 +3255,22 @@ function aggregateTable(rows, keyField, label) {
     return row[key];
   });
 
-  const body = sortedRows.map(item => `
-    <tr>
-      <td>${renderActorLink(item.Libelle)}</td>
-      <td class="num">${item.Count}</td>
-      <td class="num">${euro(item.Total)}</td>
-    </tr>
-  `).join("");
+  const visibleColumnCount = getVisibleDetailColumnKeys("aggregate").length;
+
+  const body = sortedRows
+    .map(item => renderDetailAggregateRow(item))
+    .join("");
 
   return `
+    ${renderDetailTableToolbar("aggregate", { Libelle: label })}
     <table>
       <thead>
         <tr>
-          <th>${detailSortableHeader(label, "Libelle")}</th>
-          <th class="num">${detailSortableHeader("Nb opérations", "Count")}</th>
-          <th class="num">${detailSortableHeader("Montant total", "Total")}</th>
+          ${renderDetailAggregateHeaderCells(label)}
         </tr>
       </thead>
       <tbody>
-        ${body || `<tr><td colspan="3">Aucune ligne</td></tr>`}
+        ${body || `<tr><td colspan="${visibleColumnCount}">Aucune ligne</td></tr>`}
       </tbody>
     </table>
   `;
