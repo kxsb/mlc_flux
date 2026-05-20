@@ -11490,3 +11490,34 @@ body.dark-mode .pro-detail-payment-basin-postal-chip {
   }
 }
 
+
+
+/* TICKETLAYOUT001 — Vue Tickets pleine largeur */
+
+.tickets-view {
+  width: 100%;
+  max-width: none;
+}
+
+.ticket-filter-card,
+.ticket-create-card,
+.ticket-roadmap-overview-card,
+.ticket-roadmap-gantt-card,
+.ticket-roadmap-loading-card,
+.ticket-roadmap-empty-card,
+.ticket-list-grid {
+  width: 100%;
+  max-width: none;
+}
+
+.ticket-list-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: stretch;
+}
+
+.ticket-list-grid > * {
+  width: 100%;
+  max-width: none;
+}
+
