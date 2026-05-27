@@ -3534,6 +3534,1288 @@ function shiftIsoDate(dateString, days) {
   return date.toISOString().slice(0, 10);
 }
 
+
+/* PILOTAGEVISU008B — période précédente et deltas de trajectoire */
+function getIsoInclusiveDayCount(start, end) {
+  if (!start || !end) {
+    return null;
+  }
+
+  const startDate = new Date(`${start}T00:00:00Z`);
+  const endDate = new Date(`${end}T00:00:00Z`);
+
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+    return null;
+  }
+
+  const dayMs = 24 * 60 * 60 * 1000;
+  const diff = Math.round((endDate.getTime() - startDate.getTime()) / dayMs) + 1;
+
+  return diff > 0 ? diff : null;
+}
+
+function buildPilotagePreviousPeriod(summary = {}) {
+  const period = (
+    summary?.effective_period?.start && summary?.effective_period?.end
+      ? summary.effective_period
+      : summary?.requested_period
+  ) || {};
+
+  const start = period.start;
+  const end = period.end;
+  const dayCount = getIsoInclusiveDayCount(start, end);
+
+  if (!start || !end || !dayCount) {
+    return null;
+  }
+
+  const previousEnd = shiftIsoDate(start, -1);
+  const previousStart = shiftIsoDate(previousEnd, -(dayCount - 1));
+
+  if (!previousStart || !previousEnd) {
+    return null;
+  }
+
+  return {
+    start: previousStart,
+    end: previousEnd,
+    day_count: dayCount,
+    query: `?start=${encodeURIComponent(previousStart)}&end=${encodeURIComponent(previousEnd)}`
+  };
+}
+
+async function fetchPilotagePreviousPeriodSummary(summary = {}) {
+  const previousPeriod = buildPilotagePreviousPeriod(summary);
+
+  if (!previousPeriod) {
+    return null;
+  }
+
+  try {
+    const previousSummary = await apiGet(
+      `/api/monetary-indicators/pilotage-summary${previousPeriod.query}`
+    );
+
+    return {
+      period: previousPeriod,
+      summary: previousSummary
+    };
+  } catch (error) {
+    console.warn("Impossible de charger la période précédente du pilotage monétaire.", error);
+    return null;
+  }
+}
+
+function getPilotageNestedValue(source, path) {
+  if (!source || !path) {
+    return null;
+  }
+
+  return path.split(".").reduce((current, key) => {
+    if (!current || typeof current !== "object") {
+      return null;
+    }
+
+    return current[key];
+  }, source);
+}
+
+
+/* PILOTAGEVISU008C — synthèse de trajectoire vs période équivalente */
+function getPilotageTrajectoryLabel(delta, stableThreshold = 0.03) {
+  const numericDelta = normalizePilotageInstrumentNumber(delta);
+
+  if (numericDelta === null) {
+    return "non comparable";
+  }
+
+  if (Math.abs(numericDelta) <= stableThreshold) {
+    return "quasi stable";
+  }
+
+  return numericDelta > 0 ? "en hausse" : "en baisse";
+}
+
+function formatPilotageSignedDeltaValue(delta, mode = "absolute", digits = 1, unit = "") {
+  const numericDelta = normalizePilotageInstrumentNumber(delta);
+
+  if (numericDelta === null) {
+    return "n.d.";
+  }
+
+  const sign = numericDelta > 0 ? "+" : "";
+  const value = numericDelta.toLocaleString("fr-FR", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits
+  });
+
+  if (mode === "points") {
+    return `${sign}${value} pts`;
+  }
+
+  return `${sign}${value}${unit ? ` ${unit}` : ""}`;
+}
+
+function getPilotageNumericDelta(currentValue, previousValue) {
+  const current = normalizePilotageInstrumentNumber(currentValue);
+  const previous = normalizePilotageInstrumentNumber(previousValue);
+
+  if (current === null || previous === null) {
+    return null;
+  }
+
+  return current - previous;
+}
+
+function getPilotageTrajectoryDirection(delta, stableThreshold = 0.03) {
+  const numericDelta = normalizePilotageInstrumentNumber(delta);
+
+  if (numericDelta === null) {
+    return "unknown";
+  }
+
+  if (Math.abs(numericDelta) <= stableThreshold) {
+    return "flat";
+  }
+
+  return numericDelta > 0 ? "up" : "down";
+}
+
+function getPilotageTrajectoryIntensity(delta, visualMax = 1) {
+  const numericDelta = normalizePilotageInstrumentNumber(delta);
+
+  if (numericDelta === null || visualMax <= 0) {
+    return 0;
+  }
+
+  const raw = (Math.abs(numericDelta) / visualMax) * 48;
+  return clampPilotageInstrumentPercent(Math.max(4, Math.min(48, raw)));
+}
+
+
+/* PILOTAGEVISU008C-FIX2 — boussole narrative de trajectoire */
+function getPilotageTrajectoryNarrative(axis, direction) {
+  const normalizedAxis = String(axis || "");
+  const normalizedDirection = String(direction || "unknown");
+
+  const narratives = {
+    rotation: {
+      up: "circulation renforcée",
+      down: "ralentissement",
+      flat: "régime stable",
+      unknown: "non comparable"
+    },
+    retention: {
+      up: "circuit renforcé",
+      down: "tension de sortie",
+      flat: "équilibre stable",
+      unknown: "non comparable"
+    },
+    yield: {
+      up: "rendement renforcé",
+      down: "rendement réduit",
+      flat: "rendement stable",
+      unknown: "non comparable"
+    },
+    coverage: {
+      up: "réserve renforcée",
+      down: "couverture réduite",
+      flat: "réserve stable",
+      unknown: "non comparable"
+    }
+  };
+
+  return narratives[normalizedAxis]?.[normalizedDirection] || "non comparable";
+}
+
+function buildPilotageGlobalTrajectoryState({
+  rotationDirection,
+  retentionDirection,
+  coverageDirection
+} = {}) {
+  const scoreMap = {
+    up: 1,
+    flat: 0,
+    down: -1,
+    unknown: 0
+  };
+
+  const score = (
+    (scoreMap[rotationDirection] || 0) +
+    (scoreMap[retentionDirection] || 0) +
+    (scoreMap[coverageDirection] || 0)
+  );
+
+  if (
+    (retentionDirection === "up" || retentionDirection === "flat") &&
+    (coverageDirection === "up" || coverageDirection === "flat") &&
+    rotationDirection !== "down"
+  ) {
+    return {
+      label: "consolidation du circuit",
+      tone: "positive",
+      detail: "les entrées/sorties et la couverture évoluent favorablement, avec une circulation stable ou mieux."
+    };
+  }
+
+  if (score >= 2) {
+    return {
+      label: "dynamique favorable",
+      tone: "positive",
+      detail: "plusieurs axes progressent par rapport à la période équivalente précédente."
+    };
+  }
+
+  if (score <= -2) {
+    return {
+      label: "tension à surveiller",
+      tone: "watch",
+      detail: "plusieurs axes reculent par rapport à la période équivalente précédente."
+    };
+  }
+
+  return {
+    label: "trajectoire contrastée",
+    tone: "neutral",
+    detail: "les signaux sont mixtes ou proches de la stabilité."
+  };
+}
+
+
+
+/* PILOTAGEVISU009C — phrases dynamiques d’analyse des cartes trajectoire */
+function buildPilotageTrajectoryCardExplanation({
+  axis,
+  currentValue,
+  previousValue,
+  delta,
+  direction
+} = {}) {
+  const current = normalizePilotageInstrumentNumber(currentValue);
+  const previous = normalizePilotageInstrumentNumber(previousValue);
+  const numericDelta = normalizePilotageInstrumentNumber(delta);
+
+  if (current === null || previous === null || numericDelta === null) {
+    return "Lecture non disponible : la période équivalente ne contient pas assez de données comparables.";
+  }
+
+  const safeDirection = ["up", "down", "flat"].includes(direction) ? direction : "flat";
+
+  if (axis === "rotation") {
+    const currentText = formatPilotageMultiple(current);
+    const previousText = formatPilotageMultiple(previous);
+    const deltaText = formatPilotageSignedDeltaValue(numericDelta, "absolute", 2, "×");
+
+    const interpretation = safeDirection === "up"
+      ? "La monnaie produit davantage d’activité par rapport à sa masse moyenne : la circulation s’intensifie."
+      : safeDirection === "down"
+        ? "La monnaie produit moins d’activité par rapport à sa masse moyenne : la circulation ralentit relativement."
+        : "La circulation reste proche de la période équivalente : le régime d’activité est stable.";
+
+    return `Calcul : activité économique rapportée à la masse numérique moyenne, puis annualisée selon la durée couverte. Résultat : ${currentText} contre ${previousText} sur la période équivalente (${deltaText}). Borne radar : 0 → 3×. ${interpretation}`;
+  }
+
+  if (axis === "retention") {
+    const currentText = formatPilotagePercent(current);
+    const previousText = formatPilotagePercent(previous);
+    const deltaText = formatPilotageSignedDeltaValue(numericDelta * 100, "points", 1);
+
+    const interpretation = safeDirection === "up"
+      ? "Les alimentations restent davantage dans le circuit après sorties : le circuit se consolide."
+      : safeDirection === "down"
+        ? "Les sorties absorbent davantage les alimentations : la pression de sortie augmente."
+        : "Le rapport entrées / sorties reste proche de la période équivalente.";
+
+    return `Calcul : (alimentations − sorties) ÷ alimentations. Résultat : ${currentText} contre ${previousText} sur la période équivalente (${deltaText}). Borne radar : −50 % → +50 %. ${interpretation}`;
+  }
+
+  if (axis === "yield") {
+    const currentText = formatPilotageGonetteYield(current);
+    const previousText = formatPilotageGonetteYield(previous);
+    const deltaText = formatPilotageSignedDeltaValue(numericDelta, "yield", 2, "G/G");
+
+    const interpretation = safeDirection === "up"
+      ? "Chaque Gonette sortie du circuit a été associée à davantage d’activité économique avant sortie."
+      : safeDirection === "down"
+        ? "Chaque Gonette sortie du circuit a été associée à moins d’activité économique avant sortie."
+        : "Le rendement apparent avant sortie reste proche de la période équivalente.";
+
+    return `Calcul : activité économique totale ÷ sorties du circuit. Résultat : ${currentText} contre ${previousText} sur la période équivalente (${deltaText}). Borne radar : 0 → 3 G/G. ${interpretation}`;
+  }
+
+  if (axis === "coverage") {
+    const currentText = formatPilotageThirtyDayPeriods(current);
+    const previousText = formatPilotageThirtyDayPeriods(previous);
+    const deltaText = formatPilotageSignedDeltaValue(numericDelta, "absolute", 1, "mois");
+
+    const interpretation = safeDirection === "up"
+      ? "À rythme de sortie comparable, le fonds moyen couvre davantage de mois de reconversion apparente."
+      : safeDirection === "down"
+        ? "À rythme de sortie comparable, la couverture apparente se réduit."
+        : "La couverture apparente reste proche de la période équivalente.";
+
+    return `Calcul : fonds de garantie numérique moyen rapporté au rythme moyen des sorties, exprimé en mois de 30 jours. Résultat : ${currentText} contre ${previousText} sur la période équivalente (${deltaText}). Borne radar : 0 → 12 mois. ${interpretation}`;
+  }
+
+  return "Lecture de trajectoire : comparaison avec la période équivalente précédente, de même durée.";
+}
+
+
+
+/* PILOTAGEVISU009H — KPI d’axe + fils pédagogiques radar/cartes */
+function buildPilotageTrajectoryAxisKpis({
+  currentLabel = "",
+  previousLabel = "",
+  boundsLabel = ""
+} = {}) {
+  return `
+    <div class="pilotage-trajectory-axis-kpis" aria-label="Valeurs de l’axe radar">
+      <span>
+        <b>Actuel</b>
+        <strong>${escapePilotageInstrumentHtml(currentLabel)}</strong>
+      </span>
+      <span>
+        <b>Équivalent</b>
+        <strong>${escapePilotageInstrumentHtml(previousLabel)}</strong>
+      </span>
+      <span>
+        <b>Borne radar</b>
+        <strong>${escapePilotageInstrumentHtml(boundsLabel)}</strong>
+      </span>
+    </div>
+  `;
+}
+
+function buildPilotageTrajectorySpiderLinks() {
+  return `
+    <svg
+      class="pilotage-trajectory-spider-links"
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <defs>
+        <linearGradient id="pilotageTrajectoryLinkGradient" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="rgba(14, 165, 233, 0)" />
+          <stop offset="52%" stop-color="rgba(14, 165, 233, 0.22)" />
+          <stop offset="100%" stop-color="rgba(14, 165, 233, 0.38)" />
+        </linearGradient>
+        <linearGradient id="pilotageTrajectoryLinkNeutral" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="rgba(100, 116, 139, 0)" />
+          <stop offset="100%" stop-color="rgba(100, 116, 139, 0.34)" />
+        </linearGradient>
+      </defs>
+
+      <path d="M 39 30 C 48 26, 54 16, 61 13" />
+      <path d="M 39 44 C 48 43, 54 37, 61 37" />
+      <path d="M 39 58 C 48 58, 54 62, 61 62" />
+      <path d="M 39 72 C 48 76, 54 86, 61 87" />
+    </svg>
+  `;
+}
+
+
+function buildPilotageTrajectoryVisualItem({
+  label,
+  state,
+  deltaText,
+  direction = "flat",
+  intensity = 0,
+  caption = "",
+  metaHtml = ""
+} = {}) {
+  const safeDirection = ["up", "down", "flat", "unknown"].includes(direction)
+    ? direction
+    : "unknown";
+
+  const arrow = {
+    up: "↗",
+    down: "↘",
+    flat: "→",
+    unknown: "·"
+  }[safeDirection];
+
+  const fillStyle = safeDirection === "down"
+    ? `left:${50 - intensity}%; width:${intensity}%`
+    : safeDirection === "up"
+      ? `left:50%; width:${intensity}%`
+      : `left:49%; width:2%`;
+
+  const cursorPosition = safeDirection === "down"
+    ? 50 - intensity
+    : safeDirection === "up"
+      ? 50 + intensity
+      : 50;
+
+  return `
+    <article class="pilotage-trajectory-visual-item pilotage-trajectory-visual-item-${safeDirection}">
+      <div class="pilotage-trajectory-visual-topline">
+        <span>${escapePilotageInstrumentHtml(label)}</span>
+        <strong>${escapePilotageInstrumentHtml(arrow)}</strong>
+      </div>
+
+      <div class="pilotage-trajectory-visual-state">
+        <strong>${escapePilotageInstrumentHtml(state)}</strong>
+        <small>${escapePilotageInstrumentHtml(deltaText)}</small>
+      </div>
+
+      ${metaHtml ? metaHtml : ""}
+
+      <div class="pilotage-trajectory-compass">
+        <div class="pilotage-trajectory-compass-labels" aria-hidden="true">
+          <span>recul</span>
+          <span>stable</span>
+          <span>progression</span>
+        </div>
+
+        <div
+          class="pilotage-trajectory-meter"
+          title="Variation par rapport à la période équivalente précédente"
+          aria-hidden="true"
+        >
+          <span class="pilotage-trajectory-meter-zone pilotage-trajectory-meter-zone-left"></span>
+          <span class="pilotage-trajectory-meter-zone pilotage-trajectory-meter-zone-right"></span>
+          <span class="pilotage-trajectory-meter-zero"></span>
+          <span class="pilotage-trajectory-meter-fill" style="${fillStyle}"></span>
+          <span class="pilotage-trajectory-meter-cursor" style="left:${cursorPosition}%"></span>
+        </div>
+      </div>
+
+      ${caption ? `<p>${escapePilotageInstrumentHtml(caption)}</p>` : ""}
+    </article>
+  `;
+}
+
+
+/* PILOTAGEVISU008D — micro-radar de comparaison des périodes */
+function normalizePilotageRadarScore(value, min, max) {
+  const numericValue = normalizePilotageInstrumentNumber(value);
+  const numericMin = normalizePilotageInstrumentNumber(min);
+  const numericMax = normalizePilotageInstrumentNumber(max);
+
+  if (
+    numericValue === null ||
+    numericMin === null ||
+    numericMax === null ||
+    numericMax <= numericMin
+  ) {
+    return 0;
+  }
+
+  return Math.max(0, Math.min(1, (numericValue - numericMin) / (numericMax - numericMin)));
+}
+
+function buildPilotageRadarPoint(score, index, total = 3) {
+  const center = 50;
+  const radius = 36 * Math.max(0, Math.min(1, Number(score || 0)));
+  const angle = -Math.PI / 2 + (2 * Math.PI * index) / total;
+  const x = center + radius * Math.cos(angle);
+  const y = center + radius * Math.sin(angle);
+
+  return `${x.toFixed(2)},${y.toFixed(2)}`;
+}
+
+function buildPilotageTrajectoryPeriodLine(currentPeriod = {}, previousPeriod = null) {
+  const currentStart = currentPeriod?.start;
+  const currentEnd = currentPeriod?.end;
+  const previousStart = previousPeriod?.start;
+  const previousEnd = previousPeriod?.end;
+
+  if (!currentStart || !currentEnd || !previousStart || !previousEnd) {
+    return "";
+  }
+
+  return `
+    <div class="pilotage-trajectory-period-line">
+      <span>Période affichée : <strong>${escapePilotageInstrumentHtml(formatIsoDateFr(currentStart))} → ${escapePilotageInstrumentHtml(formatIsoDateFr(currentEnd))}</strong></span>
+      <span>Période équivalente : <strong>${escapePilotageInstrumentHtml(formatIsoDateFr(previousStart))} → ${escapePilotageInstrumentHtml(formatIsoDateFr(previousEnd))}</strong></span>
+    </div>
+  `;
+}
+
+/* PILOTAGEVISU008E — radar Chart.js sérieux */
+function getPilotageTrajectoryRadarAxes() {
+  return [
+    {
+      label: "Circulation",
+      path: "pilotage_metrics.circulation.annualized_economic_activity_intensity_indicative",
+      min: 0,
+      max: 3,
+      boundsLabel: "0 → 3×",
+      formatter: formatPilotageMultiple
+    },
+    {
+      label: "Rétention",
+      path: "pilotage_metrics.retention_and_yield.net_inflow_retention_rate",
+      min: -0.5,
+      max: 0.5,
+      boundsLabel: "-50 % → +50 %",
+      formatter: formatPilotagePercent
+    },
+    {
+      label: "Activité / sortie",
+      path: "pilotage_metrics.retention_and_yield.economic_activity_per_outflow",
+      min: 0,
+      max: 3,
+      boundsLabel: "0 → 3 G/G",
+      formatter: formatPilotageGonetteYield
+    },
+    {
+      label: "Couverture",
+      path: "pilotage_metrics.reconversion_coverage_proxy.apparent_reconversion_coverage_30_day_periods",
+      min: 0,
+      max: 12,
+      boundsLabel: "0 → 12 mois",
+      formatter: formatPilotageThirtyDayPeriods
+    }
+  ];
+}
+
+
+/* PILOTAGEVISU008E-FIX3 — bulles de périodes comparées */
+function buildPilotagePeriodComparisonBubbles(currentPeriod = {}, previousPeriod = null) {
+  const currentStart = currentPeriod?.start;
+  const currentEnd = currentPeriod?.end;
+  const previousStart = previousPeriod?.start;
+  const previousEnd = previousPeriod?.end;
+
+  if (!currentStart || !currentEnd || !previousStart || !previousEnd) {
+    return "";
+  }
+
+  return `
+    <div class="pilotage-radar-period-bubbles" aria-label="Périodes comparées">
+      <span class="pilotage-radar-period-bubble pilotage-radar-period-bubble-current">
+        <b>Période affichée</b>
+        ${escapePilotageInstrumentHtml(formatIsoDateFr(currentStart))} → ${escapePilotageInstrumentHtml(formatIsoDateFr(currentEnd))}
+      </span>
+      <span class="pilotage-radar-period-bubble pilotage-radar-period-bubble-previous">
+        <b>Période équivalente</b>
+        ${escapePilotageInstrumentHtml(formatIsoDateFr(previousStart))} → ${escapePilotageInstrumentHtml(formatIsoDateFr(previousEnd))}
+      </span>
+    </div>
+  `;
+}
+
+function buildPilotageTrajectoryRadarPayload(data = {}, previousData = null, previousPeriod = null) {
+  if (!previousData) {
+    return null;
+  }
+
+  const axes = getPilotageTrajectoryRadarAxes();
+  const currentValues = axes.map((axis) => getPilotageNestedValue(data, axis.path));
+  const previousValues = axes.map((axis) => getPilotageNestedValue(previousData, axis.path));
+
+  return {
+    axes,
+    currentPeriod: data?.effective_period || data?.requested_period || {},
+    previousPeriod,
+    currentValues,
+    previousValues,
+    currentScores: axes.map((axis, index) => normalizePilotageRadarScore(
+      currentValues[index],
+      axis.min,
+      axis.max
+    ) * 100),
+    previousScores: axes.map((axis, index) => normalizePilotageRadarScore(
+      previousValues[index],
+      axis.min,
+      axis.max
+    ) * 100)
+  };
+}
+
+
+/* PILOTAGEVISU009J — fils dynamiques radar → cartes */
+function updatePilotageTrajectorySpiderLinks() {
+  const layout = document.querySelector(".pilotage-trajectory-compare-layout");
+  const svg = layout?.querySelector(".pilotage-trajectory-spider-links");
+  const radarCard = layout?.querySelector(".pilotage-trajectory-chartjs-card");
+  const radarFrame = layout?.querySelector(".pilotage-trajectory-chartjs-frame");
+  const cards = Array.from(layout?.querySelectorAll(".pilotage-trajectory-visual-item") || []);
+  const paths = Array.from(svg?.querySelectorAll("path") || []);
+
+  if (!layout || !svg || !radarCard || !radarFrame || cards.length < 4 || paths.length < 4) {
+    return;
+  }
+
+  const layoutRect = layout.getBoundingClientRect();
+  const radarCardRect = radarCard.getBoundingClientRect();
+  const frameRect = radarFrame.getBoundingClientRect();
+
+  const width = Math.max(1, layoutRect.width);
+  const height = Math.max(1, layoutRect.height);
+
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+
+  const centerX = frameRect.left - layoutRect.left + frameRect.width * 0.50;
+  const centerY = frameRect.top - layoutRect.top + frameRect.height * 0.52;
+  const radiusX = frameRect.width * 0.32;
+  const radiusY = frameRect.height * 0.31;
+
+  const radarAxisPoints = [
+    {
+      // Axe 1 · Circulation : sommet du radar
+      x: centerX,
+      y: centerY - radiusY
+    },
+    {
+      // Axe 2 · Rétention : droite du radar
+      x: centerX + radiusX,
+      y: centerY
+    },
+    {
+      // Axe 3 · Activité / sortie : bas du radar
+      x: centerX,
+      y: centerY + radiusY
+    },
+    {
+      // Axe 4 · Couverture : gauche du radar
+      x: centerX - radiusX,
+      y: centerY
+    }
+  ];
+
+  cards.slice(0, 4).forEach((card, index) => {
+    const cardRect = card.getBoundingClientRect();
+    const source = radarAxisPoints[index];
+
+    const targetX = cardRect.left - layoutRect.left;
+    const targetY = cardRect.top - layoutRect.top + Math.min(42, cardRect.height * 0.26);
+
+    const distance = Math.max(40, targetX - source.x);
+    const controlA = source.x + distance * 0.34;
+    const controlB = targetX - distance * 0.28;
+
+    const d = [
+      `M ${source.x.toFixed(1)} ${source.y.toFixed(1)}`,
+      `C ${controlA.toFixed(1)} ${source.y.toFixed(1)},`,
+      `${controlB.toFixed(1)} ${targetY.toFixed(1)},`,
+      `${targetX.toFixed(1)} ${targetY.toFixed(1)}`
+    ].join(" ");
+
+    paths[index].setAttribute("d", d);
+    paths[index].setAttribute("data-axis-index", String(index + 1));
+  });
+}
+
+function schedulePilotageTrajectorySpiderLinksUpdate() {
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      updatePilotageTrajectorySpiderLinks();
+    });
+  });
+
+  if (!window.__pilotageTrajectorySpiderLinksResizeBound) {
+    let resizeTimer = null;
+
+    window.addEventListener("resize", () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(updatePilotageTrajectorySpiderLinks, 120);
+    });
+
+    window.__pilotageTrajectorySpiderLinksResizeBound = true;
+  }
+}
+
+
+function schedulePilotageTrajectoryRadarChart(payload) {
+  if (!payload) {
+    return;
+  }
+
+  window.__pilotageTrajectoryRadarPayload = payload;
+
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      renderPilotageTrajectoryRadarChart(window.__pilotageTrajectoryRadarPayload);
+      schedulePilotageTrajectorySpiderLinksUpdate();
+      forcePilotageTrajectorySpiderLinksUpdate();
+    });
+  });
+}
+
+
+/* PILOTAGEVISU008E-FIX2 — zoom dédié du radar pilotage */
+function renderPilotageTrajectoryRadarZoomChart(payload) {
+  const canvas = document.getElementById("pilotageTrajectoryRadarZoomChart");
+
+  if (!canvas || !payload || typeof Chart === "undefined") {
+    return;
+  }
+
+  if (appState.statsZoomChart && typeof appState.statsZoomChart.destroy === "function") {
+    appState.statsZoomChart.destroy();
+    appState.statsZoomChart = null;
+  }
+
+  appState.statsZoomChart = new Chart(canvas, {
+    type: "radar",
+    data: {
+      labels: payload.axes.map((axis) => axis.label),
+      datasets: [
+        {
+          label: "Période affichée",
+          data: payload.currentScores,
+          borderColor: "rgba(14, 165, 233, 0.95)",
+          backgroundColor: "rgba(14, 165, 233, 0.20)",
+          pointBackgroundColor: "rgba(14, 165, 233, 0.98)",
+          pointBorderColor: "#ffffff",
+          pointBorderWidth: 2,
+          pointRadius: 5,
+          borderWidth: 3
+        },
+        {
+          label: "Période équivalente",
+          data: payload.previousScores,
+          borderColor: "rgba(100, 116, 139, 0.78)",
+          backgroundColor: "rgba(100, 116, 139, 0.10)",
+          pointBackgroundColor: "rgba(100, 116, 139, 0.84)",
+          pointBorderColor: "#ffffff",
+          pointBorderWidth: 2,
+          pointRadius: 4,
+          borderWidth: 2.4,
+          borderDash: [6, 4]
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: {
+        duration: 520,
+        easing: "easeOutQuart"
+      },
+      plugins: {
+        legend: {
+          position: "bottom",
+          labels: {
+            boxWidth: 12,
+            boxHeight: 12,
+            usePointStyle: true,
+            padding: 18,
+            font: {
+              size: 13,
+              weight: "800"
+            }
+          }
+        },
+        tooltip: {
+          callbacks: {
+            title(items) {
+              const item = items?.[0];
+              return item ? payload.axes[item.dataIndex]?.label || "" : "";
+            },
+            label(context) {
+              const axis = payload.axes[context.dataIndex];
+              const values = context.datasetIndex === 0
+                ? payload.currentValues
+                : payload.previousValues;
+              const rawValue = values[context.dataIndex];
+              const normalized = Math.round(context.parsed.r);
+
+              return `${context.dataset.label} : ${axis.formatter(rawValue)} · score normalisé ${normalized}/100`;
+            },
+            afterLabel(context) {
+              const axis = payload.axes[context.dataIndex];
+              return `Borne : ${axis.boundsLabel}`;
+            }
+          }
+        }
+      },
+      scales: {
+        r: {
+          min: 0,
+          max: 100,
+          ticks: {
+            backdropColor: "rgba(255, 255, 255, 0.72)",
+            color: "#64748b",
+            display: true,
+            stepSize: 20,
+            callback(value) {
+              return `${value}`;
+            },
+            font: {
+              size: 11,
+              weight: "700"
+            }
+          },
+          pointLabels: {
+            color: "#334155",
+            font: {
+              size: 15,
+              weight: "900"
+            }
+          },
+          grid: {
+            color: "rgba(148, 163, 184, 0.30)"
+          },
+          angleLines: {
+            color: "rgba(148, 163, 184, 0.26)"
+          }
+        }
+      }
+    }
+  });
+}
+
+function openPilotageTrajectoryRadarZoom() {
+  const payload = window.__pilotageTrajectoryRadarPayload;
+
+  if (!payload) {
+    openStatsChartModal(`
+      <div class="stats-chart-zoom-shell pilotage-trajectory-radar-zoom-shell">
+        <p class="stats-chart-modal-kicker">Agrandissement</p>
+        <div class="stats-chart-zoom-header">
+          <div class="stats-chart-zoom-title-group">
+            <h2>Profil comparatif normalisé</h2>
+            <p>Le radar n’est pas encore disponible pour cette période.</p>
+          </div>
+        </div>
+      </div>
+    `, "zoom");
+    return;
+  }
+
+  const axisRows = payload.axes.map((axis, index) => `
+    <li>
+      <span>${escapePilotageInstrumentHtml(axis.label)}</span>
+      <strong>${axis.formatter(payload.currentValues[index])}</strong>
+      <small>période équivalente : ${axis.formatter(payload.previousValues[index])}</small>
+      <em>borne : ${escapePilotageInstrumentHtml(axis.boundsLabel)}</em>
+    </li>
+  `).join("");
+
+  openStatsChartModal(`
+    <div class="stats-chart-zoom-shell pilotage-trajectory-radar-zoom-shell">
+      <p class="stats-chart-modal-kicker">Agrandissement</p>
+
+      <div class="stats-chart-zoom-header">
+        <div class="stats-chart-zoom-title-group">
+          <h2>Profil comparatif normalisé</h2>
+          <p>
+            Radar Chart.js comparant la période affichée et la période équivalente précédente.
+            Les scores sont normalisés sur des bornes fixes.
+          </p>
+        </div>
+      </div>
+
+      ${buildPilotagePeriodComparisonBubbles(payload.currentPeriod, payload.previousPeriod)}
+
+      <div class="pilotage-trajectory-radar-zoom-layout">
+        <div class="stats-chart-zoom-canvas-wrap pilotage-trajectory-radar-zoom-wrap">
+          <canvas id="pilotageTrajectoryRadarZoomChart"></canvas>
+        </div>
+
+        <aside class="pilotage-trajectory-radar-zoom-values">
+          <h3>Valeurs brutes</h3>
+          <ul>
+            ${axisRows}
+          </ul>
+          <p>
+            Le radar compare une forme de profil. Il ne remplace pas les valeurs brutes,
+            ni les graphiques détaillés des onglets suivants.
+          </p>
+        </aside>
+      </div>
+    </div>
+  `, "zoom");
+
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      renderPilotageTrajectoryRadarZoomChart(payload);
+    });
+  });
+}
+
+
+function renderPilotageTrajectoryRadarChart(payload) {
+  const canvas = document.getElementById("pilotageTrajectoryRadarChart");
+
+  if (!canvas || !payload || typeof Chart === "undefined") {
+    return;
+  }
+
+  const existingChart = appState.charts?.pilotageTrajectoryRadar;
+
+  if (existingChart && typeof existingChart.destroy === "function") {
+    existingChart.destroy();
+  }
+
+  const axisLabels = payload.axes.map((axis) => axis.label);
+
+  appState.charts.pilotageTrajectoryRadar = new Chart(canvas, {
+    type: "radar",
+    data: {
+      labels: axisLabels,
+      datasets: [
+        {
+          label: "Période affichée",
+          data: payload.currentScores,
+          borderColor: "rgba(14, 165, 233, 0.92)",
+          backgroundColor: "rgba(14, 165, 233, 0.18)",
+          pointBackgroundColor: "rgba(14, 165, 233, 0.95)",
+          pointBorderColor: "#ffffff",
+          pointBorderWidth: 2,
+          pointRadius: 4,
+          borderWidth: 2.5
+        },
+        {
+          label: "Période équivalente",
+          data: payload.previousScores,
+          borderColor: "rgba(100, 116, 139, 0.72)",
+          backgroundColor: "rgba(100, 116, 139, 0.10)",
+          pointBackgroundColor: "rgba(100, 116, 139, 0.82)",
+          pointBorderColor: "#ffffff",
+          pointBorderWidth: 2,
+          pointRadius: 3,
+          borderWidth: 2,
+          borderDash: [5, 4]
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: {
+        duration: 520,
+        easing: "easeOutQuart"
+      },
+      plugins: {
+        legend: {
+          position: "bottom",
+          labels: {
+            boxWidth: 10,
+            boxHeight: 10,
+            usePointStyle: true,
+            font: {
+              size: 11,
+              weight: "700"
+            }
+          }
+        },
+        tooltip: {
+          callbacks: {
+            title(items) {
+              const item = items?.[0];
+              return item ? payload.axes[item.dataIndex]?.label || "" : "";
+            },
+            label(context) {
+              const axis = payload.axes[context.dataIndex];
+              const values = context.datasetIndex === 0
+                ? payload.currentValues
+                : payload.previousValues;
+              const rawValue = values[context.dataIndex];
+              const normalized = Math.round(context.parsed.r);
+
+              return `${context.dataset.label} : ${axis.formatter(rawValue)} · score normalisé ${normalized}/100`;
+            },
+            afterLabel(context) {
+              const axis = payload.axes[context.dataIndex];
+              return `Borne : ${axis.boundsLabel}`;
+            }
+          }
+        }
+      },
+      scales: {
+        r: {
+          min: 0,
+          max: 100,
+          ticks: {
+            display: false,
+            stepSize: 20
+          },
+          pointLabels: {
+            color: "#475569",
+            font: {
+              size: 12,
+              weight: "800"
+            }
+          },
+          grid: {
+            color: "rgba(148, 163, 184, 0.28)"
+          },
+          angleLines: {
+            color: "rgba(148, 163, 184, 0.24)"
+          }
+        }
+      }
+    }
+  });
+}
+
+function buildPilotageTrajectoryRadar(data = {}, previousData = null, previousPeriod = null) {
+  const payload = buildPilotageTrajectoryRadarPayload(data, previousData, previousPeriod);
+
+  if (!payload) {
+    return "";
+  }
+
+  schedulePilotageTrajectoryRadarChart(payload);
+
+  const axisRows = payload.axes.map((axis, index) => `
+    <li>
+      <span>${escapePilotageInstrumentHtml(axis.label)}</span>
+      <strong>${axis.formatter(payload.currentValues[index])}</strong>
+      <small>avant : ${axis.formatter(payload.previousValues[index])}</small>
+      <em>borne : ${escapePilotageInstrumentHtml(axis.boundsLabel)}</em>
+    </li>
+  `).join("");
+
+  return `
+    <article class="pilotage-trajectory-radar-card pilotage-trajectory-chartjs-card">
+      ${buildStatsChartHeader({
+        chartKey: "pilotageTrajectoryRadar",
+        title: "Profil comparatif normalisé",
+        description: "Comparaison normalisée de la période affichée et de la période équivalente précédente sur quatre axes : circulation, rétention, activité / sortie, couverture.",
+        supportsMetricToggle: false
+      })}
+
+      ${buildPilotagePeriodComparisonBubbles(payload.currentPeriod, payload.previousPeriod)}
+
+      <div class="pilotage-trajectory-radar-body pilotage-trajectory-chartjs-body">
+        <div class="pilotage-trajectory-chartjs-frame">
+          <canvas id="pilotageTrajectoryRadarChart"></canvas>
+        </div>
+
+        <ul class="pilotage-trajectory-radar-values">
+          ${axisRows}
+        </ul>
+      </div>
+
+      <div class="pilotage-trajectory-radar-legend">
+        <span><i class="pilotage-radar-dot-current"></i>période affichée</span>
+        <span><i class="pilotage-radar-dot-previous"></i>période équivalente</span>
+      </div>
+
+      <p class="pilotage-trajectory-radar-method">
+        Profil normalisé sur quatre axes. Le radar compare la forme des deux périodes ;
+        les cartes à droite explicitent chaque axe du radar.
+      </p>
+    </article>
+  `;
+}
+
+function buildPilotageTrajectoryDigest(data = {}, previousData = null, previousPeriod = null) {
+  if (!previousData) {
+    return "";
+  }
+
+  const rotationDelta = getPilotageNumericDelta(
+    getPilotageNestedValue(
+      data,
+      "pilotage_metrics.circulation.annualized_economic_activity_intensity_indicative"
+    ),
+    getPilotageNestedValue(
+      previousData,
+      "pilotage_metrics.circulation.annualized_economic_activity_intensity_indicative"
+    )
+  );
+
+  const retentionDelta = getPilotageNumericDelta(
+    getPilotageNestedValue(
+      data,
+      "pilotage_metrics.retention_and_yield.net_inflow_retention_rate"
+    ),
+    getPilotageNestedValue(
+      previousData,
+      "pilotage_metrics.retention_and_yield.net_inflow_retention_rate"
+    )
+  );
+
+  const yieldDelta = getPilotageNumericDelta(
+    getPilotageNestedValue(
+      data,
+      "pilotage_metrics.retention_and_yield.economic_activity_per_outflow"
+    ),
+    getPilotageNestedValue(
+      previousData,
+      "pilotage_metrics.retention_and_yield.economic_activity_per_outflow"
+    )
+  );
+
+  const coverageDelta = getPilotageNumericDelta(
+    getPilotageNestedValue(
+      data,
+      "pilotage_metrics.reconversion_coverage_proxy.apparent_reconversion_coverage_30_day_periods"
+    ),
+    getPilotageNestedValue(
+      previousData,
+      "pilotage_metrics.reconversion_coverage_proxy.apparent_reconversion_coverage_30_day_periods"
+    )
+  );
+
+  const rotationDirection = getPilotageTrajectoryDirection(rotationDelta, 0.05);
+  const retentionDirection = getPilotageTrajectoryDirection(retentionDelta, 0.03);
+  const yieldDirection = getPilotageTrajectoryDirection(yieldDelta, 0.10);
+  const coverageDirection = getPilotageTrajectoryDirection(coverageDelta, 0.2);
+  const globalTrajectory = buildPilotageGlobalTrajectoryState({
+    rotationDirection,
+    retentionDirection,
+    coverageDirection
+  });
+
+  return `
+    <section class="card pilotage-trajectory-digest-card pilotage-trajectory-visual-card">
+      <div class="pilotage-section-heading pilotage-trajectory-heading">
+        <h3>Trajectoire par rapport à la période équivalente</h3>
+        <p>
+          Comparaison avec la période immédiatement précédente de même durée : une lecture de tendance, pas un jugement de performance.
+        </p>
+      </div>
+
+      <div class="pilotage-trajectory-global pilotage-trajectory-global-${escapePilotageInstrumentHtml(globalTrajectory.tone)}">
+        <span>Trajectoire globale</span>
+        <strong>${escapePilotageInstrumentHtml(globalTrajectory.label)}</strong>
+        <small>${escapePilotageInstrumentHtml(globalTrajectory.detail)}</small>
+      </div>
+
+      <div class="pilotage-trajectory-compare-layout">
+        ${buildPilotageTrajectoryRadar(data, previousData, previousPeriod)}
+
+        <div class="pilotage-trajectory-digest-grid pilotage-trajectory-visual-grid">
+        ${buildPilotageTrajectoryVisualItem({
+          label: "Axe 1 · Circulation",
+          state: getPilotageTrajectoryNarrative("rotation", rotationDirection),
+          deltaText: formatPilotageSignedDeltaValue(rotationDelta, "absolute", 2, "×"),
+          direction: rotationDirection,
+          metaHtml: buildPilotageTrajectoryAxisKpis({
+            currentLabel: formatPilotageMultiple(getPilotageNestedValue(data, "pilotage_metrics.circulation.annualized_economic_activity_intensity_indicative")),
+            previousLabel: formatPilotageMultiple(getPilotageNestedValue(previousData, "pilotage_metrics.circulation.annualized_economic_activity_intensity_indicative")),
+            boundsLabel: "0 → 3×"
+          }),
+          intensity: getPilotageTrajectoryIntensity(rotationDelta, 0.25),
+          caption: buildPilotageTrajectoryCardExplanation({
+            axis: "rotation",
+            currentValue: getPilotageNestedValue(data, "pilotage_metrics.circulation.annualized_economic_activity_intensity_indicative"),
+            previousValue: getPilotageNestedValue(previousData, "pilotage_metrics.circulation.annualized_economic_activity_intensity_indicative"),
+            delta: rotationDelta,
+            direction: rotationDirection
+          })
+        })}
+
+        ${buildPilotageTrajectoryVisualItem({
+          label: "Axe 2 · Rétention",
+          state: getPilotageTrajectoryNarrative("retention", retentionDirection),
+          deltaText: formatPilotageSignedDeltaValue(retentionDelta * 100, "points", 1),
+          direction: retentionDirection,
+          metaHtml: buildPilotageTrajectoryAxisKpis({
+            currentLabel: formatPilotagePercent(getPilotageNestedValue(data, "pilotage_metrics.retention_and_yield.net_inflow_retention_rate")),
+            previousLabel: formatPilotagePercent(getPilotageNestedValue(previousData, "pilotage_metrics.retention_and_yield.net_inflow_retention_rate")),
+            boundsLabel: "−50 % → +50 %"
+          }),
+          intensity: getPilotageTrajectoryIntensity(retentionDelta, 0.5),
+          caption: buildPilotageTrajectoryCardExplanation({
+            axis: "retention",
+            currentValue: getPilotageNestedValue(data, "pilotage_metrics.retention_and_yield.net_inflow_retention_rate"),
+            previousValue: getPilotageNestedValue(previousData, "pilotage_metrics.retention_and_yield.net_inflow_retention_rate"),
+            delta: retentionDelta,
+            direction: retentionDirection
+          })
+        })}
+
+        ${buildPilotageTrajectoryVisualItem({
+          label: "Axe 3 · Activité / sortie",
+          state: getPilotageTrajectoryNarrative("yield", yieldDirection),
+          deltaText: formatPilotageSignedDeltaValue(yieldDelta, "yield", 2, "G/G"),
+          direction: yieldDirection,
+          metaHtml: buildPilotageTrajectoryAxisKpis({
+            currentLabel: formatPilotageGonetteYield(getPilotageNestedValue(data, "pilotage_metrics.retention_and_yield.economic_activity_per_outflow")),
+            previousLabel: formatPilotageGonetteYield(getPilotageNestedValue(previousData, "pilotage_metrics.retention_and_yield.economic_activity_per_outflow")),
+            boundsLabel: "0 → 3 G/G"
+          }),
+          intensity: getPilotageTrajectoryIntensity(yieldDelta, 0.75),
+          caption: buildPilotageTrajectoryCardExplanation({
+            axis: "yield",
+            currentValue: getPilotageNestedValue(data, "pilotage_metrics.retention_and_yield.economic_activity_per_outflow"),
+            previousValue: getPilotageNestedValue(previousData, "pilotage_metrics.retention_and_yield.economic_activity_per_outflow"),
+            delta: yieldDelta,
+            direction: yieldDirection
+          })
+        })}
+
+        ${buildPilotageTrajectoryVisualItem({
+          label: "Axe 4 · Couverture",
+          state: getPilotageTrajectoryNarrative("coverage", coverageDirection),
+          deltaText: formatPilotageSignedDeltaValue(coverageDelta, "absolute", 1, "mois"),
+          direction: coverageDirection,
+          metaHtml: buildPilotageTrajectoryAxisKpis({
+            currentLabel: formatPilotageThirtyDayPeriods(getPilotageNestedValue(data, "pilotage_metrics.reconversion_coverage_proxy.apparent_reconversion_coverage_30_day_periods")),
+            previousLabel: formatPilotageThirtyDayPeriods(getPilotageNestedValue(previousData, "pilotage_metrics.reconversion_coverage_proxy.apparent_reconversion_coverage_30_day_periods")),
+            boundsLabel: "0 → 12 mois"
+          }),
+          intensity: getPilotageTrajectoryIntensity(coverageDelta, 3),
+          caption: buildPilotageTrajectoryCardExplanation({
+            axis: "coverage",
+            currentValue: getPilotageNestedValue(data, "pilotage_metrics.reconversion_coverage_proxy.apparent_reconversion_coverage_30_day_periods"),
+            previousValue: getPilotageNestedValue(previousData, "pilotage_metrics.reconversion_coverage_proxy.apparent_reconversion_coverage_30_day_periods"),
+            delta: coverageDelta,
+            direction: coverageDirection
+          })
+        })}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function buildPilotageDeltaLine({
+  currentValue,
+  previousValue,
+  mode = "absolute",
+  unit = "",
+  digits = 1
+} = {}) {
+  const current = normalizePilotageInstrumentNumber(currentValue);
+  const previous = normalizePilotageInstrumentNumber(previousValue);
+
+  if (current === null || previous === null) {
+    return "";
+  }
+
+  const delta = current - previous;
+  const absDelta = Math.abs(delta);
+  const epsilon = 0.000001;
+  const direction = absDelta <= epsilon ? "flat" : (delta > 0 ? "up" : "down");
+  const arrow = direction === "up" ? "↗" : (direction === "down" ? "↘" : "→");
+
+  let formattedDelta = "";
+
+  if (mode === "points") {
+    formattedDelta = `${delta >= 0 ? "+" : ""}${(delta * 100).toLocaleString("fr-FR", {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits
+    })} pts`;
+  } else if (mode === "months") {
+    formattedDelta = `${delta >= 0 ? "+" : ""}${delta.toLocaleString("fr-FR", {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits
+    })} mois`;
+  } else if (mode === "yield") {
+    formattedDelta = `${delta >= 0 ? "+" : ""}${delta.toLocaleString("fr-FR", {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits
+    })} ${unit || "G/G"}`;
+  } else {
+    formattedDelta = `${delta >= 0 ? "+" : ""}${delta.toLocaleString("fr-FR", {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits
+    })}${unit ? ` ${unit}` : ""}`;
+  }
+
+  return `
+    <span
+      class="pilotage-delta-line pilotage-delta-line-${direction}"
+      title="Variation par rapport à la période précédente équivalente, de même durée"
+    >
+      <span class="pilotage-delta-arrow">${arrow}</span>
+      <strong>${formattedDelta}</strong>
+      <em>vs période équivalente</em>
+    </span>
+  `;
+}
+
+
 function clampDateToBounds(dateString) {
   if (!dateString) return dateString;
 
@@ -9476,7 +10758,7 @@ function buildPilotageRotationChartConfig(items, summary) {
   const datasets = [
     {
       type: "line",
-      label: "Rotation annualisée",
+      label: "Intensité d’activité / masse moyenne",
       data: items.map((item) => (
         item.annualized_economic_activity_intensity_indicative ?? null
       )),
@@ -9540,7 +10822,7 @@ function buildPilotageRotationChartConfig(items, summary) {
           beginAtZero: true,
           title: {
             display: true,
-            text: "Rotation annualisée (× / an)"
+            text: "Intensité d’activité / masse moyenne (× / an)"
           },
           ticks: {
             callback(value) {
@@ -9648,7 +10930,7 @@ function buildPilotageRetentionChartConfig(items) {
       labels,
       datasets: [
         {
-          label: "Rétention nette des alimentations",
+          label: "Entrées conservées après sorties des alimentations",
           data: items.map((item) => (
             item.net_inflow_retention_rate === null ||
             item.net_inflow_retention_rate === undefined
@@ -9672,7 +10954,7 @@ function buildPilotageRetentionChartConfig(items) {
         tooltip: {
           callbacks: {
             label(context) {
-              return `Rétention nette : ${formatPilotageChartPercent(context.raw)}`;
+              return `Entrées conservées après sorties : ${formatPilotageChartPercent(context.raw)}`;
             },
             afterTitle(context) {
               const index = context?.[0]?.dataIndex;
@@ -9691,7 +10973,7 @@ function buildPilotageRetentionChartConfig(items) {
         y: {
           title: {
             display: true,
-            text: "Rétention nette (%)"
+            text: "Entrées conservées après sorties (%)"
           },
           ticks: {
             callback(value) {
@@ -10943,45 +12225,52 @@ const PILOTAGE_INDICATOR_HELP = {
 
   annualizedRotation: {
     title: "Rotation économique annualisée",
-    summary: "Cet indicateur synthétise, à l’échelle de la période, l’intensité de circulation de la Gonette numérique rapportée à la masse disponible.",
-    usefulness: "Il sert à savoir si la masse numérique présente dans le système produit réellement de l’activité économique. C’est un indicateur de vitalité circulatoire, plus exigeant qu’un simple volume de transactions.",
+    summary: "Cet indicateur situe l’intensité de circulation de la Gonette numérique : combien d’activité économique est générée par rapport à la masse numérique moyenne disponible.",
+    usefulness: "Il aide à savoir si la masse présente dans le système circule réellement. La jauge affichée en synthèse n’est pas un verdict absolu : elle situe la valeur par rapport aux mois disponibles dans la période affichée.",
     reading: [
       "Une valeur plus élevée signale davantage d’activité économique générée par unité de masse numérique moyenne.",
-      "Une valeur plus faible peut traduire un ralentissement de l’usage, mais aussi une hausse récente de la masse plus rapide que l’activité.",
-      "L’annualisation permet de comparer des périodes de durées différentes, mais elle reste indicative sur les périodes courtes."
+      "Une valeur plus faible peut traduire un ralentissement d’usage, mais aussi une hausse récente de la masse plus rapide que l’activité.",
+      "Le repère visuel est relatif : il compare la valeur de synthèse aux observations mensuelles disponibles, notamment à leur médiane.",
+      "Il n’existe pas ici de seuil scientifique simple permettant de dire automatiquement « bon » ou « mauvais »."
     ],
     crossReading: [
       "À croiser avec la « Masse numérique moyenne » et l’« Activité économique » dans les grandeurs de référence.",
-      "À rapprocher du graphe « Rotation économique annualisée » pour voir si la moyenne de période masque des inflexions mensuelles.",
-      "À lire avec la « Rétention nette des alimentations » : garder davantage de Gonettes dans le circuit est d’autant plus intéressant si elles circulent effectivement."
+      "À rapprocher du graphe « Rotation économique annualisée » pour vérifier si la moyenne de période masque des inflexions mensuelles.",
+      "À lire avec la « Entrées conservées après sorties des alimentations » : garder davantage de Gonettes dans le circuit est plus intéressant si elles circulent effectivement."
     ],
     pilotage: [
       "Si la rotation baisse durablement, vérifier si l’activité ralentit, si la masse s’accumule, ou si les nouveaux volumes injectés trouvent mal leurs débouchés.",
+      "Si elle augmente fortement, vérifier que la dynamique ne repose pas uniquement sur quelques gros flux exceptionnels.",
       "À terme, cet indicateur devra être rapproché de la masse active / dormante."
     ],
     perimeter: [
       "Basé sur l’activité économique numérique retenue dans MLCFlux et sur la masse numérique moyenne issue des stocks Odoo.",
+      "La jauge de synthèse utilise un repère interne à la période affichée, pas un benchmark externe.",
       "Ne mesure pas directement un multiplicateur économique complet ni un impact territorial."
     ],
     formulas: [
       "Rotation de période = activité économique / masse numérique moyenne.",
-      "Rotation annualisée indicative = rotation de période rapportée à une année."
+      "Intensité d’activité / masse moyenne indicative = rotation de période rapportée à une année.",
+      "Repère visuel = position relative entre les valeurs mensuelles disponibles sur la période affichée."
     ],
     sources: [
       "pilotage-summary.pilotage_metrics.circulation",
       "pilotage-summary.flow_reference",
-      "pilotage-summary.monetary_reference"
+      "pilotage-summary.monetary_reference",
+      "pilotage-timeseries.items"
     ]
   },
 
   netInflowRetention: {
-    title: "Rétention nette des alimentations",
+    title: "Entrées conservées après sorties des alimentations",
     summary: "Cet indicateur mesure la part nette des Gonettes nouvellement alimentées qui reste dans le circuit une fois les sorties observées retranchées.",
-    usefulness: "Il renseigne sur la capacité apparente du circuit à conserver les volumes qui entrent. C’est utile pour distinguer une alimentation qui consolide réellement le système d’une alimentation vite neutralisée par des sorties.",
+    usefulness: "Il renseigne sur la capacité apparente du circuit à conserver les volumes qui entrent. La jauge ajoute un repère national indicatif, issu de l’enquête nationale 2023 sur les monnaies locales.",
     reading: [
       "Une valeur positive signifie que les alimentations sont supérieures aux sorties.",
       "Une valeur proche de zéro indique que les entrées sont presque compensées par les sorties.",
-      "Une valeur négative indique que les sorties dépassent les entrées sur la période."
+      "Une valeur négative indique que les sorties dépassent les entrées sur la période.",
+      "Le repère national affiché en synthèse correspond à une rétention apparente de 13,2 %, dérivée d’un taux moyen de reconversion national 2022 de 86,8 %.",
+      "Ce repère doit rester prudent : les périodes, périmètres et définitions doivent être comparables."
     ],
     crossReading: [
       "À croiser avec les volumes « Alimentations » et « Sorties » dans les grandeurs de référence.",
@@ -10990,18 +12279,22 @@ const PILOTAGE_INDICATOR_HELP = {
     ],
     pilotage: [
       "Si la rétention se dégrade, identifier si cela vient d’une baisse des entrées, d’une hausse des sorties, ou d’un effet combiné.",
-      "Si elle s’améliore fortement, vérifier aussi que la masse ne devient pas plus dormante."
+      "Si elle s’améliore fortement, vérifier aussi que la masse ne devient pas plus dormante.",
+      "Le repère national permet une lecture de contexte, mais la décision de pilotage doit surtout s’appuyer sur la trajectoire propre de la Gonette."
     ],
     perimeter: [
       "Ratio construit uniquement à partir des alimentations et sorties numériques identifiées dans Cyclos.",
+      "Le repère national n’est pas encore un seuil de performance : il sert de point de comparaison documentaire.",
       "Ne dit pas à lui seul si les Gonettes conservées sont activement redépensées."
     ],
     formulas: [
-      "Rétention nette = (alimentations − sorties) / alimentations × 100."
+      "Entrées conservées après sorties = (alimentations − sorties) / alimentations × 100.",
+      "Repère national indicatif = 100 % − taux moyen de reconversion national."
     ],
     sources: [
       "pilotage-summary.pilotage_metrics.retention_and_yield",
-      "pilotage-summary.flow_reference"
+      "pilotage-summary.flow_reference",
+      "Enquête nationale 2023 sur les monnaies locales en France"
     ]
   },
 
@@ -11012,38 +12305,46 @@ const PILOTAGE_INDICATOR_HELP = {
     reading: [
       "Une valeur élevée signifie que les sorties sont faibles relativement à l’activité générée.",
       "Une valeur plus basse signale que les reconversions prennent davantage de poids au regard de l’activité économique.",
-      "Cet indicateur n’établit pas une causalité individuelle entre une Gonette qui circule et une Gonette qui sort."
+      "La jauge utilise un repère interne, construit à partir des mois disponibles dans la période affichée.",
+      "Ce KPI est un proxy de pilotage : il ne doit pas être confondu avec le LM3 scientifique, qui suit les vagues successives de circulation après injection."
     ],
     crossReading: [
       "À lire avec le volume de « Sorties » et les « Sorties quotidiennes moyennes ».",
       "À rapprocher de la rotation économique : un bon rendement avant sortie est plus robuste si l’intensité circulatoire reste elle aussi élevée.",
-      "À comparer à « Activité générée pour 1 G alimenté » afin de distinguer rendement des entrées et rendement avant sortie."
+      "À comparer à « Activité générée pour 1 G alimenté » afin de distinguer rendement des entrées et rendement avant sortie.",
+      "À comparer au bloc LM3 de l’onglet « Circulation & rendement » pour une lecture plus proche de la littérature scientifique."
     ],
     pilotage: [
       "Une baisse progressive peut inviter à examiner si les sorties professionnelles s’accélèrent ou si l’activité économique ne suit plus.",
-      "Utile pour suivre la capacité du circuit à produire de l’activité avant reconversion."
+      "Utile pour suivre la capacité du circuit à produire de l’activité avant reconversion.",
+      "Ne pas l’utiliser seul comme indicateur d’impact : il décrit un rapport entre flux observés, pas une causalité individuelle."
     ],
     perimeter: [
       "Fondé sur l’activité économique numérique retenue et sur les sorties identifiées dans Cyclos.",
-      "À interpréter avec prudence lorsque le volume de sorties est très faible."
+      "À interpréter avec prudence lorsque le volume de sorties est très faible.",
+      "Repère visuel interne à la période affichée."
     ],
     formulas: [
-      "Activité pour 1 G sorti = volume d’activité économique / volume de sorties."
+      "Activité pour 1 G sorti = volume d’activité économique / volume de sorties.",
+      "Repère visuel = position relative entre les valeurs mensuelles disponibles sur la période affichée."
     ],
     sources: [
       "pilotage-summary.pilotage_metrics.retention_and_yield",
-      "pilotage-summary.flow_reference"
+      "pilotage-summary.flow_reference",
+      "pilotage-timeseries.items"
     ]
   },
 
   apparentReconversionCoverage: {
-    title: "Couverture apparente des reconversions",
+    title: "Fonds moyen / rythme de sorties des reconversions",
     summary: "Cet indicateur exprime combien de jours ou de mois de sorties moyennes le fonds de garantie numérique moyen représenterait au rythme observé.",
-    usefulness: "Il fournit une lecture de robustesse apparente face au rythme courant des reconversions. Ce n’est pas un ratio prudentiel réglementaire, mais un repère de pilotage utile pour mettre les sorties en perspective.",
+    usefulness: "Il fournit une lecture de robustesse apparente face au rythme courant des reconversions. La jauge est un repère interne de pilotage, pas un ratio prudentiel réglementaire.",
     reading: [
       "Une couverture plus longue signifie que les sorties observées sont faibles relativement au fonds de garantie moyen.",
       "Une couverture plus courte signale une pression de sortie plus forte au regard du stock de garantie.",
-      "La valeur dépend à la fois du fonds moyen et du rythme des reconversions."
+      "La valeur dépend à la fois du fonds moyen et du rythme des reconversions.",
+      "La jauge situe la période affichée par rapport aux mois disponibles, notamment à leur médiane.",
+      "Ce n’est pas une mesure juridique ou bancaire de solvabilité."
     ],
     crossReading: [
       "À croiser avec les « Sorties quotidiennes moyennes » et la « Couverture moyenne du stock numérique ».",
@@ -11052,20 +12353,24 @@ const PILOTAGE_INDICATOR_HELP = {
     ],
     pilotage: [
       "Si la couverture se contracte nettement, regarder si cela vient d’une accélération des sorties, d’une baisse du fonds de garantie, ou des deux.",
-      "Bon indicateur d’alerte douce, mais jamais un verdict isolé."
+      "Bon indicateur d’alerte douce, mais jamais un verdict isolé.",
+      "À utiliser comme signal de contexte pour discuter de la pression de reconversion."
     ],
     perimeter: [
       "Fondé sur le fonds de garantie numérique moyen Odoo et les sorties numériques identifiées dans Cyclos.",
+      "Repère visuel interne à la période affichée.",
       "Doit rester interprété comme une approximation de pilotage, pas comme une mesure juridique ou bancaire de solvabilité."
     ],
     formulas: [
       "Sorties quotidiennes moyennes = volume de sorties / jours couverts.",
-      "Couverture apparente en jours = fonds de garantie numérique moyen / sorties quotidiennes moyennes."
+      "Fonds moyen / rythme de sorties en jours = fonds de garantie numérique moyen / sorties quotidiennes moyennes.",
+      "Fonds moyen / rythme de sorties en mois = couverture apparente en jours / 30."
     ],
     sources: [
       "pilotage-summary.pilotage_metrics.reconversion_coverage_proxy",
       "pilotage-summary.monetary_reference",
-      "pilotage-summary.flow_reference"
+      "pilotage-summary.flow_reference",
+      "pilotage-timeseries.items"
     ]
   },
 
@@ -11139,7 +12444,7 @@ const PILOTAGE_INDICATOR_HELP = {
       "Une alimentation forte peut correspondre à une dynamique positive, à une campagne spécifique ou à un événement ponctuel."
     ],
     crossReading: [
-      "À croiser avec les « Sorties » et la « Rétention nette des alimentations ».",
+      "À croiser avec les « Sorties » et la « Entrées conservées après sorties des alimentations ».",
       "À lire avec la « Pression d’alimentation », qui rapporte ces entrées à la masse moyenne.",
       "À comparer au graphe mensuel d’alimentations et sorties pour distinguer tendance et ponctualité."
     ],
@@ -11169,7 +12474,7 @@ const PILOTAGE_INDICATOR_HELP = {
     ],
     crossReading: [
       "À croiser avec les « Alimentations » et le ratio « Sorties / alimentations ».",
-      "À rapprocher des « Sorties quotidiennes moyennes » et de la « Couverture apparente des reconversions ».",
+      "À rapprocher des « Sorties quotidiennes moyennes » et de la « Fonds moyen / rythme de sorties des reconversions ».",
       "À lire avec « Activité générée pour 1 G sorti »."
     ],
     pilotage: [
@@ -11198,7 +12503,7 @@ const PILOTAGE_INDICATOR_HELP = {
     ],
     crossReading: [
       "À croiser avec la « Masse numérique moyenne » pour lire la couverture moyenne du stock numérique.",
-      "À rapprocher des « Sorties quotidiennes moyennes » et de la « Couverture apparente des reconversions ».",
+      "À rapprocher des « Sorties quotidiennes moyennes » et de la « Fonds moyen / rythme de sorties des reconversions ».",
       "À suivre dans le temps avec les données de stocks monétaires issues d’Odoo."
     ],
     pilotage: [
@@ -11254,7 +12559,7 @@ const PILOTAGE_INDICATOR_HELP = {
       "Une valeur faible peut apparaître si les entrées augmentent fortement sans produire encore une activité proportionnelle."
     ],
     crossReading: [
-      "À croiser avec les « Alimentations » et la « Rétention nette des alimentations ».",
+      "À croiser avec les « Alimentations » et la « Entrées conservées après sorties des alimentations ».",
       "À comparer à « Activité générée pour 1 G sorti » pour distinguer logique d’injection et logique de sortie.",
       "À lire avec la rotation économique pour replacer ce rendement dans l’intensité globale de circulation."
     ],
@@ -11284,7 +12589,7 @@ const PILOTAGE_INDICATOR_HELP = {
       "Au-dessus de 100 %, les sorties dépassent les entrées."
     ],
     crossReading: [
-      "À lire avec la « Rétention nette des alimentations », qui exprime la même dynamique sous un autre angle.",
+      "À lire avec la « Entrées conservées après sorties des alimentations », qui exprime la même dynamique sous un autre angle.",
       "À rapprocher des volumes bruts « Alimentations » et « Sorties ».",
       "À replacer dans la chronologie mensuelle du graphe alimentations / sorties."
     ],
@@ -11342,7 +12647,7 @@ const PILOTAGE_INDICATOR_HELP = {
     crossReading: [
       "À croiser avec les « Sorties » et les « Sorties quotidiennes moyennes ».",
       "À comparer à la « Pression d’alimentation » pour lire l’équilibre dynamique du circuit.",
-      "À rapprocher de la « Couverture apparente des reconversions »."
+      "À rapprocher de la « Fonds moyen / rythme de sorties des reconversions »."
     ],
     pilotage: [
       "Une hausse de pression de sortie peut justifier d’examiner les secteurs ou profils professionnels qui reconvertissent davantage.",
@@ -11399,7 +12704,7 @@ const PILOTAGE_INDICATOR_HELP = {
     ],
     crossReading: [
       "À croiser avec la « Masse numérique moyenne » et le « Fonds de garantie numérique moyen ».",
-      "À rapprocher de la « Couverture apparente des reconversions » pour distinguer couverture du stock et couverture d’un rythme de sorties.",
+      "À rapprocher de la « Fonds moyen / rythme de sorties des reconversions » pour distinguer couverture du stock et couverture d’un rythme de sorties.",
       "À lire avec le diagnostic stock ↔ flux si des écarts de périmètre apparaissent."
     ],
     pilotage: [
@@ -11427,7 +12732,7 @@ const PILOTAGE_INDICATOR_HELP = {
     ],
     crossReading: [
       "À croiser avec le volume brut de « Sorties » et la durée de la période.",
-      "À rapprocher de la « Couverture apparente détaillée ».",
+      "À rapprocher de la « Fonds moyen / rythme de sorties détaillée ».",
       "À lire avec le graphe mensuel d’alimentations et sorties afin de repérer d’éventuels pics."
     ],
     pilotage: [
@@ -11819,6 +13124,473 @@ const PILOTAGE_INDICATOR_HELP = {
   }
 };
 
+
+/* PILOTAGEVISU003A — mini-instruments de synthèse pilotage monétaire */
+function normalizePilotageInstrumentNumber(value) {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : null;
+}
+
+function escapePilotageInstrumentHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function clampPilotageInstrumentPercent(value) {
+  return Math.max(0, Math.min(100, value));
+}
+
+function getPilotageInstrumentSeriesValues(items = [], key) {
+  if (!key) {
+    return [];
+  }
+
+  return (items || [])
+    .map((item) => normalizePilotageInstrumentNumber(item?.[key]))
+    .filter((value) => value !== null);
+}
+
+function getPilotageInstrumentMedian(values = []) {
+  const sorted = values
+    .map((value) => normalizePilotageInstrumentNumber(value))
+    .filter((value) => value !== null)
+    .sort((a, b) => a - b);
+
+  if (!sorted.length) {
+    return null;
+  }
+
+  const middle = Math.floor(sorted.length / 2);
+
+  if (sorted.length % 2) {
+    return sorted[middle];
+  }
+
+  return (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+/* PILOTAGEVISU006C — aides au survol des repères visuels */
+function getPilotageReferenceTooltip(label, tone = "neutral") {
+  const normalizedTone = String(tone || "neutral");
+
+  const tooltips = {
+    history: "Repère interne : la valeur est située par rapport aux mois visibles dans la période affichée. Ce n’est pas un seuil externe.",
+    national: "Repère documentaire externe : point de comparaison issu de l’enquête nationale, à lire avec prudence selon les périodes et périmètres.",
+    proxy: "Proxy interne MLCFlux : indicateur construit pour le pilotage, utile pour lire une tendance mais non équivalent à un indicateur scientifique strict.",
+    internal: "Repère de prudence interne : signal de contexte ou d’alerte douce, pas un seuil bancaire, juridique ou réglementaire.",
+    neutral: "Repère de lecture : aide à situer l’indicateur, sans produire un verdict automatique."
+  };
+
+  return tooltips[normalizedTone] || tooltips.neutral;
+}
+
+function buildPilotageReferenceBadge(label, tone = "neutral", tooltip = null) {
+  const tooltipText = tooltip || getPilotageReferenceTooltip(label, tone);
+  const escapedTooltip = escapePilotageInstrumentHtml(tooltipText);
+
+  return `
+    <span
+      class="pilotage-reference-badge pilotage-reference-badge-${escapePilotageInstrumentHtml(tone)}"
+      title="${escapedTooltip}"
+      aria-label="${escapedTooltip}"
+      tabindex="0"
+    >
+      ${escapePilotageInstrumentHtml(label)}
+    </span>
+  `;
+}
+
+function buildPilotageLinearGauge({
+  value,
+  min = 0,
+  max = 1,
+  marker = null,
+  scaleStart = "",
+  scaleEnd = "",
+  markerLabel = ""
+} = {}) {
+  const numericValue = normalizePilotageInstrumentNumber(value);
+  let numericMin = normalizePilotageInstrumentNumber(min);
+  let numericMax = normalizePilotageInstrumentNumber(max);
+  const numericMarker = normalizePilotageInstrumentNumber(marker);
+
+  if (numericValue === null) {
+    return `
+      <div class="pilotage-instrument-gauge pilotage-instrument-gauge-empty">
+        <div class="pilotage-gauge-empty-label">Repère indisponible</div>
+      </div>
+    `;
+  }
+
+  if (numericMin === null) {
+    numericMin = 0;
+  }
+
+  if (numericMax === null) {
+    numericMax = Math.max(1, numericValue);
+  }
+
+  if (numericMax <= numericMin) {
+    numericMax = numericMin + 1;
+  }
+
+  const valuePosition = clampPilotageInstrumentPercent(
+    ((numericValue - numericMin) / (numericMax - numericMin)) * 100
+  );
+
+  const markerHtml = numericMarker === null
+    ? ""
+    : `
+      <span
+        class="pilotage-gauge-marker"
+        style="left:${clampPilotageInstrumentPercent(((numericMarker - numericMin) / (numericMax - numericMin)) * 100)}%"
+        title="${escapePilotageInstrumentHtml(markerLabel)}"
+        aria-hidden="true"
+      ></span>
+    `;
+
+  const zeroHtml = numericMin < 0 && numericMax > 0
+    ? `
+      <span
+        class="pilotage-gauge-zero"
+        style="left:${clampPilotageInstrumentPercent(((0 - numericMin) / (numericMax - numericMin)) * 100)}%"
+        aria-hidden="true"
+      ></span>
+    `
+    : "";
+
+  return `
+    <div
+      class="pilotage-instrument-gauge"
+      ${markerLabel ? `title="${escapePilotageInstrumentHtml(markerLabel)}"` : ""}
+    >
+      <div class="pilotage-gauge-track" aria-hidden="true">
+        <span class="pilotage-gauge-fill" style="width:${valuePosition}%"></span>
+        ${zeroHtml}
+        ${markerHtml}
+      </div>
+      <div class="pilotage-gauge-scale">
+        <span>${escapePilotageInstrumentHtml(scaleStart)}</span>
+        <span>${escapePilotageInstrumentHtml(scaleEnd)}</span>
+      </div>
+      ${markerLabel ? `<div class="pilotage-gauge-reference">${escapePilotageInstrumentHtml(markerLabel)}</div>` : ""}
+    </div>
+  `;
+}
+
+function buildPilotageGaugeFromSeries({
+  items = [],
+  key,
+  currentValue,
+  formatter = (value) => String(value)
+} = {}) {
+  const current = normalizePilotageInstrumentNumber(currentValue);
+  const seriesValues = getPilotageInstrumentSeriesValues(items, key);
+  const values = current === null ? seriesValues : [...seriesValues, current];
+
+  if (!values.length || current === null) {
+    return buildPilotageLinearGauge({ value: current });
+  }
+
+  if (values.length < 2) {
+    const end = Math.max(Math.abs(current) * 1.5, 1);
+    return buildPilotageLinearGauge({
+      value: current,
+      min: 0,
+      max: end,
+      scaleStart: formatter(0),
+      scaleEnd: formatter(end)
+    });
+  }
+
+  const minValue = Math.min(...values);
+  const maxValue = Math.max(...values);
+  const span = Math.max(maxValue - minValue, Math.abs(maxValue || 1) * 0.1, 0.01);
+  const paddedMin = minValue - span * 0.08;
+  const paddedMax = maxValue + span * 0.08;
+  const median = getPilotageInstrumentMedian(seriesValues);
+
+  return buildPilotageLinearGauge({
+    value: current,
+    min: paddedMin,
+    max: paddedMax,
+    marker: median,
+    scaleStart: formatter(minValue),
+    scaleEnd: formatter(maxValue),
+    markerLabel: median === null ? "" : `Médiane période affichée : ${formatter(median)}`
+  });
+}
+
+function buildPilotageSparkline({
+  items = [],
+  key,
+  label = "Tendance"
+} = {}) {
+  const values = getPilotageInstrumentSeriesValues(items, key);
+
+  if (values.length < 2) {
+    return "";
+  }
+
+  const width = 180;
+  const height = 34;
+  const minValue = Math.min(...values);
+  const maxValue = Math.max(...values);
+  const span = Math.max(maxValue - minValue, 0.000001);
+
+  const points = values.map((value, index) => {
+    const x = values.length === 1 ? width : (index / (values.length - 1)) * width;
+    const y = height - ((value - minValue) / span) * (height - 4) - 2;
+    return `${x.toFixed(2)},${y.toFixed(2)}`;
+  }).join(" ");
+
+  return `
+    <svg
+      class="pilotage-instrument-sparkline"
+      viewBox="0 0 ${width} ${height}"
+      role="img"
+      aria-label="${escapePilotageInstrumentHtml(label)}"
+      focusable="false"
+    >
+      <polyline points="${points}"></polyline>
+    </svg>
+  `;
+}
+
+function buildPilotageInstrumentCard({
+  helpKey,
+  label,
+  valueHtml,
+  subtext,
+  badgeLabel,
+  badgeTone = "neutral",
+  badgeTooltip = null,
+  deltaHtml = "",
+  gaugeHtml = "",
+  sparklineHtml = "",
+  insightHtml = ""
+} = {}) {
+  return `
+    <article class="card pilotage-primary-kpi-card pilotage-instrument-card" data-pilotage-help="${escapePilotageInstrumentHtml(helpKey)}">
+      <div class="pilotage-instrument-head">
+        <div>
+          <div class="stat-label">${escapePilotageInstrumentHtml(label)}</div>
+          <div class="pilotage-primary-value">${valueHtml}</div>
+          ${deltaHtml ? `<div class="pilotage-instrument-delta-slot">${deltaHtml}</div>` : ""}
+        </div>
+        ${buildPilotageReferenceBadge(badgeLabel, badgeTone, badgeTooltip)}
+      </div>
+
+      <div class="pilotage-instrument-visual">
+        ${gaugeHtml}
+        ${sparklineHtml}
+      </div>
+
+      <div class="stat-subtext">${subtext}</div>
+
+      ${insightHtml ? `<div class="pilotage-instrument-insight">${insightHtml}</div>` : ""}
+    </article>
+  `;
+}
+
+
+
+/* PILOTAGEVISU005A-LIGHT — légende des repères et balance entrées/sorties */
+
+/* PILOTAGEVISU006D — métadonnées API pour repères de synthèse */
+function getPilotageReferenceTypeEntry(benchmarks = {}, referenceType) {
+  const referenceTypes = benchmarks?.reference_types || {};
+  const entry = referenceTypes?.[referenceType];
+
+  return entry && typeof entry === "object" ? entry : {};
+}
+
+function getPilotageReferenceTypeTooltip(benchmarks = {}, referenceType, fallback = "") {
+  const entry = getPilotageReferenceTypeEntry(benchmarks, referenceType);
+  return entry.description || fallback || "Repère de lecture : aide à situer l’indicateur sans produire un verdict automatique.";
+}
+
+
+/* PILOTAGEVISU007A — grandeurs de référence visuelles */
+function getPilotageSafeRatio(numerator, denominator) {
+  const n = normalizePilotageInstrumentNumber(numerator);
+  const d = normalizePilotageInstrumentNumber(denominator);
+
+  if (n === null || d === null || d === 0) {
+    return null;
+  }
+
+  return n / d;
+}
+
+function buildPilotageReferenceVisualBar({
+  value,
+  max,
+  tone = "neutral",
+  label = ""
+} = {}) {
+  const numericValue = Math.max(0, Number(value || 0));
+  const numericMax = Math.max(1, Number(max || 0), numericValue);
+  const width = clampPilotageInstrumentPercent((numericValue / numericMax) * 100);
+
+  return `
+    <div class="pilotage-reference-visual-bar">
+      <div class="pilotage-reference-visual-track" aria-hidden="true">
+        <span
+          class="pilotage-reference-visual-fill pilotage-reference-visual-fill-${escapePilotageInstrumentHtml(tone)}"
+          style="width:${width}%"
+        ></span>
+      </div>
+      ${label ? `<small class="pilotage-reference-visual-bar-label">${escapePilotageInstrumentHtml(label)}</small>` : ""}
+    </div>
+  `;
+}
+
+function buildPilotageReferenceVisualItem({
+  helpKey,
+  group,
+  label,
+  valueHtml,
+  subtext = "",
+  barValue = null,
+  barMax = null,
+  barTone = "neutral",
+  barLabel = "",
+  emphasis = false
+} = {}) {
+  const helpAttr = helpKey
+    ? ` data-pilotage-help="${escapePilotageInstrumentHtml(helpKey)}"`
+    : "";
+
+  return `
+    <article class="pilotage-reference-visual-item ${emphasis ? "pilotage-reference-visual-item-emphasis" : ""}"${helpAttr}>
+      <div class="pilotage-reference-visual-head">
+        <span class="pilotage-reference-visual-group">${escapePilotageInstrumentHtml(group)}</span>
+        <span class="pilotage-reference-visual-label">${escapePilotageInstrumentHtml(label)}</span>
+      </div>
+
+      <strong class="pilotage-reference-visual-value">${valueHtml}</strong>
+
+      ${subtext ? `<small class="pilotage-reference-visual-subtext">${subtext}</small>` : ""}
+
+      ${barValue === null
+        ? ""
+        : buildPilotageReferenceVisualBar({
+            value: barValue,
+            max: barMax,
+            tone: barTone,
+            label: barLabel
+          })
+      }
+    </article>
+  `;
+}
+
+
+function buildPilotageReferenceLegend(benchmarks = {}) {
+  const fallbackTypes = {
+    displayed_period: {
+      label: "Période affichée",
+      description: "Comparaison aux mois visibles.",
+    },
+    national_survey: {
+      label: "Enquête nationale",
+      description: "Point documentaire externe, non prescriptif.",
+    },
+    internal_proxy: {
+      label: "Proxy interne",
+      description: "Indicateur MLCFlux construit pour le pilotage.",
+    },
+    internal_caution: {
+      label: "Prudence interne",
+      description: "Signal de contexte, pas seuil réglementaire.",
+    },
+  };
+
+  const referenceTypes = {
+    ...fallbackTypes,
+    ...(benchmarks?.reference_types || {}),
+  };
+
+  const order = [
+    "displayed_period",
+    "national_survey",
+    "internal_proxy",
+    "internal_caution",
+  ];
+
+  const items = order
+    .map((key) => {
+      const item = referenceTypes[key] || {};
+      const label = item.label || fallbackTypes[key]?.label || key;
+      const description = item.description || fallbackTypes[key]?.description || "";
+
+      return `
+        <span title="${escapePilotageInstrumentHtml(description)}">
+          <b>${escapePilotageInstrumentHtml(label)}</b> : ${escapePilotageInstrumentHtml(description)}
+        </span>
+      `;
+    })
+    .join("");
+
+  return `
+    <aside class="pilotage-reference-legend" aria-label="Légende des repères de synthèse">
+      <strong>Repères de lecture.</strong>
+      ${items}
+    </aside>
+  `;
+}
+
+
+function buildPilotageFlowBalanceCard(flow = {}) {
+  const inflow = Math.max(0, Number(flow.inflow_volume || 0));
+  const outflow = Math.max(0, Number(flow.outflow_volume || 0));
+  const netFlow = Number.isFinite(Number(flow.net_cyclos_flow))
+    ? Number(flow.net_cyclos_flow)
+    : inflow - outflow;
+
+  const maxValue = Math.max(inflow, outflow, 1);
+  const inflowWidth = clampPilotageInstrumentPercent((inflow / maxValue) * 100);
+  const outflowWidth = clampPilotageInstrumentPercent((outflow / maxValue) * 100);
+
+  return `
+    <section class="card pilotage-flow-balance-card">
+      <div class="pilotage-section-heading pilotage-flow-balance-heading">
+        <h3>Balance rapide entrées / sorties</h3>
+        <p>Lecture rapide du rapport entre alimentations, sorties et solde net sur la période.</p>
+      </div>
+
+      <div class="pilotage-flow-balance-bars">
+        <div class="pilotage-flow-balance-row">
+          <span>Alimentations</span>
+          <div class="pilotage-flow-balance-track" aria-hidden="true">
+            <i class="pilotage-flow-balance-fill pilotage-flow-balance-fill-inflow" style="width:${inflowWidth}%"></i>
+          </div>
+          <strong>${gonettes(inflow)}</strong>
+        </div>
+
+        <div class="pilotage-flow-balance-row">
+          <span>Sorties</span>
+          <div class="pilotage-flow-balance-track" aria-hidden="true">
+            <i class="pilotage-flow-balance-fill pilotage-flow-balance-fill-outflow" style="width:${outflowWidth}%"></i>
+          </div>
+          <strong>${gonettes(outflow)}</strong>
+        </div>
+
+        <div class="pilotage-flow-balance-net">
+          <span>Solde net</span>
+          <strong>${formatPilotageSignedGonettes(netFlow)}</strong>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+
 function buildPilotageSummaryReading({
   flow = {},
   reference = {},
@@ -11828,19 +13600,19 @@ function buildPilotageSummaryReading({
   const retentionValue = Number(retentionYield.net_inflow_retention_rate);
   const retentionSentence = Number.isFinite(retentionValue)
     ? retentionValue >= 0
-      ? `Les alimentations dépassent les sorties, avec une rétention nette de <strong>${formatPilotagePercent(retentionValue)}</strong>.`
-      : `Les sorties dépassent les alimentations, avec une rétention nette de <strong>${formatPilotagePercent(retentionValue)}</strong>.`
+      ? `<span class="pilotage-diagnostic-axis">Entrées / sorties</span> Les alimentations dépassent les sorties, avec une rétention nette de <strong>${formatPilotagePercent(retentionValue)}</strong>.`
+      : `<span class="pilotage-diagnostic-axis">Entrées / sorties</span> Les sorties dépassent les alimentations, avec une rétention nette de <strong>${formatPilotagePercent(retentionValue)}</strong>.`
     : "La rétention nette des alimentations n’est pas disponible sur cette période.";
 
   return `
-    <section class="card pilotage-reading-card">
+    <section class="card pilotage-reading-card pilotage-diagnostic-lite-card">
       <div class="pilotage-section-heading">
-        <h3>Lecture rapide de la période</h3>
+        <h3>Diagnostic rapide de la période</h3>
       </div>
 
       <div class="pilotage-reading-copy">
         <p>
-          La Gonette numérique a généré
+          <span class="pilotage-diagnostic-axis">Circulation</span> La Gonette numérique a généré
           <strong>${gonettes(flow.economic_activity_volume || 0)}</strong>
           d’activité économique pour une masse numérique moyenne de
           <strong>${gonettes(reference.average_numeric_mass || 0)}</strong>.
@@ -11848,7 +13620,7 @@ function buildPilotageSummaryReading({
 
         <p>
           ${retentionSentence}
-          Au rythme moyen des reconversions observées,
+          <span class="pilotage-diagnostic-axis">Robustesse</span> Au rythme moyen des reconversions observées,
           le fonds de garantie numérique moyen représente une couverture apparente de
           <strong>${formatPilotageThirtyDayPeriods(coverage.apparent_reconversion_coverage_30_day_periods)}</strong>.
         </p>
@@ -11983,8 +13755,11 @@ async function renderMonetaryPilotageView(forceReload = false) {
         apiGet(`/api/monetary-indicators/pilotage-holdings-timeseries${getPeriodQueryParam()}`)
       ]);
 
+      const previousSummary = await fetchPilotagePreviousPeriodSummary(data);
+
       pilotagePayloads = {
         data,
+        previousSummary,
         timeseries,
         reuseYearly,
         lm3Yearly,
@@ -11997,6 +13772,7 @@ async function renderMonetaryPilotageView(forceReload = false) {
 
     const {
       data,
+      previousSummary,
       timeseries,
       reuseYearly,
       lm3Yearly,
@@ -12013,6 +13789,7 @@ async function renderMonetaryPilotageView(forceReload = false) {
     const flow = data?.flow_reference || {};
     const reference = data?.monetary_reference || {};
     const metrics = data?.pilotage_metrics || {};
+    const previousData = previousSummary?.summary || null;
     const pilotageSeries = timeseries?.items || [];
     const pilotageSeriesForCharts = buildPilotageMonthlyChartSeries(
       pilotageSeries,
@@ -12208,50 +13985,130 @@ async function renderMonetaryPilotageView(forceReload = false) {
       </section>
 
       <section class="pilotage-tab-panel" data-pilotage-panel="summary">
-        <section class="pilotage-primary-kpi-grid">
-          <article class="card pilotage-primary-kpi-card" data-pilotage-help="annualizedRotation">
-            <div class="stat-label">Rotation économique annualisée</div>
-            <div class="pilotage-primary-value">
-              ${formatPilotageMultiple(circulation.annualized_economic_activity_intensity_indicative)}
-              <span>/ an</span>
-            </div>
-            <div class="stat-subtext">
-              ${formatPilotageMultiple(circulation.economic_activity_intensity)}
-              sur la période · activité économique / masse numérique moyenne
-            </div>
-          </article>
+        <section class="pilotage-primary-kpi-grid pilotage-instrument-grid">
+          ${buildPilotageInstrumentCard({
+            helpKey: "annualizedRotation",
+            label: "Rotation économique annualisée",
+            valueHtml: formatPilotageMultiple(circulation.annualized_economic_activity_intensity_indicative) + " <span>/ an</span>",
+            deltaHtml: buildPilotageDeltaLine({
+              currentValue: circulation.annualized_economic_activity_intensity_indicative,
+              previousValue: getPilotageNestedValue(previousData, "pilotage_metrics.circulation.annualized_economic_activity_intensity_indicative"),
+              mode: "absolute",
+              unit: "×",
+              digits: 2
+            }),
+            subtext: formatPilotageMultiple(circulation.economic_activity_intensity)
+              + " sur la période · activité économique / masse numérique moyenne",
+            badgeLabel: "Repère : période affichée",
+            badgeTone: "history",
+            badgeTooltip: getPilotageReferenceTypeTooltip(data.benchmarks || {}, "displayed_period"),
+            gaugeHtml: buildPilotageGaugeFromSeries({
+              items: pilotageSeriesForCharts,
+              key: "annualized_economic_activity_intensity_indicative",
+              currentValue: circulation.annualized_economic_activity_intensity_indicative,
+              formatter: formatPilotageMultiple
+            }),
+            sparklineHtml: buildPilotageSparkline({
+              items: pilotageSeriesForCharts,
+              key: "annualized_economic_activity_intensity_indicative",
+              label: "Tendance mensuelle de la rotation économique annualisée"
+            }),
+            insightHtml: "Lecture relative : intensité située par rapport aux mois disponibles."
+          })}
 
-          <article class="card pilotage-primary-kpi-card" data-pilotage-help="netInflowRetention">
-            <div class="stat-label">Rétention nette des alimentations</div>
-            <div class="pilotage-primary-value">
-              ${formatPilotagePercent(retentionYield.net_inflow_retention_rate)}
-            </div>
-            <div class="stat-subtext">
-              Part nette des Gonettes alimentées qui restent dans le circuit sur la période
-            </div>
-          </article>
+          ${buildPilotageInstrumentCard({
+            helpKey: "netInflowRetention",
+            label: "Entrées conservées après sorties des alimentations",
+            valueHtml: formatPilotagePercent(retentionYield.net_inflow_retention_rate),
+            deltaHtml: buildPilotageDeltaLine({
+              currentValue: retentionYield.net_inflow_retention_rate,
+              previousValue: getPilotageNestedValue(previousData, "pilotage_metrics.retention_and_yield.net_inflow_retention_rate"),
+              mode: "points",
+              digits: 1
+            }),
+            subtext: "Part nette des Gonettes alimentées qui restent dans le circuit sur la période",
+            badgeLabel: "Repère : enquête nationale",
+            badgeTone: "national",
+            badgeTooltip: getPilotageReferenceTypeTooltip(data.benchmarks || {}, "national_survey"),
+            gaugeHtml: buildPilotageLinearGauge({
+              value: retentionYield.net_inflow_retention_rate,
+              min: -0.25,
+              max: 0.5,
+              marker: 0.132,
+              scaleStart: "-25 %",
+              scaleEnd: "+50 %",
+              markerLabel: "Repère national 2022 indicatif : 13,2 % de rétention apparente"
+            }),
+            sparklineHtml: buildPilotageSparkline({
+              items: pilotageSeriesForCharts,
+              key: "net_inflow_retention_rate",
+              label: "Tendance mensuelle de la rétention nette"
+            }),
+            insightHtml: "Repère indicatif : les définitions et périodes doivent rester comparables."
+          })}
 
-          <article class="card pilotage-primary-kpi-card" data-pilotage-help="economicActivityPerOutflow">
-            <div class="stat-label">Activité générée pour 1 G sorti</div>
-            <div class="pilotage-primary-value">
-              ${formatPilotageGonetteYield(retentionYield.economic_activity_per_outflow)}
-            </div>
-            <div class="stat-subtext">
-              Volume d’activité économique rapporté aux reconversions / sorties
-            </div>
-          </article>
+          ${buildPilotageInstrumentCard({
+            helpKey: "economicActivityPerOutflow",
+            label: "Activité générée pour 1 G sorti",
+            valueHtml: formatPilotageGonetteYield(retentionYield.economic_activity_per_outflow),
+            deltaHtml: buildPilotageDeltaLine({
+              currentValue: retentionYield.economic_activity_per_outflow,
+              previousValue: getPilotageNestedValue(previousData, "pilotage_metrics.retention_and_yield.economic_activity_per_outflow"),
+              mode: "yield",
+              unit: "G/G",
+              digits: 2
+            }),
+            subtext: "Volume d’activité économique rapporté aux reconversions / sorties",
+            badgeLabel: "Repère : proxy interne",
+            badgeTone: "proxy",
+            badgeTooltip: getPilotageReferenceTypeTooltip(data.benchmarks || {}, "internal_proxy"),
+            gaugeHtml: buildPilotageGaugeFromSeries({
+              items: pilotageSeriesForCharts,
+              key: "economic_activity_per_outflow",
+              currentValue: retentionYield.economic_activity_per_outflow,
+              formatter: formatPilotageGonetteYield
+            }),
+            sparklineHtml: buildPilotageSparkline({
+              items: pilotageSeriesForCharts,
+              key: "economic_activity_per_outflow",
+              label: "Tendance mensuelle de l’activité générée avant sortie"
+            }),
+            insightHtml: "Proxy de rendement avant sortie, distinct d’un LM3 strict."
+          })}
 
-          <article class="card pilotage-primary-kpi-card" data-pilotage-help="apparentReconversionCoverage">
-            <div class="stat-label">Couverture apparente des reconversions</div>
-            <div class="pilotage-primary-value">
-              ${formatPilotageThirtyDayPeriods(coverage.apparent_reconversion_coverage_30_day_periods)}
-            </div>
-            <div class="stat-subtext">
-              ${formatPilotageDays(coverage.apparent_reconversion_coverage_days)}
-              au rythme moyen des sorties observées
-            </div>
-          </article>
+          ${buildPilotageInstrumentCard({
+            helpKey: "apparentReconversionCoverage",
+            label: "Fonds moyen / rythme de sorties des reconversions",
+            valueHtml: formatPilotageThirtyDayPeriods(coverage.apparent_reconversion_coverage_30_day_periods),
+            deltaHtml: buildPilotageDeltaLine({
+              currentValue: coverage.apparent_reconversion_coverage_30_day_periods,
+              previousValue: getPilotageNestedValue(previousData, "pilotage_metrics.reconversion_coverage_proxy.apparent_reconversion_coverage_30_day_periods"),
+              mode: "months",
+              digits: 1
+            }),
+            subtext: formatPilotageDays(coverage.apparent_reconversion_coverage_days)
+              + " au rythme moyen des sorties observées",
+            badgeLabel: "Repère : prudence interne",
+            badgeTone: "internal",
+            badgeTooltip: getPilotageReferenceTypeTooltip(data.benchmarks || {}, "internal_caution"),
+            gaugeHtml: buildPilotageGaugeFromSeries({
+              items: pilotageSeriesForCharts,
+              key: "apparent_reconversion_coverage_30_day_periods",
+              currentValue: coverage.apparent_reconversion_coverage_30_day_periods,
+              formatter: formatPilotageThirtyDayPeriods
+            }),
+            sparklineHtml: buildPilotageSparkline({
+              items: pilotageSeriesForCharts,
+              key: "apparent_reconversion_coverage_30_day_periods",
+              label: "Tendance mensuelle de la couverture apparente"
+            }),
+            insightHtml: "Robustesse apparente : repère de pilotage, pas ratio bancaire."
+          })}
         </section>
+
+        ${buildPilotageReferenceLegend(data.benchmarks || {})}
+
+        ${buildPilotageTrajectoryDigest(data, previousData, previousSummary?.period)}
 
         ${buildPilotageSummaryReading({
           flow,
@@ -12260,44 +14117,113 @@ async function renderMonetaryPilotageView(forceReload = false) {
           coverage
         })}
 
-        <section class="card pilotage-context-card">
+        ${buildPilotageFlowBalanceCard(flow)}
+
+        <section class="card pilotage-context-card pilotage-reference-visual-card">
           <div class="pilotage-section-heading">
             <h3>Grandeurs de référence de la période</h3>
             <p>
-              Ces valeurs servent de socle aux ratios de pilotage présentés dans les différents onglets.
+              Les valeurs brutes sont regroupées par fonction : circulation, flux d’entrée/sortie, garantie.
             </p>
           </div>
 
-          <div class="pilotage-context-grid">
-            <article class="pilotage-context-item" data-pilotage-help="economicActivityVolume">
-              <span>Activité économique</span>
-              <strong>${gonettes(flow.economic_activity_volume || 0)}</strong>
-              <small>${(flow.economic_activity_transaction_count || 0).toLocaleString("fr-FR")} transactions</small>
-            </article>
+          <div class="pilotage-reference-visual-grid">
+            ${buildPilotageReferenceVisualItem({
+              helpKey: "economicActivityVolume",
+              group: "Circulation",
+              label: "Activité économique",
+              valueHtml: gonettes(flow.economic_activity_volume || 0),
+              subtext: `${(flow.economic_activity_transaction_count || 0).toLocaleString("fr-FR")} transactions économiques`,
+              barValue: flow.economic_activity_volume || 0,
+              barMax: Math.max(
+                Number(flow.economic_activity_volume || 0),
+                Number(reference.average_numeric_mass || 0),
+                1
+              ),
+              barTone: "activity",
+              barLabel: `${formatPilotageMultiple(getPilotageSafeRatio(flow.economic_activity_volume, reference.average_numeric_mass))} la masse moyenne`
+            })}
 
-            <article class="pilotage-context-item" data-pilotage-help="averageNumericMass">
-              <span>Masse numérique moyenne</span>
-              <strong>${gonettes(reference.average_numeric_mass || 0)}</strong>
-              <small>${(reference.day_count || 0).toLocaleString("fr-FR")} jours couverts</small>
-            </article>
+            ${buildPilotageReferenceVisualItem({
+              helpKey: "averageNumericMass",
+              group: "Socle monétaire",
+              label: "Masse numérique moyenne",
+              valueHtml: gonettes(reference.average_numeric_mass || 0),
+              subtext: `${(reference.day_count || 0).toLocaleString("fr-FR")} jours couverts`,
+              barValue: reference.average_numeric_mass || 0,
+              barMax: Math.max(
+                Number(flow.economic_activity_volume || 0),
+                Number(reference.average_numeric_mass || 0),
+                1
+              ),
+              barTone: "stock",
+              barLabel: "stock moyen disponible"
+            })}
 
-            <article class="pilotage-context-item" data-pilotage-help="inflowVolume">
-              <span>Alimentations</span>
-              <strong>${gonettes(flow.inflow_volume || 0)}</strong>
-              <small>${(flow.inflow_transaction_count || 0).toLocaleString("fr-FR")} opérations</small>
-            </article>
+            ${buildPilotageReferenceVisualItem({
+              helpKey: "inflowVolume",
+              group: "Flux",
+              label: "Alimentations",
+              valueHtml: gonettes(flow.inflow_volume || 0),
+              subtext: `${(flow.inflow_transaction_count || 0).toLocaleString("fr-FR")} opérations`,
+              barValue: flow.inflow_volume || 0,
+              barMax: Math.max(
+                Number(flow.inflow_volume || 0),
+                Number(flow.outflow_volume || 0),
+                1
+              ),
+              barTone: "inflow",
+              barLabel: "base entrante"
+            })}
 
-            <article class="pilotage-context-item" data-pilotage-help="outflowVolume">
-              <span>Sorties</span>
-              <strong>${gonettes(flow.outflow_volume || 0)}</strong>
-              <small>${(flow.outflow_transaction_count || 0).toLocaleString("fr-FR")} opérations</small>
-            </article>
+            ${buildPilotageReferenceVisualItem({
+              helpKey: "outflowVolume",
+              group: "Flux",
+              label: "Sorties",
+              valueHtml: gonettes(flow.outflow_volume || 0),
+              subtext: `${(flow.outflow_transaction_count || 0).toLocaleString("fr-FR")} opérations`,
+              barValue: flow.outflow_volume || 0,
+              barMax: Math.max(
+                Number(flow.inflow_volume || 0),
+                Number(flow.outflow_volume || 0),
+                1
+              ),
+              barTone: "outflow",
+              barLabel: `${formatPilotagePercent(getPilotageSafeRatio(flow.outflow_volume, flow.inflow_volume))} des alimentations`
+            })}
 
-            <article class="pilotage-context-item" data-pilotage-help="averageNumericGuaranteeFund">
-              <span>Fonds de garantie numérique moyen</span>
-              <strong>${accountingEuros(reference.average_numeric_guarantee_fund || 0)}</strong>
-              <small>moyenne quotidienne</small>
-            </article>
+            ${buildPilotageReferenceVisualItem({
+              helpKey: "netFlowPressure",
+              group: "Flux",
+              label: "Solde net",
+              valueHtml: formatPilotageSignedGonettes(flow.net_cyclos_flow || 0),
+              subtext: "alimentations − sorties",
+              barValue: Math.abs(Number(flow.net_cyclos_flow || 0)),
+              barMax: Math.max(
+                Math.abs(Number(flow.net_cyclos_flow || 0)),
+                Number(flow.inflow_volume || 0),
+                1
+              ),
+              barTone: Number(flow.net_cyclos_flow || 0) >= 0 ? "net-positive" : "net-negative",
+              barLabel: `${formatPilotagePercent(getPilotageSafeRatio(Math.abs(Number(flow.net_cyclos_flow || 0)), flow.inflow_volume))} des alimentations`,
+              emphasis: true
+            })}
+
+            ${buildPilotageReferenceVisualItem({
+              helpKey: "averageNumericGuaranteeFund",
+              group: "Garantie",
+              label: "Fonds de garantie numérique moyen",
+              valueHtml: accountingEuros(reference.average_numeric_guarantee_fund || 0),
+              subtext: "moyenne quotidienne",
+              barValue: reference.average_numeric_guarantee_fund || 0,
+              barMax: Math.max(
+                Number(reference.average_numeric_guarantee_fund || 0),
+                Number(reference.average_numeric_mass || 0),
+                1
+              ),
+              barTone: "guarantee",
+              barLabel: `${formatPilotagePercent(getPilotageSafeRatio(reference.average_numeric_guarantee_fund, reference.average_numeric_mass))} de la masse moyenne`
+            })}
           </div>
         </section>
 
@@ -12538,7 +14464,7 @@ async function renderMonetaryPilotageView(forceReload = false) {
           <article class="card stats-chart-card stats-chart-card-full pilotage-chart-card">
             ${buildStatsChartHeader({
               chartKey: "pilotageRetention",
-              title: "Rétention nette des alimentations",
+              title: "Entrées conservées après sorties des alimentations",
               description: "Chaque barre indique la part nette des Gonettes alimentées qui reste dans le circuit : positive lorsque les alimentations dépassent les sorties, négative lorsque les sorties excèdent les entrées.",
               supportsMetricToggle: false
             })}
@@ -12625,7 +14551,7 @@ async function renderMonetaryPilotageView(forceReload = false) {
               </article>
 
               <article class="pilotage-metric-card" data-pilotage-help="apparentReconversionCoverage">
-                <span>Couverture apparente détaillée</span>
+                <span>Fonds moyen / rythme de sorties détaillée</span>
                 <strong>${formatPilotageDays(coverage.apparent_reconversion_coverage_days)}</strong>
                 <small>
                   soit
@@ -16052,7 +17978,7 @@ const STATS_CHART_HELP = {
     usefulness: "Cet indicateur aide à évaluer si la masse numérique disponible produit effectivement de l’activité économique. Il permet de distinguer une monnaie simplement présente en stock d’une monnaie réellement mobilisée dans les échanges.",
     crossReading: [
       "Croisez ce graphe avec la « Masse numérique moyenne » et le « Volume d’activité économique » de la Synthèse : une rotation qui baisse peut refléter une hausse récente de la masse plus rapide que l’activité.",
-      "Comparez-le à la « Rétention nette des alimentations » : conserver davantage de Gonettes dans le circuit n’est réellement positif que si elles continuent aussi à circuler.",
+      "Comparez-le à la « Entrées conservées après sorties des alimentations » : conserver davantage de Gonettes dans le circuit n’est réellement positif que si elles continuent aussi à circuler.",
       "Lisez-le avec les indicateurs « Activité générée pour 1 G alimenté » et « Activité générée pour 1 G sorti » dans l’onglet Circulation & rendement."
     ],
     reading: [
@@ -16068,7 +17994,7 @@ const STATS_CHART_HELP = {
     ],
     formulas: [
       "Intensité mensuelle = volume d’activité économique du mois / masse numérique moyenne du mois.",
-      "Rotation annualisée indicative = intensité mensuelle × facteur d’annualisation lié à la durée couverte."
+      "Intensité d’activité / masse moyenne indicative = intensité mensuelle × facteur d’annualisation lié à la durée couverte."
     ],
     sources: [
       "pilotage-timeseries.month_key",
@@ -16083,9 +18009,9 @@ const STATS_CHART_HELP = {
     summary: "Ce graphe compare, mois par mois, les entrées et les sorties du circuit numérique en les ramenant à un équivalent 30 jours.",
     usefulness: "Ce graphique permet de voir si le circuit numérique est, mois après mois, davantage alimenté ou davantage vidé par les reconversions. Il est utile pour repérer des changements de rythme, des périodes de tension ou l’effet visible d’une dynamique d’injection.",
     crossReading: [
-      "Croisez-le avec le graphe « Rétention nette des alimentations » : de fortes entrées sont plus intéressantes lorsqu’elles ne sont pas rapidement compensées par des sorties.",
+      "Croisez-le avec le graphe « Entrées conservées après sorties des alimentations » : de fortes entrées sont plus intéressantes lorsqu’elles ne sont pas rapidement compensées par des sorties.",
       "Comparez-le aux indicateurs « Sorties / alimentations », « Pression d’alimentation » et « Pression de sortie » dans ce même onglet.",
-      "Lisez-le avec la « Couverture apparente des reconversions » : une hausse des sorties prend un sens différent selon la robustesse apparente du fonds de garantie face à ce rythme."
+      "Lisez-le avec la « Fonds moyen / rythme de sorties des reconversions » : une hausse des sorties prend un sens différent selon la robustesse apparente du fonds de garantie face à ce rythme."
     ],
     reading: [
       "Les alimentations apparaissent au-dessus de zéro.",
@@ -16111,7 +18037,7 @@ const STATS_CHART_HELP = {
   },
 
   pilotageRetention: {
-    title: "Rétention nette des alimentations",
+    title: "Entrées conservées après sorties des alimentations",
     summary: "Ce graphe mesure, mois par mois, la part nette des Gonettes nouvellement alimentées qui reste dans le circuit après déduction des sorties observées.",
     usefulness: "Cet indicateur aide à apprécier la capacité apparente du circuit à conserver une partie des Gonettes nouvellement alimentées au lieu de les voir ressortir immédiatement. Il renseigne sur la stabilité du flux entrant, mais pas à lui seul sur sa qualité de circulation.",
     crossReading: [
@@ -16131,7 +18057,7 @@ const STATS_CHART_HELP = {
       "Les mois partiels sont signalés par un astérisque."
     ],
     formulas: [
-      "Rétention nette = (alimentations − sorties) / alimentations × 100."
+      "Entrées conservées après sorties = (alimentations − sorties) / alimentations × 100."
     ],
     sources: [
       "pilotage-timeseries.month_key",
@@ -17543,6 +19469,11 @@ function renderStatsZoomChart(chartKey, charts, metric) {
 }
 
 function openStatsChartZoom(chartKey, charts) {
+  if (chartKey === "pilotageTrajectoryRadar") {
+    openPilotageTrajectoryRadarZoom();
+    return;
+  }
+
   const help = STATS_CHART_HELP[chartKey];
   const metric = getStatsChartMetric(
     chartKey,
@@ -22656,3 +24587,966 @@ window.changeDetailTransactionPage = changeDetailTransactionPage;
 window.renderUserDetail = renderUserDetail;
 window.setProTab = setProTab;
 window.selectNetworkSearchResult = selectNetworkSearchResult;
+
+
+/* PILOTAGEVISU009L — fils lisibles dans le couloir radar/cartes */
+function updatePilotageTrajectorySpiderLinks() {
+  const layout = document.querySelector(".pilotage-trajectory-compare-layout");
+  const svg = layout?.querySelector(".pilotage-trajectory-spider-links");
+  const radarFrame = layout?.querySelector(".pilotage-trajectory-chartjs-frame");
+  const cards = Array.from(layout?.querySelectorAll(".pilotage-trajectory-visual-item") || []);
+
+  if (!layout || !svg || !radarFrame || cards.length < 4) {
+    return;
+  }
+
+  while (svg.querySelectorAll("path").length < 4) {
+    svg.appendChild(document.createElementNS("http://www.w3.org/2000/svg", "path"));
+  }
+
+  const paths = Array.from(svg.querySelectorAll("path")).slice(0, 4);
+
+  const layoutRect = layout.getBoundingClientRect();
+  const frameRect = radarFrame.getBoundingClientRect();
+
+  const width = Math.max(1, layoutRect.width);
+  const height = Math.max(1, layoutRect.height);
+
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+
+  const sourceX = frameRect.right - layoutRect.left - 8;
+
+  const sourceYs = [
+    frameRect.top - layoutRect.top + frameRect.height * 0.24,
+    frameRect.top - layoutRect.top + frameRect.height * 0.46,
+    frameRect.top - layoutRect.top + frameRect.height * 0.66,
+    frameRect.top - layoutRect.top + frameRect.height * 0.53
+  ];
+
+  cards.slice(0, 4).forEach((card, index) => {
+    const cardRect = card.getBoundingClientRect();
+
+    const targetX = cardRect.left - layoutRect.left + 1;
+    const targetY = cardRect.top - layoutRect.top + Math.min(38, cardRect.height * 0.22);
+
+    const sourceY = sourceYs[index];
+    const gap = Math.max(36, targetX - sourceX);
+    const c1x = sourceX + gap * 0.38;
+    const c2x = targetX - gap * 0.34;
+
+    const d = [
+      `M ${sourceX.toFixed(1)} ${sourceY.toFixed(1)}`,
+      `C ${c1x.toFixed(1)} ${sourceY.toFixed(1)},`,
+      `${c2x.toFixed(1)} ${targetY.toFixed(1)},`,
+      `${targetX.toFixed(1)} ${targetY.toFixed(1)}`
+    ].join(" ");
+
+    paths[index].setAttribute("d", d);
+    paths[index].setAttribute("data-axis-index", String(index + 1));
+  });
+}
+
+
+/* PILOTAGEVISU009N — fils visibles par-dessus le radar */
+function updatePilotageTrajectorySpiderLinks() {
+  const layout = document.querySelector(".pilotage-trajectory-compare-layout");
+  const svg = layout?.querySelector(".pilotage-trajectory-spider-links");
+  const radarFrame = layout?.querySelector(".pilotage-trajectory-chartjs-frame");
+  const cards = Array.from(layout?.querySelectorAll(".pilotage-trajectory-visual-item") || []);
+
+  if (!layout || !svg || !radarFrame || cards.length < 4) {
+    return;
+  }
+
+  while (svg.querySelectorAll("path").length < 4) {
+    svg.appendChild(document.createElementNS("http://www.w3.org/2000/svg", "path"));
+  }
+
+  const paths = Array.from(svg.querySelectorAll("path")).slice(0, 4);
+
+  const layoutRect = layout.getBoundingClientRect();
+  const frameRect = radarFrame.getBoundingClientRect();
+
+  const width = Math.max(1, layoutRect.width);
+  const height = Math.max(1, layoutRect.height);
+
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+
+  const cx = frameRect.left - layoutRect.left + frameRect.width * 0.50;
+  const cy = frameRect.top - layoutRect.top + frameRect.height * 0.52;
+  const rx = frameRect.width * 0.30;
+  const ry = frameRect.height * 0.30;
+
+  const sourcePoints = [
+    { x: cx, y: cy - ry },          // Axe 1 : circulation
+    { x: cx + rx, y: cy },          // Axe 2 : rétention
+    { x: cx, y: cy + ry },          // Axe 3 : activité / sortie
+    { x: cx - rx, y: cy }           // Axe 4 : couverture
+  ];
+
+  cards.slice(0, 4).forEach((card, index) => {
+    const cardRect = card.getBoundingClientRect();
+
+    const source = sourcePoints[index];
+    const targetX = cardRect.left - layoutRect.left + 4;
+    const targetY = cardRect.top - layoutRect.top + Math.min(42, cardRect.height * 0.24);
+
+    const gap = Math.max(80, targetX - source.x);
+    const c1x = source.x + gap * 0.32;
+    const c1y = source.y;
+    const c2x = targetX - gap * 0.28;
+    const c2y = targetY;
+
+    const d = [
+      `M ${source.x.toFixed(1)} ${source.y.toFixed(1)}`,
+      `C ${c1x.toFixed(1)} ${c1y.toFixed(1)},`,
+      `${c2x.toFixed(1)} ${c2y.toFixed(1)},`,
+      `${targetX.toFixed(1)} ${targetY.toFixed(1)}`
+    ].join(" ");
+
+    paths[index].setAttribute("d", d);
+    paths[index].setAttribute("data-axis-index", String(index + 1));
+  });
+}
+
+function forcePilotageTrajectorySpiderLinksUpdate() {
+  updatePilotageTrajectorySpiderLinks();
+
+  window.requestAnimationFrame(() => {
+    updatePilotageTrajectorySpiderLinks();
+  });
+
+  setTimeout(updatePilotageTrajectorySpiderLinks, 250);
+  setTimeout(updatePilotageTrajectorySpiderLinks, 800);
+}
+
+window.addEventListener("resize", () => {
+  clearTimeout(window.__pilotageTrajectorySpiderLinksTimer);
+  window.__pilotageTrajectorySpiderLinksTimer = setTimeout(forcePilotageTrajectorySpiderLinksUpdate, 120);
+});
+
+
+/* PILOTAGEVISU010A — connecteurs LeaderLine radar → cartes */
+function loadPilotageLeaderLineLibrary() {
+  if (window.LeaderLine) {
+    return Promise.resolve(window.LeaderLine);
+  }
+
+  if (window.__pilotageLeaderLinePromise) {
+    return window.__pilotageLeaderLinePromise;
+  }
+
+  window.__pilotageLeaderLinePromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "/static/vendor/leader-line/leader-line.min.js";
+    script.async = true;
+    script.onload = () => {
+      if (window.LeaderLine) {
+        resolve(window.LeaderLine);
+      } else {
+        reject(new Error("LeaderLine chargé mais window.LeaderLine absent."));
+      }
+    };
+    script.onerror = () => reject(new Error("Échec du chargement LeaderLine."));
+    document.head.appendChild(script);
+  });
+
+  return window.__pilotageLeaderLinePromise;
+}
+
+function destroyPilotageLeaderLines() {
+  (window.__pilotageLeaderLines || []).forEach((line) => {
+    try {
+      line.remove();
+    } catch (error) {
+      console.warn("LeaderLine remove failed", error);
+    }
+  });
+
+  window.__pilotageLeaderLines = [];
+}
+
+function ensurePilotageLeaderLineAnchors() {
+  const layout = document.querySelector(".pilotage-trajectory-compare-layout");
+  const radarFrame = layout?.querySelector(".pilotage-trajectory-chartjs-frame");
+  const cards = Array.from(layout?.querySelectorAll(".pilotage-trajectory-visual-item") || []);
+
+  if (!layout || !radarFrame || cards.length < 4) {
+    return null;
+  }
+
+  const radarAnchors = [1, 2, 3, 4].map((axis) => {
+    let anchor = radarFrame.querySelector(`.pilotage-leaderline-anchor-radar[data-axis="${axis}"]`);
+
+    if (!anchor) {
+      anchor = document.createElement("span");
+      anchor.className = "pilotage-leaderline-anchor-radar";
+      anchor.dataset.axis = String(axis);
+      radarFrame.appendChild(anchor);
+    }
+
+    return anchor;
+  });
+
+  const cardAnchors = cards.slice(0, 4).map((card, index) => {
+    let anchor = card.querySelector(".pilotage-leaderline-anchor-card");
+
+    if (!anchor) {
+      anchor = document.createElement("span");
+      anchor.className = "pilotage-leaderline-anchor-card";
+      anchor.dataset.axis = String(index + 1);
+      card.appendChild(anchor);
+    }
+
+    return anchor;
+  });
+
+  return { layout, radarAnchors, cardAnchors };
+}
+
+function renderPilotageLeaderLines() {
+  const anchors = ensurePilotageLeaderLineAnchors();
+
+  if (!anchors) {
+    destroyPilotageLeaderLines();
+    return;
+  }
+
+  if (window.matchMedia("(max-width: 1300px)").matches) {
+    destroyPilotageLeaderLines();
+    return;
+  }
+
+  loadPilotageLeaderLineLibrary()
+    .then((LeaderLine) => {
+      destroyPilotageLeaderLines();
+
+      const lineConfigByAxis = [
+        { color: "rgba(100, 116, 139, 0.52)", startSocket: "top", endSocket: "left" },
+        { color: "rgba(14, 165, 233, 0.62)", startSocket: "right", endSocket: "left" },
+        { color: "rgba(14, 165, 233, 0.56)", startSocket: "bottom", endSocket: "left" },
+        { color: "rgba(14, 165, 233, 0.50)", startSocket: "left", endSocket: "left" },
+      ];
+
+      window.__pilotageLeaderLines = anchors.radarAnchors.map((start, index) => {
+        const config = lineConfigByAxis[index] || lineConfigByAxis[1];
+
+        return new LeaderLine(start, anchors.cardAnchors[index], {
+          path: "fluid",
+          color: config.color,
+          size: 2,
+          startSocket: config.startSocket,
+          endSocket: config.endSocket,
+          startPlug: "disc",
+          endPlug: "disc",
+          startPlugSize: 0.72,
+          endPlugSize: 0.72,
+          dash: {
+            animation: false,
+            len: 6,
+            gap: 8,
+          },
+        });
+      });
+    })
+    .catch((error) => {
+      console.warn("LeaderLine indisponible pour les connecteurs pilotage.", error);
+    });
+}
+
+function schedulePilotageLeaderLinesRender() {
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      renderPilotageLeaderLines();
+    });
+  });
+
+  setTimeout(renderPilotageLeaderLines, 250);
+  setTimeout(renderPilotageLeaderLines, 800);
+
+  if (!window.__pilotageLeaderLineEventsBound) {
+    let timer = null;
+
+    const reposition = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        (window.__pilotageLeaderLines || []).forEach((line) => {
+          try {
+            line.position();
+          } catch (error) {
+            console.warn("LeaderLine position failed", error);
+          }
+        });
+      }, 80);
+    };
+
+    window.addEventListener("resize", () => {
+      clearTimeout(timer);
+      timer = setTimeout(renderPilotageLeaderLines, 120);
+    });
+
+    window.addEventListener("scroll", reposition, true);
+
+    window.__pilotageLeaderLineEventsBound = true;
+  }
+}
+
+function bindPilotageLeaderLineHover() {
+  const cards = Array.from(document.querySelectorAll(".pilotage-trajectory-visual-item"));
+
+  cards.slice(0, 4).forEach((card, index) => {
+    if (card.dataset.leaderLineHoverBound === "1") {
+      return;
+    }
+
+    card.addEventListener("mouseenter", () => {
+      const line = window.__pilotageLeaderLines?.[index];
+      if (line) {
+        line.setOptions({
+          color: index === 0 ? "rgba(100, 116, 139, 0.78)" : "rgba(14, 165, 233, 0.92)",
+          size: 3,
+        });
+      }
+    });
+
+    card.addEventListener("mouseleave", () => {
+      const colors = [
+        "rgba(100, 116, 139, 0.52)",
+        "rgba(14, 165, 233, 0.62)",
+        "rgba(14, 165, 233, 0.56)",
+        "rgba(14, 165, 233, 0.50)",
+      ];
+
+      const line = window.__pilotageLeaderLines?.[index];
+      if (line) {
+        line.setOptions({
+          color: colors[index] || colors[1],
+          size: 2,
+        });
+      }
+    });
+
+    card.dataset.leaderLineHoverBound = "1";
+  });
+}
+
+if (!window.__pilotageLeaderLineRenderWrapped && typeof renderPilotageTrajectoryRadarChart === "function") {
+  const originalRenderPilotageTrajectoryRadarChart = renderPilotageTrajectoryRadarChart;
+
+  renderPilotageTrajectoryRadarChart = function(payload) {
+    originalRenderPilotageTrajectoryRadarChart(payload);
+    schedulePilotageLeaderLinesRender();
+    bindPilotageLeaderLineHover();
+  };
+
+  window.__pilotageLeaderLineRenderWrapped = true;
+}
+
+
+/* PILOTAGEVISU010B — polish LeaderLine : plus sobre, plus fluide */
+function getPilotageLeaderLineConfig(index, active = false) {
+  const baseColors = [
+    "rgba(100, 116, 139, 0.46)",
+    "rgba(14, 165, 233, 0.54)",
+    "rgba(14, 165, 233, 0.50)",
+    "rgba(14, 165, 233, 0.46)",
+  ];
+
+  const activeColors = [
+    "rgba(100, 116, 139, 0.82)",
+    "rgba(14, 165, 233, 0.95)",
+    "rgba(14, 165, 233, 0.90)",
+    "rgba(14, 165, 233, 0.84)",
+  ];
+
+  return {
+    path: "fluid",
+    color: active ? activeColors[index] || activeColors[1] : baseColors[index] || baseColors[1],
+    size: active ? 3 : 1.7,
+    startSocket: "right",
+    endSocket: "left",
+    startPlug: "disc",
+    endPlug: "disc",
+    startPlugSize: active ? 0.82 : 0.58,
+    endPlugSize: active ? 0.82 : 0.58,
+    dash: {
+      animation: false,
+      len: active ? 9 : 6,
+      gap: active ? 7 : 10,
+    },
+  };
+}
+
+function renderPilotageLeaderLines() {
+  const anchors = ensurePilotageLeaderLineAnchors();
+
+  if (!anchors) {
+    destroyPilotageLeaderLines();
+    return;
+  }
+
+  if (window.matchMedia("(max-width: 1300px)").matches) {
+    destroyPilotageLeaderLines();
+    return;
+  }
+
+  loadPilotageLeaderLineLibrary()
+    .then((LeaderLine) => {
+      destroyPilotageLeaderLines();
+
+      window.__pilotageLeaderLines = anchors.radarAnchors.map((start, index) => {
+        const line = new LeaderLine(
+          start,
+          anchors.cardAnchors[index],
+          getPilotageLeaderLineConfig(index, false)
+        );
+
+        return line;
+      });
+
+      window.requestAnimationFrame(() => {
+        (window.__pilotageLeaderLines || []).forEach((line) => {
+          try {
+            line.position();
+          } catch (error) {
+            console.warn("LeaderLine position failed", error);
+          }
+        });
+      });
+    })
+    .catch((error) => {
+      console.warn("LeaderLine indisponible pour les connecteurs pilotage.", error);
+    });
+}
+
+function setPilotageLeaderLineActive(index, active) {
+  const line = window.__pilotageLeaderLines?.[index];
+  const cards = Array.from(document.querySelectorAll(".pilotage-trajectory-visual-item"));
+  const radarAnchors = Array.from(document.querySelectorAll(".pilotage-leaderline-anchor-radar"));
+  const cardAnchors = Array.from(document.querySelectorAll(".pilotage-leaderline-anchor-card"));
+
+  cards[index]?.classList.toggle("pilotage-axis-card-active", active);
+  radarAnchors[index]?.classList.toggle("pilotage-leaderline-anchor-active", active);
+  cardAnchors[index]?.classList.toggle("pilotage-leaderline-anchor-active", active);
+
+  if (line) {
+    line.setOptions(getPilotageLeaderLineConfig(index, active));
+    try {
+      line.position();
+    } catch (error) {
+      console.warn("LeaderLine position failed", error);
+    }
+  }
+}
+
+function bindPilotageLeaderLineHover() {
+  const cards = Array.from(document.querySelectorAll(".pilotage-trajectory-visual-item"));
+  const radarAnchors = Array.from(document.querySelectorAll(".pilotage-leaderline-anchor-radar"));
+
+  cards.slice(0, 4).forEach((card, index) => {
+    if (card.dataset.leaderLineHoverBoundModern === "1") {
+      return;
+    }
+
+    card.addEventListener("mouseenter", () => setPilotageLeaderLineActive(index, true));
+    card.addEventListener("mouseleave", () => setPilotageLeaderLineActive(index, false));
+
+    card.dataset.leaderLineHoverBoundModern = "1";
+  });
+
+  radarAnchors.slice(0, 4).forEach((anchor, index) => {
+    if (anchor.dataset.leaderLineHoverBoundModern === "1") {
+      return;
+    }
+
+    anchor.addEventListener("mouseenter", () => setPilotageLeaderLineActive(index, true));
+    anchor.addEventListener("mouseleave", () => setPilotageLeaderLineActive(index, false));
+
+    anchor.dataset.leaderLineHoverBoundModern = "1";
+  });
+}
+
+
+/* PILOTAGEVISU010C — textes pédagogiques consolidés des axes */
+function buildPilotageTrajectoryCardExplanation({
+  axis,
+  currentValue,
+  previousValue,
+  delta,
+  direction
+} = {}) {
+  const current = normalizePilotageInstrumentNumber(currentValue);
+  const previous = normalizePilotageInstrumentNumber(previousValue);
+  const numericDelta = normalizePilotageInstrumentNumber(delta);
+
+  if (current === null || previous === null || numericDelta === null) {
+    return "Lecture non disponible : la période affichée et la période équivalente ne contiennent pas assez de données comparables.";
+  }
+
+  const safeDirection = ["up", "down", "flat"].includes(direction) ? direction : "flat";
+
+  if (axis === "rotation") {
+    const currentText = formatPilotageMultiple(current);
+    const previousText = formatPilotageMultiple(previous);
+    const deltaText = formatPilotageSignedDeltaValue(numericDelta, "absolute", 2, "×");
+
+    const interpretation = safeDirection === "up"
+      ? "La même masse moyenne de Gonettes produit davantage d’échanges : la monnaie circule plus intensément."
+      : safeDirection === "down"
+        ? "La même masse moyenne de Gonettes produit moins d’échanges : l’activité ralentit relativement."
+        : "La situation est proche de la période équivalente : le régime de circulation reste stable.";
+
+    return `Mesure l’intensité d’usage de la monnaie. Formule : activité économique ÷ masse numérique moyenne, annualisée pour comparer des périodes de durées différentes. Ici : ${currentText}, contre ${previousText} sur la période équivalente (${deltaText}). Borne radar : 0 → 3×. ${interpretation}`;
+  }
+
+  if (axis === "retention") {
+    const currentText = formatPilotagePercent(current);
+    const previousText = formatPilotagePercent(previous);
+    const deltaText = formatPilotageSignedDeltaValue(numericDelta * 100, "points", 1);
+
+    const interpretation = safeDirection === "up"
+      ? "Une plus grande part des Gonettes alimentées reste dans le circuit après les sorties : le circuit retient mieux la monnaie."
+      : safeDirection === "down"
+        ? "Les sorties pèsent davantage sur les alimentations : la monnaie ressort plus vite du circuit."
+        : "Le rapport entre entrées et sorties reste proche de la période équivalente.";
+
+    return `Mesure la part nette des alimentations conservée dans le circuit. Formule : (alimentations − sorties) ÷ alimentations. Ici : ${currentText}, contre ${previousText} sur la période équivalente (${deltaText}). Borne radar : −50 % → +50 %. ${interpretation}`;
+  }
+
+  if (axis === "yield") {
+    const currentText = formatPilotageGonetteYield(current);
+    const previousText = formatPilotageGonetteYield(previous);
+    const deltaText = formatPilotageSignedDeltaValue(numericDelta, "yield", 2, "G/G");
+
+    const interpretation = safeDirection === "up"
+      ? "Avant de sortir, chaque Gonette a généré davantage d’activité économique : le rendement circulatoire apparent progresse."
+      : safeDirection === "down"
+        ? "Avant de sortir, chaque Gonette a généré moins d’activité économique : le rendement circulatoire apparent se réduit."
+        : "Le rendement avant sortie reste proche de la période équivalente.";
+
+    return `Mesure l’activité générée avant sortie du circuit. Formule : activité économique totale ÷ sorties. Ici : ${currentText}, contre ${previousText} sur la période équivalente (${deltaText}). Borne radar : 0 → 3 G/G. ${interpretation}`;
+  }
+
+  if (axis === "coverage") {
+    const currentText = formatPilotageThirtyDayPeriods(current);
+    const previousText = formatPilotageThirtyDayPeriods(previous);
+    const deltaText = formatPilotageSignedDeltaValue(numericDelta, "absolute", 1, "mois");
+
+    const interpretation = safeDirection === "up"
+      ? "Au rythme moyen actuel des sorties, le fonds moyen représente davantage de mois de couverture apparente."
+      : safeDirection === "down"
+        ? "Au rythme moyen actuel des sorties, le fonds moyen représente moins de mois de couverture apparente."
+        : "La couverture apparente reste proche de la période équivalente.";
+
+    return `Situe le rapport entre fonds disponible et rythme des sorties. Formule : fonds de garantie numérique moyen ÷ sorties moyennes, exprimé en mois de 30 jours. Ici : ${currentText}, contre ${previousText} sur la période équivalente (${deltaText}). Borne radar : 0 → 12 mois. ${interpretation}`;
+  }
+
+  return "Lecture de trajectoire : comparaison avec la période équivalente précédente, de même durée.";
+}
+
+
+/* PILOTAGEVISU010D — textes pédagogiques compacts des axes */
+function buildPilotageTrajectoryCardExplanation({
+  axis,
+  currentValue,
+  previousValue,
+  delta,
+  direction
+} = {}) {
+  const current = normalizePilotageInstrumentNumber(currentValue);
+  const previous = normalizePilotageInstrumentNumber(previousValue);
+  const numericDelta = normalizePilotageInstrumentNumber(delta);
+
+  if (current === null || previous === null || numericDelta === null) {
+    return "Données insuffisantes pour comparer proprement cette période avec la période équivalente.";
+  }
+
+  const safeDirection = ["up", "down", "flat"].includes(direction) ? direction : "flat";
+
+  if (axis === "rotation") {
+    const currentText = formatPilotageMultiple(current);
+    const previousText = formatPilotageMultiple(previous);
+    const deltaText = formatPilotageSignedDeltaValue(numericDelta, "absolute", 2, "×");
+
+    const interpretation = safeDirection === "up"
+      ? "La même masse moyenne de Gonettes soutient davantage d’échanges : la circulation s’intensifie."
+      : safeDirection === "down"
+        ? "La même masse moyenne de Gonettes soutient moins d’échanges : la circulation ralentit."
+        : "Le niveau reste proche de la période équivalente : le régime de circulation est stable.";
+
+    return `Mesure l’intensité d’usage de la monnaie. Formule : activité économique ÷ masse numérique moyenne, ramenée sur un an. Ici : ${currentText} contre ${previousText} avant (${deltaText}). Borne radar : 0 → 3×. ${interpretation}`;
+  }
+
+  if (axis === "retention") {
+    const currentText = formatPilotagePercent(current);
+    const previousText = formatPilotagePercent(previous);
+    const deltaText = formatPilotageSignedDeltaValue(numericDelta * 100, "points", 1);
+
+    const interpretation = safeDirection === "up"
+      ? "Une plus grande part des Gonettes alimentées reste dans le circuit : la rétention progresse."
+      : safeDirection === "down"
+        ? "Les sorties absorbent davantage les alimentations : la rétention se fragilise."
+        : "Le rapport entre entrées et sorties reste proche de la période équivalente.";
+
+    return `Mesure ce qui reste des alimentations après les sorties. Formule : (alimentations − sorties) ÷ alimentations. Ici : ${currentText} contre ${previousText} avant (${deltaText}). Borne radar : −50 % → +50 %. ${interpretation}`;
+  }
+
+  if (axis === "yield") {
+    const currentText = formatPilotageGonetteYield(current);
+    const previousText = formatPilotageGonetteYield(previous);
+    const deltaText = formatPilotageSignedDeltaValue(numericDelta, "yield", 2, "G/G");
+
+    const interpretation = safeDirection === "up"
+      ? "Avant de sortir, chaque Gonette a généré davantage d’activité : le rendement circulatoire apparent progresse."
+      : safeDirection === "down"
+        ? "Avant de sortir, chaque Gonette a généré moins d’activité : le rendement apparent recule."
+        : "Le rendement avant sortie reste proche de la période équivalente.";
+
+    return `Mesure l’activité générée avant sortie du circuit. Formule : activité économique ÷ sorties. Ici : ${currentText} contre ${previousText} avant (${deltaText}). Borne radar : 0 → 3 G/G. Indicateur proxy, distinct d’un LM3 strict. ${interpretation}`;
+  }
+
+  if (axis === "coverage") {
+    const currentText = formatPilotageThirtyDayPeriods(current);
+    const previousText = formatPilotageThirtyDayPeriods(previous);
+    const deltaText = formatPilotageSignedDeltaValue(numericDelta, "absolute", 1, "mois");
+
+    const interpretation = safeDirection === "up"
+      ? "Au rythme moyen des sorties, le fonds moyen couvre davantage de mois apparents."
+      : safeDirection === "down"
+        ? "Au rythme moyen des sorties, le fonds moyen couvre moins de mois apparents."
+        : "La couverture apparente reste proche de la période équivalente.";
+
+    return `Situe le rapport entre fonds moyen et rythme des sorties. Formule : fonds de garantie numérique moyen ÷ sorties moyennes, exprimé en mois de 30 jours. Ici : ${currentText} contre ${previousText} avant (${deltaText}). Borne radar : 0 → 12 mois. Ce n’est pas un ratio bancaire. ${interpretation}`;
+  }
+
+  return "Lecture de trajectoire : comparaison avec la période équivalente précédente, de même durée.";
+}
+
+
+/* PILOTAGEVISU010E — textes pédagogiques approfondis des axes */
+function buildPilotageTrajectoryCardExplanation({
+  axis,
+  currentValue,
+  previousValue,
+  delta,
+  direction
+} = {}) {
+  const current = normalizePilotageInstrumentNumber(currentValue);
+  const previous = normalizePilotageInstrumentNumber(previousValue);
+  const numericDelta = normalizePilotageInstrumentNumber(delta);
+
+  if (current === null || previous === null || numericDelta === null) {
+    return "Lecture non disponible : il manque assez de données comparables entre la période affichée et la période équivalente. Dans ce cas, l’indicateur ne doit pas être interprété comme une tendance.";
+  }
+
+  const safeDirection = ["up", "down", "flat"].includes(direction) ? direction : "flat";
+
+  if (axis === "rotation") {
+    const currentText = formatPilotageMultiple(current);
+    const previousText = formatPilotageMultiple(previous);
+    const deltaText = formatPilotageSignedDeltaValue(numericDelta, "absolute", 2, "×");
+
+    const reading = safeDirection === "up"
+      ? "C’est plutôt favorable : à masse monétaire moyenne comparable, les Gonettes soutiennent davantage d’échanges. Cela peut indiquer une monnaie plus active, plus souvent réutilisée, ou mieux insérée dans les pratiques d’achat."
+      : safeDirection === "down"
+        ? "C’est à surveiller : la même masse moyenne produit moins d’activité. Cela peut venir d’une baisse des achats, d’un ralentissement saisonnier, d’une concentration de Gonettes peu réutilisées, ou d’un décrochage de certains acteurs."
+        : "C’est plutôt stable : l’intensité de circulation ne change pas beaucoup par rapport à la période équivalente. Cela peut signaler un régime d’usage installé, mais pas forcément une progression.";
+
+    return `Cet axe répond à la question : la masse de Gonettes disponible travaille-t-elle beaucoup ou peu ? Il rapporte l’activité économique à la masse numérique moyenne, puis annualise le résultat pour comparer des périodes de durées différentes. Ici, la rotation est de ${currentText}, contre ${previousText} sur la période équivalente (${deltaText}). Borne radar : 0 → 3×. ${reading} À lire avec prudence : une bonne rotation peut masquer une activité concentrée sur quelques acteurs, d’où l’intérêt de croiser ensuite avec la détention, les secteurs et les fiches pros.`;
+  }
+
+  if (axis === "retention") {
+    const currentText = formatPilotagePercent(current);
+    const previousText = formatPilotagePercent(previous);
+    const deltaText = formatPilotageSignedDeltaValue(numericDelta * 100, "points", 1);
+
+    const reading = safeDirection === "up"
+      ? "C’est plutôt favorable : une plus grande part des Gonettes alimentées reste dans le circuit après les sorties. Cela peut renforcer la capacité de circulation interne et réduire la dépendance à de nouvelles alimentations."
+      : safeDirection === "down"
+        ? "C’est à surveiller : les sorties absorbent davantage les alimentations. Cela peut venir de reconversions plus fortes, d’acteurs qui récupèrent des Gonettes sans les réemployer, ou d’une difficulté à trouver des débouchés dans le réseau."
+        : "C’est relativement stable : les entrées et les sorties gardent un équilibre proche de la période équivalente. Cela peut être sain si l’activité reste forte, mais limitant si le circuit ne grossit pas.";
+
+    return `Cet axe répond à la question : quand des Gonettes entrent, restent-elles dans le circuit ou ressortent-elles rapidement ? La formule est : (alimentations − sorties) ÷ alimentations. Ici, la rétention nette est de ${currentText}, contre ${previousText} sur la période équivalente (${deltaText}). Borne radar : −50 % → +50 %. ${reading} Attention : une rétention élevée n’est pas automatiquement positive si elle correspond à de la monnaie dormante ; elle devient intéressante lorsqu’elle s’accompagne d’activité économique réelle.`;
+  }
+
+  if (axis === "yield") {
+    const currentText = formatPilotageGonetteYield(current);
+    const previousText = formatPilotageGonetteYield(previous);
+    const deltaText = formatPilotageSignedDeltaValue(numericDelta, "yield", 2, "G/G");
+
+    const reading = safeDirection === "up"
+      ? "C’est plutôt favorable : avant de sortir, chaque Gonette sortie a été associée à davantage d’activité économique. Cela suggère que la monnaie a davantage circulé avant reconversion ou sortie du circuit."
+      : safeDirection === "down"
+        ? "C’est à surveiller : chaque Gonette sortie a généré moins d’activité avant de quitter le circuit. Cela peut venir de sorties rapides après alimentation, de reconversions professionnelles fortes, ou d’un manque de réemploi B2B."
+        : "C’est assez stable : le rendement apparent avant sortie reste proche de la période équivalente. Cela indique que la relation entre activité et sorties ne change pas fortement.";
+
+    return `Cet axe répond à la question : avant qu’une Gonette ne sorte, combien d’activité économique a-t-elle généré ? La formule est : activité économique ÷ sorties. Ici, chaque Gonette sortie correspond à ${currentText} d’activité, contre ${previousText} sur la période équivalente (${deltaText}). Borne radar : 0 → 3 G/G. ${reading} C’est un proxy de pilotage, pas un LM3 strict : il sert à repérer une dynamique de rendement circulatoire, pas à prouver une causalité économique complète.`;
+  }
+
+  if (axis === "coverage") {
+    const currentText = formatPilotageThirtyDayPeriods(current);
+    const previousText = formatPilotageThirtyDayPeriods(previous);
+    const deltaText = formatPilotageSignedDeltaValue(numericDelta, "absolute", 1, "mois");
+
+    const reading = safeDirection === "up"
+      ? "C’est plutôt rassurant : au rythme moyen des sorties observées, le fonds moyen représente davantage de mois de couverture apparente. Cela donne plus de marge face aux sorties futures."
+      : safeDirection === "down"
+        ? "C’est à surveiller : au rythme moyen des sorties, la couverture apparente se réduit. Cela peut venir d’une hausse des reconversions, d’un fonds moyen plus faible, ou d’une période où les sorties sont exceptionnellement concentrées."
+        : "C’est stable : le rapport entre fonds moyen et rythme de sortie reste proche de la période équivalente. Cela indique une robustesse apparente comparable.";
+
+    return `Cet axe répond à la question : si les sorties continuaient au rythme moyen observé, combien de temps le fonds moyen représenterait-il ? La formule est : fonds de garantie numérique moyen ÷ sorties moyennes, exprimé en mois de 30 jours. Ici, la couverture apparente est de ${currentText}, contre ${previousText} sur la période équivalente (${deltaText}). Borne radar : 0 → 12 mois. ${reading} Ce n’est pas un ratio bancaire ni une prévision : c’est un repère de pression et de robustesse apparente à croiser avec la nature réelle des sorties.`;
+  }
+
+  return "Lecture de trajectoire : comparaison avec la période équivalente précédente, de même durée.";
+}
+
+
+/* PILOTAGEVISU010F — radar technique normalisé */
+function buildPilotageRadarTechnicalScores(payload) {
+  if (!payload?.axes?.length) {
+    return "";
+  }
+
+  return `
+    <div class="pilotage-radar-technical-scores" aria-label="Scores normalisés du radar">
+      ${payload.axes.map((axis, index) => {
+        const currentScore = Math.round(Number(payload.currentScores?.[index] || 0));
+        const previousScore = Math.round(Number(payload.previousScores?.[index] || 0));
+        const deltaScore = currentScore - previousScore;
+        const deltaClass = deltaScore > 3 ? "up" : deltaScore < -3 ? "down" : "flat";
+        const sign = deltaScore > 0 ? "+" : "";
+
+        return `
+          <span class="pilotage-radar-score pilotage-radar-score-${deltaClass}">
+            <b>${escapePilotageInstrumentHtml(axis.label)}</b>
+            <strong>${currentScore}/100</strong>
+            <em>${sign}${deltaScore} pts radar</em>
+          </span>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function getPilotageTechnicalRadarDatasets(payload) {
+  return [
+    {
+      label: "Zone médiane 50/100",
+      data: payload.axes.map(() => 50),
+      borderColor: "rgba(148, 163, 184, 0.34)",
+      backgroundColor: "rgba(148, 163, 184, 0.055)",
+      pointRadius: 0,
+      borderWidth: 1.4,
+      borderDash: [3, 5],
+      order: 3
+    },
+    {
+      label: "Période équivalente",
+      data: payload.previousScores,
+      borderColor: "rgba(100, 116, 139, 0.82)",
+      backgroundColor: "rgba(100, 116, 139, 0.10)",
+      pointBackgroundColor: "rgba(100, 116, 139, 0.92)",
+      pointBorderColor: "#ffffff",
+      pointBorderWidth: 2,
+      pointRadius: 4,
+      pointHoverRadius: 6,
+      borderWidth: 2.2,
+      borderDash: [6, 4],
+      order: 2
+    },
+    {
+      label: "Période affichée",
+      data: payload.currentScores,
+      borderColor: "rgba(14, 165, 233, 0.96)",
+      backgroundColor: "rgba(14, 165, 233, 0.22)",
+      pointBackgroundColor: "rgba(14, 165, 233, 1)",
+      pointBorderColor: "#ffffff",
+      pointBorderWidth: 2.5,
+      pointRadius: 5.5,
+      pointHoverRadius: 7,
+      borderWidth: 3,
+      order: 1
+    }
+  ];
+}
+
+function getPilotageTechnicalRadarOptions(payload, { zoom = false } = {}) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: {
+      duration: 520,
+      easing: "easeOutQuart"
+    },
+    interaction: {
+      mode: "nearest",
+      intersect: false
+    },
+    plugins: {
+      legend: {
+        position: "bottom",
+        labels: {
+          boxWidth: 12,
+          boxHeight: 12,
+          usePointStyle: true,
+          padding: zoom ? 20 : 14,
+          filter(item) {
+            return item.text !== "Zone médiane 50/100";
+          },
+          font: {
+            size: zoom ? 13 : 11,
+            weight: "800"
+          }
+        }
+      },
+      tooltip: {
+        backgroundColor: "rgba(15, 23, 42, 0.94)",
+        padding: 11,
+        displayColors: true,
+        callbacks: {
+          title(items) {
+            const item = items?.[0];
+            const axis = item ? payload.axes[item.dataIndex] : null;
+            return axis ? `${axis.label} · score radar` : "";
+          },
+          label(context) {
+            if (context.dataset.label === "Zone médiane 50/100") {
+              return "Repère médian : 50/100";
+            }
+
+            const axis = payload.axes[context.dataIndex];
+            const values = context.dataset.label === "Période affichée"
+              ? payload.currentValues
+              : payload.previousValues;
+
+            const rawValue = values[context.dataIndex];
+            const score = Math.round(context.parsed.r);
+
+            return `${context.dataset.label} : ${axis.formatter(rawValue)} · ${score}/100`;
+          },
+          afterLabel(context) {
+            const axis = payload.axes[context.dataIndex];
+            const currentScore = Math.round(Number(payload.currentScores?.[context.dataIndex] || 0));
+            const previousScore = Math.round(Number(payload.previousScores?.[context.dataIndex] || 0));
+            const delta = currentScore - previousScore;
+            const sign = delta > 0 ? "+" : "";
+
+            return [
+              `Borne : ${axis.boundsLabel}`,
+              `Écart radar : ${sign}${delta} pts`
+            ];
+          }
+        }
+      }
+    },
+    scales: {
+      r: {
+        min: 0,
+        max: 100,
+        beginAtZero: true,
+        ticks: {
+          backdropColor: "rgba(255, 255, 255, 0.72)",
+          color: "#64748b",
+          display: true,
+          stepSize: 20,
+          showLabelBackdrop: true,
+          z: 2,
+          callback(value) {
+            return `${value}`;
+          },
+          font: {
+            size: zoom ? 11 : 9,
+            weight: "800"
+          }
+        },
+        pointLabels: {
+          color: "#334155",
+          padding: zoom ? 20 : 14,
+          font: {
+            size: zoom ? 15 : 12,
+            weight: "900"
+          }
+        },
+        grid: {
+          circular: false,
+          color(context) {
+            return context.tick?.value === 50
+              ? "rgba(100, 116, 139, 0.36)"
+              : "rgba(148, 163, 184, 0.22)";
+          },
+          lineWidth(context) {
+            return context.tick?.value === 50 ? 1.4 : 1;
+          }
+        },
+        angleLines: {
+          color: "rgba(148, 163, 184, 0.26)",
+          lineWidth: 1
+        }
+      }
+    }
+  };
+}
+
+function renderPilotageTrajectoryRadarChart(payload) {
+  const canvas = document.getElementById("pilotageTrajectoryRadarChart");
+
+  if (!canvas || !payload || typeof Chart === "undefined") {
+    return;
+  }
+
+  if (appState.charts.pilotageTrajectoryRadar) {
+    appState.charts.pilotageTrajectoryRadar.destroy();
+  }
+
+  appState.charts.pilotageTrajectoryRadar = new Chart(canvas, {
+    type: "radar",
+    data: {
+      labels: payload.axes.map((axis) => axis.label),
+      datasets: getPilotageTechnicalRadarDatasets(payload)
+    },
+    options: getPilotageTechnicalRadarOptions(payload)
+  });
+
+  const card = canvas.closest(".pilotage-trajectory-chartjs-card");
+  const existingScores = card?.querySelector(".pilotage-radar-technical-scores");
+
+  if (existingScores) {
+    existingScores.remove();
+  }
+
+  const method = card?.querySelector(".pilotage-trajectory-radar-method");
+  if (method) {
+    method.insertAdjacentHTML("beforebegin", buildPilotageRadarTechnicalScores(payload));
+  }
+
+  if (typeof schedulePilotageLeaderLinesRender === "function") {
+    schedulePilotageLeaderLinesRender();
+  }
+
+  if (typeof bindPilotageLeaderLineHover === "function") {
+    bindPilotageLeaderLineHover();
+  }
+}
+
+function renderPilotageTrajectoryRadarZoomChart(payload) {
+  const canvas = document.getElementById("pilotageTrajectoryRadarZoomChart");
+
+  if (!canvas || !payload || typeof Chart === "undefined") {
+    return;
+  }
+
+  if (appState.statsZoomChart && typeof appState.statsZoomChart.destroy === "function") {
+    appState.statsZoomChart.destroy();
+    appState.statsZoomChart = null;
+  }
+
+  appState.statsZoomChart = new Chart(canvas, {
+    type: "radar",
+    data: {
+      labels: payload.axes.map((axis) => axis.label),
+      datasets: getPilotageTechnicalRadarDatasets(payload)
+    },
+    options: getPilotageTechnicalRadarOptions(payload, { zoom: true })
+  });
+}
+

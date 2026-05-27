@@ -11663,3 +11663,4421 @@ body.dark-mode .pro-detail-payment-basin-tooltip {
   }
 }
 
+/* PILOTAGEVISU003A — cartes-instruments de synthèse pilotage monétaire */
+.pilotage-instrument-grid {
+  align-items: stretch;
+}
+
+.pilotage-instrument-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  min-height: 190px;
+  overflow: hidden;
+  position: relative;
+}
+
+.pilotage-instrument-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 0.85rem;
+  justify-content: space-between;
+}
+
+.pilotage-reference-badge {
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
+  color: #475569;
+  flex: 0 0 auto;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  padding: 0.42rem 0.62rem;
+  white-space: nowrap;
+}
+
+.pilotage-reference-badge-history {
+  background: rgba(99, 102, 241, 0.08);
+  border-color: rgba(99, 102, 241, 0.24);
+  color: #4338ca;
+}
+
+.pilotage-reference-badge-national {
+  background: rgba(14, 165, 233, 0.08);
+  border-color: rgba(14, 165, 233, 0.24);
+  color: #0369a1;
+}
+
+.pilotage-reference-badge-proxy {
+  background: rgba(245, 158, 11, 0.10);
+  border-color: rgba(245, 158, 11, 0.28);
+  color: #92400e;
+}
+
+.pilotage-reference-badge-internal {
+  background: rgba(15, 118, 110, 0.08);
+  border-color: rgba(15, 118, 110, 0.24);
+  color: #0f766e;
+}
+
+.pilotage-instrument-visual {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.1rem;
+}
+
+.pilotage-instrument-gauge {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.pilotage-instrument-gauge-empty {
+  align-items: center;
+  background: rgba(248, 250, 252, 0.9);
+  border: 1px dashed rgba(148, 163, 184, 0.5);
+  border-radius: 0.9rem;
+  color: #64748b;
+  font-size: 0.78rem;
+  min-height: 2.3rem;
+  padding: 0.65rem;
+}
+
+.pilotage-gauge-track {
+  background:
+    linear-gradient(90deg, rgba(226, 232, 240, 0.8), rgba(203, 213, 225, 0.46));
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 999px;
+  height: 0.78rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.pilotage-gauge-fill {
+  background:
+    linear-gradient(90deg, rgba(99, 102, 241, 0.72), rgba(14, 165, 233, 0.68));
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  min-width: 2px;
+}
+
+.pilotage-gauge-marker,
+.pilotage-gauge-zero {
+  bottom: -0.22rem;
+  position: absolute;
+  top: -0.22rem;
+  transform: translateX(-50%);
+  width: 2px;
+  z-index: 2;
+}
+
+.pilotage-gauge-marker {
+  background: rgba(15, 23, 42, 0.74);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.86);
+}
+
+.pilotage-gauge-zero {
+  background: rgba(100, 116, 139, 0.55);
+}
+
+.pilotage-gauge-scale {
+  color: #64748b;
+  display: flex;
+  font-size: 0.72rem;
+  justify-content: space-between;
+  line-height: 1.2;
+}
+
+.pilotage-gauge-reference {
+  color: #64748b;
+  font-size: 0.72rem;
+  line-height: 1.25;
+}
+
+.pilotage-instrument-sparkline {
+  height: 34px;
+  max-width: 100%;
+  opacity: 0.78;
+  width: 100%;
+}
+
+.pilotage-instrument-sparkline polyline {
+  fill: none;
+  stroke: rgba(79, 70, 229, 0.68);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.2;
+  vector-effect: non-scaling-stroke;
+}
+
+.pilotage-instrument-insight {
+  background: rgba(248, 250, 252, 0.92);
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 0.9rem;
+  color: #475569;
+  font-size: 0.76rem;
+  line-height: 1.35;
+  margin-top: auto;
+  padding: 0.62rem 0.72rem;
+}
+
+@media (max-width: 900px) {
+  .pilotage-instrument-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .pilotage-reference-badge {
+    width: fit-content;
+  }
+}
+
+/* PILOTAGEVISU003A-FIX1 — polish visuel des cartes-instruments */
+.pilotage-instrument-card {
+  gap: 0.72rem;
+  min-height: 170px;
+}
+
+.pilotage-instrument-head {
+  gap: 0.65rem;
+}
+
+.pilotage-reference-badge {
+  font-size: 0.64rem;
+  font-weight: 750;
+  padding: 0.36rem 0.55rem;
+}
+
+.pilotage-instrument-visual {
+  gap: 0.28rem;
+}
+
+.pilotage-gauge-track {
+  height: 0.68rem;
+}
+
+.pilotage-gauge-scale,
+.pilotage-gauge-reference {
+  font-size: 0.68rem;
+}
+
+.pilotage-gauge-reference {
+  opacity: 0.9;
+}
+
+.pilotage-instrument-sparkline {
+  height: 26px;
+  justify-self: center;
+  margin-top: 0.05rem;
+  max-width: 250px;
+  width: 42%;
+}
+
+.pilotage-instrument-sparkline polyline {
+  stroke-width: 2;
+}
+
+.pilotage-instrument-insight {
+  border-radius: 0.75rem;
+  font-size: 0.72rem;
+  line-height: 1.3;
+  padding: 0.52rem 0.62rem;
+}
+
+@media (min-width: 1180px) {
+  .pilotage-instrument-visual {
+    grid-template-columns: minmax(0, 1fr) minmax(120px, 180px);
+    align-items: end;
+  }
+
+  .pilotage-instrument-gauge {
+    min-width: 0;
+  }
+
+  .pilotage-instrument-sparkline {
+    justify-self: end;
+    width: 100%;
+  }
+}
+
+/* PILOTAGEVISU005A-LIGHT — légende et balance de synthèse */
+.pilotage-reference-legend {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(203, 213, 225, 0.86);
+  border-radius: 1rem;
+  color: #475569;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.42rem 0.75rem;
+  line-height: 1.35;
+  margin: -0.25rem 0 0.85rem;
+  padding: 0.68rem 0.86rem;
+}
+
+.pilotage-reference-legend strong {
+  color: #0f172a;
+  margin-right: 0.2rem;
+}
+
+.pilotage-reference-legend span {
+  font-size: 0.76rem;
+}
+
+.pilotage-reference-legend b {
+  color: #334155;
+}
+
+.pilotage-flow-balance-card {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.pilotage-flow-balance-heading {
+  margin-bottom: 0;
+}
+
+.pilotage-flow-balance-bars {
+  display: grid;
+  gap: 0.58rem;
+}
+
+.pilotage-flow-balance-row {
+  align-items: center;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 8.5rem minmax(0, 1fr) 9rem;
+}
+
+.pilotage-flow-balance-row span,
+.pilotage-flow-balance-net span {
+  color: #64748b;
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+
+.pilotage-flow-balance-row strong,
+.pilotage-flow-balance-net strong {
+  color: #0f172a;
+  font-size: 0.86rem;
+  text-align: right;
+}
+
+.pilotage-flow-balance-track {
+  background: rgba(226, 232, 240, 0.74);
+  border: 1px solid rgba(203, 213, 225, 0.75);
+  border-radius: 999px;
+  height: 0.72rem;
+  overflow: hidden;
+}
+
+.pilotage-flow-balance-fill {
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  min-width: 2px;
+}
+
+.pilotage-flow-balance-fill-inflow {
+  background: linear-gradient(90deg, rgba(99, 102, 241, 0.62), rgba(14, 165, 233, 0.72));
+}
+
+.pilotage-flow-balance-fill-outflow {
+  background: linear-gradient(90deg, rgba(248, 113, 113, 0.58), rgba(245, 158, 11, 0.68));
+}
+
+.pilotage-flow-balance-net {
+  align-items: center;
+  background: rgba(248, 250, 252, 0.86);
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 0.85rem;
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.22rem;
+  padding: 0.62rem 0.78rem;
+}
+
+@media (max-width: 1000px) {
+  .pilotage-flow-balance-row {
+    grid-template-columns: 1fr;
+    gap: 0.35rem;
+  }
+
+  .pilotage-flow-balance-row strong {
+    text-align: left;
+  }
+}
+
+/* PILOTAGEVISU005B-LIGHT — chemin de lecture synthèse */
+.pilotage-diagnostic-lite-card {
+  border-left: 4px solid rgba(59, 130, 246, 0.72);
+}
+
+.pilotage-diagnostic-lite-card .pilotage-reading-copy {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.pilotage-diagnostic-lite-card h3 {
+  margin-bottom: 0.15rem;
+}
+
+.pilotage-diagnostic-lite-card p {
+  margin: 0;
+}
+
+.pilotage-diagnostic-axis {
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.18);
+  border-radius: 999px;
+  color: #1d4ed8;
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+  margin-right: 0.45rem;
+  padding: 0.28rem 0.46rem;
+  vertical-align: 0.08rem;
+}
+
+.pilotage-flow-balance-card {
+  border-left: 4px solid rgba(14, 165, 233, 0.55);
+}
+
+.pilotage-context-card {
+  margin-top: 0;
+}
+
+/* PILOTAGEVISU005B-FIX1 — lisibilité du diagnostic rapide */
+.pilotage-diagnostic-lite-card .pilotage-reading-copy {
+  display: grid;
+  gap: 0.78rem;
+}
+
+.pilotage-diagnostic-lite-card .pilotage-reading-copy p {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.48rem;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.pilotage-diagnostic-axis {
+  flex: 0 0 auto;
+}
+
+.pilotage-diagnostic-lite-card .pilotage-reading-copy p:nth-of-type(2) .pilotage-diagnostic-axis:nth-of-type(2) {
+  margin-left: 0.8rem;
+}
+
+@media (max-width: 900px) {
+  .pilotage-diagnostic-lite-card .pilotage-reading-copy p {
+    display: block;
+  }
+
+  .pilotage-diagnostic-axis {
+    margin: 0 0.35rem 0.35rem 0;
+  }
+
+  .pilotage-diagnostic-lite-card .pilotage-reading-copy p:nth-of-type(2) .pilotage-diagnostic-axis:nth-of-type(2) {
+    margin-left: 0;
+  }
+}
+
+/* PILOTAGEVISU006C — affordance des aides de repères */
+.pilotage-reference-badge,
+.pilotage-gauge-marker,
+.pilotage-instrument-gauge[title] {
+  cursor: help;
+}
+
+.pilotage-reference-badge:focus-visible {
+  outline: 2px solid rgba(59, 130, 246, 0.55);
+  outline-offset: 2px;
+}
+
+/* PILOTAGEVISU006D — légende issue des métadonnées API */
+.pilotage-reference-legend span[title] {
+  cursor: help;
+}
+
+/* PILOTAGEVISU007A — grandeurs de référence visuelles */
+.pilotage-reference-visual-card {
+  display: grid;
+  gap: 1rem;
+}
+
+.pilotage-reference-visual-grid {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.pilotage-reference-visual-item {
+  background: rgba(248, 250, 252, 0.92);
+  border: 1px solid rgba(226, 232, 240, 0.96);
+  border-radius: 1rem;
+  display: grid;
+  gap: 0.55rem;
+  min-height: 132px;
+  padding: 0.86rem 0.95rem;
+  position: relative;
+}
+
+.pilotage-reference-visual-item-emphasis {
+  background:
+    linear-gradient(135deg, rgba(239, 246, 255, 0.92), rgba(248, 250, 252, 0.96));
+  border-color: rgba(96, 165, 250, 0.28);
+}
+
+.pilotage-reference-visual-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 0.45rem;
+  justify-content: space-between;
+}
+
+.pilotage-reference-visual-group {
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.16);
+  border-radius: 999px;
+  color: #1d4ed8;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+  padding: 0.28rem 0.45rem;
+  white-space: nowrap;
+}
+
+.pilotage-reference-visual-label {
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 750;
+  line-height: 1.25;
+  text-align: right;
+}
+
+.pilotage-reference-visual-value {
+  color: #0f172a;
+  font-size: 1.05rem;
+  line-height: 1.05;
+}
+
+.pilotage-reference-visual-subtext {
+  color: #64748b;
+  font-size: 0.76rem;
+  line-height: 1.3;
+}
+
+.pilotage-reference-visual-bar {
+  display: grid;
+  gap: 0.28rem;
+  margin-top: auto;
+}
+
+.pilotage-reference-visual-track {
+  background: rgba(226, 232, 240, 0.78);
+  border: 1px solid rgba(203, 213, 225, 0.74);
+  border-radius: 999px;
+  height: 0.52rem;
+  overflow: hidden;
+}
+
+.pilotage-reference-visual-fill {
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  min-width: 2px;
+}
+
+.pilotage-reference-visual-fill-activity {
+  background: linear-gradient(90deg, rgba(99, 102, 241, 0.62), rgba(14, 165, 233, 0.72));
+}
+
+.pilotage-reference-visual-fill-stock {
+  background: linear-gradient(90deg, rgba(100, 116, 139, 0.45), rgba(148, 163, 184, 0.72));
+}
+
+.pilotage-reference-visual-fill-inflow {
+  background: linear-gradient(90deg, rgba(34, 197, 94, 0.54), rgba(14, 165, 233, 0.7));
+}
+
+.pilotage-reference-visual-fill-outflow {
+  background: linear-gradient(90deg, rgba(248, 113, 113, 0.58), rgba(245, 158, 11, 0.68));
+}
+
+.pilotage-reference-visual-fill-net-positive {
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.58), rgba(45, 212, 191, 0.72));
+}
+
+.pilotage-reference-visual-fill-net-negative {
+  background: linear-gradient(90deg, rgba(244, 63, 94, 0.58), rgba(251, 146, 60, 0.72));
+}
+
+.pilotage-reference-visual-fill-guarantee {
+  background: linear-gradient(90deg, rgba(15, 118, 110, 0.56), rgba(45, 212, 191, 0.7));
+}
+
+.pilotage-reference-visual-bar-label {
+  color: #64748b;
+  font-size: 0.7rem;
+  line-height: 1.2;
+}
+
+@media (max-width: 1100px) {
+  .pilotage-reference-visual-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .pilotage-reference-visual-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pilotage-reference-visual-head {
+    flex-direction: column;
+  }
+
+  .pilotage-reference-visual-label {
+    text-align: left;
+  }
+}
+
+/* PILOTAGEVISU007A-FIX1 — lisibilité des grandeurs de référence */
+.pilotage-reference-visual-item {
+  padding-right: 1.15rem;
+}
+
+.pilotage-reference-visual-head {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 0.42rem;
+  justify-content: flex-start;
+  min-width: 0;
+  padding-right: 2.1rem;
+}
+
+.pilotage-reference-visual-label {
+  color: #64748b;
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1.25;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: left;
+  white-space: normal;
+}
+
+.pilotage-reference-visual-group {
+  width: fit-content;
+}
+
+.pilotage-reference-visual-value {
+  margin-top: 0.05rem;
+}
+
+.pilotage-reference-visual-subtext {
+  min-height: 1.2em;
+}
+
+.pilotage-reference-visual-bar-label {
+  min-height: 1.1em;
+}
+
+@media (min-width: 1300px) {
+  .pilotage-reference-visual-grid {
+    gap: 0.95rem;
+  }
+
+  .pilotage-reference-visual-item {
+    min-height: 142px;
+  }
+}
+
+
+/* PILOTAGEVISU007B-SAFE — grandeurs de référence sans jauges ambiguës */
+.pilotage-reference-visual-card .pilotage-reference-visual-track {
+  display: none;
+}
+
+.pilotage-reference-visual-card .pilotage-reference-visual-bar {
+  align-items: center;
+  display: flex;
+  margin-top: auto;
+}
+
+.pilotage-reference-visual-card .pilotage-reference-visual-bar-label {
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  border-radius: 999px;
+  color: #475569;
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 750;
+  line-height: 1.2;
+  padding: 0.32rem 0.52rem;
+}
+
+.pilotage-reference-visual-card .pilotage-reference-visual-item {
+  min-height: 120px;
+}
+
+.pilotage-reference-visual-card .pilotage-reference-visual-value {
+  font-size: 1.12rem;
+}
+
+/* PILOTAGEVISU008B — deltas vs période précédente */
+.pilotage-instrument-delta-slot {
+  margin-top: 0.42rem;
+}
+
+.pilotage-delta-line {
+  align-items: center;
+  border: 1px solid rgba(203, 213, 225, 0.86);
+  border-radius: 999px;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.22rem 0.34rem;
+  line-height: 1;
+  padding: 0.32rem 0.5rem;
+  width: fit-content;
+}
+
+.pilotage-delta-line strong {
+  font-size: 0.74rem;
+}
+
+.pilotage-delta-line em {
+  color: #64748b;
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 650;
+}
+
+.pilotage-delta-arrow {
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.pilotage-delta-line-up {
+  background: rgba(20, 184, 166, 0.08);
+  border-color: rgba(20, 184, 166, 0.24);
+  color: #0f766e;
+}
+
+.pilotage-delta-line-down {
+  background: rgba(245, 158, 11, 0.10);
+  border-color: rgba(245, 158, 11, 0.28);
+  color: #92400e;
+}
+
+.pilotage-delta-line-flat {
+  background: rgba(148, 163, 184, 0.10);
+  border-color: rgba(148, 163, 184, 0.28);
+  color: #475569;
+}
+
+/* PILOTAGEVISU008B-FIX1 — deltas comme variation, pas verdict */
+.pilotage-delta-line-up,
+.pilotage-delta-line-down,
+.pilotage-delta-line-flat {
+  background: rgba(248, 250, 252, 0.92);
+  border-color: rgba(203, 213, 225, 0.9);
+  color: #334155;
+}
+
+.pilotage-delta-line-up .pilotage-delta-arrow {
+  color: #0f766e;
+}
+
+.pilotage-delta-line-down .pilotage-delta-arrow {
+  color: #b45309;
+}
+
+.pilotage-delta-line-flat .pilotage-delta-arrow {
+  color: #64748b;
+}
+
+.pilotage-delta-line strong {
+  color: #0f172a;
+}
+
+.pilotage-delta-line em {
+  color: #64748b;
+}
+
+/* PILOTAGEVISU008C — synthèse de trajectoire */
+.pilotage-trajectory-digest-card {
+  border-left: 4px solid rgba(99, 102, 241, 0.52);
+  display: grid;
+  gap: 0.85rem;
+}
+
+.pilotage-trajectory-heading {
+  margin-bottom: 0;
+}
+
+.pilotage-trajectory-digest-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.pilotage-trajectory-digest-grid article {
+  background: rgba(248, 250, 252, 0.88);
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 0.95rem;
+  display: grid;
+  gap: 0.28rem;
+  padding: 0.72rem 0.82rem;
+}
+
+.pilotage-trajectory-digest-grid span {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.pilotage-trajectory-digest-grid strong {
+  color: #0f172a;
+  font-size: 0.96rem;
+}
+
+.pilotage-trajectory-digest-grid small {
+  color: #475569;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+@media (max-width: 900px) {
+  .pilotage-trajectory-digest-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* PILOTAGEVISU008C-FIX1 — trajectoire en représentation visuelle */
+.pilotage-trajectory-visual-grid {
+  gap: 0.85rem;
+}
+
+.pilotage-trajectory-visual-item {
+  background:
+    linear-gradient(135deg, rgba(248, 250, 252, 0.96), rgba(255, 255, 255, 0.86));
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  border-radius: 1rem;
+  display: grid;
+  gap: 0.62rem;
+  padding: 0.82rem 0.9rem;
+}
+
+.pilotage-trajectory-visual-topline {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.pilotage-trajectory-visual-topline span {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.pilotage-trajectory-visual-topline strong {
+  align-items: center;
+  background: rgba(241, 245, 249, 0.95);
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 1rem;
+  height: 1.65rem;
+  justify-content: center;
+  width: 1.65rem;
+}
+
+.pilotage-trajectory-visual-state {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.55rem;
+}
+
+.pilotage-trajectory-visual-state strong {
+  color: #0f172a;
+  font-size: 1rem;
+}
+
+.pilotage-trajectory-visual-state small {
+  color: #475569;
+  font-size: 0.8rem;
+  font-weight: 850;
+}
+
+.pilotage-trajectory-meter {
+  background: rgba(226, 232, 240, 0.72);
+  border: 1px solid rgba(203, 213, 225, 0.78);
+  border-radius: 999px;
+  height: 0.72rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.pilotage-trajectory-meter-zero {
+  background: rgba(15, 23, 42, 0.38);
+  bottom: -0.15rem;
+  left: 50%;
+  position: absolute;
+  top: -0.15rem;
+  transform: translateX(-50%);
+  width: 2px;
+  z-index: 2;
+}
+
+.pilotage-trajectory-meter-fill {
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  position: absolute;
+  top: 0;
+}
+
+.pilotage-trajectory-visual-item-up .pilotage-trajectory-meter-fill {
+  background: linear-gradient(90deg, rgba(20, 184, 166, 0.62), rgba(14, 165, 233, 0.72));
+}
+
+.pilotage-trajectory-visual-item-down .pilotage-trajectory-meter-fill {
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.72), rgba(248, 113, 113, 0.64));
+}
+
+.pilotage-trajectory-visual-item-flat .pilotage-trajectory-meter-fill {
+  background: rgba(100, 116, 139, 0.58);
+}
+
+.pilotage-trajectory-visual-item-up .pilotage-trajectory-visual-topline strong {
+  color: #0f766e;
+}
+
+.pilotage-trajectory-visual-item-down .pilotage-trajectory-visual-topline strong {
+  color: #b45309;
+}
+
+.pilotage-trajectory-visual-item-flat .pilotage-trajectory-visual-topline strong {
+  color: #64748b;
+}
+
+.pilotage-trajectory-visual-item p {
+  color: #64748b;
+  font-size: 0.74rem;
+  line-height: 1.25;
+  margin: 0;
+}
+
+/* PILOTAGEVISU008C-FIX2 — boussole gamifiée sobre */
+.pilotage-trajectory-global {
+  align-items: center;
+  background: rgba(248, 250, 252, 0.94);
+  border: 1px solid rgba(203, 213, 225, 0.92);
+  border-radius: 1rem;
+  display: grid;
+  gap: 0.2rem;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  margin-top: -0.1rem;
+  padding: 0.72rem 0.86rem;
+}
+
+.pilotage-trajectory-global span {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.pilotage-trajectory-global strong {
+  color: #0f172a;
+  font-size: 0.92rem;
+}
+
+.pilotage-trajectory-global small {
+  color: #64748b;
+  font-size: 0.76rem;
+  line-height: 1.3;
+  min-width: 0;
+}
+
+.pilotage-trajectory-global-positive {
+  background: linear-gradient(135deg, rgba(240, 253, 250, 0.94), rgba(248, 250, 252, 0.92));
+  border-color: rgba(45, 212, 191, 0.28);
+}
+
+.pilotage-trajectory-global-watch {
+  background: linear-gradient(135deg, rgba(255, 247, 237, 0.94), rgba(248, 250, 252, 0.92));
+  border-color: rgba(251, 146, 60, 0.34);
+}
+
+.pilotage-trajectory-compass {
+  display: grid;
+  gap: 0.22rem;
+}
+
+.pilotage-trajectory-compass-labels {
+  color: #94a3b8;
+  display: grid;
+  font-size: 0.64rem;
+  font-weight: 800;
+  grid-template-columns: repeat(3, 1fr);
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+}
+
+.pilotage-trajectory-compass-labels span:nth-child(1) {
+  text-align: left;
+}
+
+.pilotage-trajectory-compass-labels span:nth-child(2) {
+  text-align: center;
+}
+
+.pilotage-trajectory-compass-labels span:nth-child(3) {
+  text-align: right;
+}
+
+.pilotage-trajectory-meter-zone {
+  bottom: 0;
+  position: absolute;
+  top: 0;
+  width: 50%;
+}
+
+.pilotage-trajectory-meter-zone-left {
+  background: linear-gradient(90deg, rgba(251, 146, 60, 0.08), rgba(226, 232, 240, 0.0));
+  left: 0;
+}
+
+.pilotage-trajectory-meter-zone-right {
+  background: linear-gradient(90deg, rgba(226, 232, 240, 0.0), rgba(45, 212, 191, 0.08));
+  right: 0;
+}
+
+.pilotage-trajectory-meter-cursor {
+  background: #ffffff;
+  border: 2px solid rgba(15, 23, 42, 0.32);
+  border-radius: 999px;
+  box-shadow: 0 2px 7px rgba(15, 23, 42, 0.18);
+  height: 1rem;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 1rem;
+  z-index: 4;
+}
+
+.pilotage-trajectory-visual-item-up .pilotage-trajectory-meter-cursor {
+  border-color: rgba(13, 148, 136, 0.62);
+}
+
+.pilotage-trajectory-visual-item-down .pilotage-trajectory-meter-cursor {
+  border-color: rgba(180, 83, 9, 0.62);
+}
+
+.pilotage-trajectory-visual-item-flat .pilotage-trajectory-meter-cursor {
+  border-color: rgba(100, 116, 139, 0.62);
+}
+
+@media (max-width: 900px) {
+  .pilotage-trajectory-global {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* PILOTAGEVISU008C-FIX3 — boussole de trajectoire plus sobre */
+.pilotage-trajectory-global,
+.pilotage-trajectory-global-positive,
+.pilotage-trajectory-global-watch {
+  background: rgba(255, 255, 255, 0.78);
+  border-color: rgba(203, 213, 225, 0.9);
+  box-shadow: none;
+}
+
+.pilotage-trajectory-global {
+  grid-template-columns: auto auto minmax(0, 1fr);
+  padding: 0.66rem 0.82rem;
+}
+
+.pilotage-trajectory-global strong {
+  background: rgba(248, 250, 252, 0.95);
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  border-radius: 999px;
+  padding: 0.26rem 0.52rem;
+  width: fit-content;
+}
+
+.pilotage-trajectory-visual-item {
+  background: rgba(255, 255, 255, 0.82);
+  border-color: rgba(226, 232, 240, 0.95);
+  box-shadow: none;
+}
+
+.pilotage-trajectory-visual-topline strong {
+  background: rgba(248, 250, 252, 0.95);
+  box-shadow: none;
+}
+
+.pilotage-trajectory-compass-labels {
+  color: #94a3b8;
+  font-size: 0.6rem;
+  opacity: 0.95;
+}
+
+.pilotage-trajectory-meter {
+  background:
+    linear-gradient(90deg,
+      rgba(226, 232, 240, 0.80) 0%,
+      rgba(226, 232, 240, 0.80) 32%,
+      rgba(148, 163, 184, 0.45) 32%,
+      rgba(148, 163, 184, 0.45) 68%,
+      rgba(226, 232, 240, 0.80) 68%,
+      rgba(226, 232, 240, 0.80) 100%
+    );
+  border-color: rgba(203, 213, 225, 0.78);
+  height: 0.56rem;
+}
+
+.pilotage-trajectory-meter-zone,
+.pilotage-trajectory-meter-fill {
+  display: none;
+}
+
+.pilotage-trajectory-meter-zero {
+  background: rgba(100, 116, 139, 0.5);
+  bottom: -0.18rem;
+  top: -0.18rem;
+}
+
+.pilotage-trajectory-meter-cursor {
+  background: #ffffff;
+  border-width: 2px;
+  height: 0.92rem;
+  width: 0.92rem;
+}
+
+.pilotage-trajectory-visual-item-up .pilotage-trajectory-meter-cursor {
+  border-color: rgba(14, 165, 233, 0.75);
+}
+
+.pilotage-trajectory-visual-item-down .pilotage-trajectory-meter-cursor {
+  border-color: rgba(245, 158, 11, 0.75);
+}
+
+.pilotage-trajectory-visual-item-flat .pilotage-trajectory-meter-cursor {
+  border-color: rgba(100, 116, 139, 0.72);
+}
+
+.pilotage-trajectory-visual-state strong {
+  font-size: 0.98rem;
+}
+
+.pilotage-trajectory-visual-state small {
+  background: rgba(248, 250, 252, 0.92);
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 999px;
+  padding: 0.22rem 0.45rem;
+}
+
+.pilotage-trajectory-visual-item p {
+  color: #64748b;
+  opacity: 0.92;
+}
+
+/* PILOTAGEVISU008C-FIX4 — trajectoire en cartes-signal, sans jauge */
+.pilotage-trajectory-visual-card {
+  border-left-color: rgba(99, 102, 241, 0.45);
+}
+
+.pilotage-trajectory-global,
+.pilotage-trajectory-global-positive,
+.pilotage-trajectory-global-watch {
+  background: rgba(248, 250, 252, 0.86);
+  border-color: rgba(226, 232, 240, 0.96);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.55rem;
+  padding: 0.62rem 0.78rem;
+}
+
+.pilotage-trajectory-global span {
+  color: #64748b;
+  font-size: 0.7rem;
+}
+
+.pilotage-trajectory-global strong {
+  background: #ffffff;
+  border: 1px solid rgba(203, 213, 225, 0.95);
+  border-radius: 999px;
+  color: #0f172a;
+  font-size: 0.82rem;
+  padding: 0.24rem 0.5rem;
+}
+
+.pilotage-trajectory-global small {
+  color: #64748b;
+  flex-basis: 100%;
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
+.pilotage-trajectory-visual-grid {
+  gap: 0.9rem;
+}
+
+.pilotage-trajectory-visual-item {
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.98);
+  border-left-width: 4px;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.035);
+  gap: 0.58rem;
+  min-height: 128px;
+  padding: 0.9rem 0.95rem;
+}
+
+.pilotage-trajectory-visual-item-up {
+  border-left-color: rgba(14, 165, 233, 0.62);
+}
+
+.pilotage-trajectory-visual-item-down {
+  border-left-color: rgba(245, 158, 11, 0.72);
+}
+
+.pilotage-trajectory-visual-item-flat {
+  border-left-color: rgba(100, 116, 139, 0.58);
+}
+
+.pilotage-trajectory-visual-topline {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.pilotage-trajectory-visual-topline span {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.pilotage-trajectory-visual-topline strong {
+  align-items: center;
+  background: rgba(248, 250, 252, 0.96);
+  border: 1px solid rgba(203, 213, 225, 0.95);
+  border-radius: 999px;
+  box-shadow: none;
+  display: inline-flex;
+  font-size: 1rem;
+  height: 1.75rem;
+  justify-content: center;
+  width: 1.75rem;
+}
+
+.pilotage-trajectory-visual-state {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.55rem;
+}
+
+.pilotage-trajectory-visual-state strong {
+  color: #0f172a;
+  font-size: 1.05rem;
+  line-height: 1.1;
+}
+
+.pilotage-trajectory-visual-state small {
+  background: rgba(248, 250, 252, 0.96);
+  border: 1px solid rgba(203, 213, 225, 0.95);
+  border-radius: 999px;
+  color: #334155;
+  font-size: 0.76rem;
+  font-weight: 850;
+  padding: 0.28rem 0.52rem;
+}
+
+.pilotage-trajectory-compass,
+.pilotage-trajectory-meter,
+.pilotage-trajectory-compass-labels {
+  display: none !important;
+}
+
+.pilotage-trajectory-visual-item p {
+  background: rgba(248, 250, 252, 0.72);
+  border-radius: 0.65rem;
+  color: #64748b;
+  font-size: 0.74rem;
+  line-height: 1.25;
+  margin: 0;
+  padding: 0.42rem 0.5rem;
+}
+
+.pilotage-trajectory-visual-item-up .pilotage-trajectory-visual-topline strong {
+  color: #0284c7;
+}
+
+.pilotage-trajectory-visual-item-down .pilotage-trajectory-visual-topline strong {
+  color: #b45309;
+}
+
+.pilotage-trajectory-visual-item-flat .pilotage-trajectory-visual-topline strong {
+  color: #64748b;
+}
+
+@media (max-width: 900px) {
+  .pilotage-trajectory-visual-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* PILOTAGEVISU008D — radar comparatif et périodes de référence */
+.pilotage-trajectory-period-line {
+  align-items: center;
+  background: rgba(248, 250, 252, 0.88);
+  border: 1px solid rgba(226, 232, 240, 0.96);
+  border-radius: 0.9rem;
+  color: #64748b;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+  padding: 0.58rem 0.72rem;
+}
+
+.pilotage-trajectory-period-line span {
+  font-size: 0.76rem;
+}
+
+.pilotage-trajectory-period-line strong {
+  color: #0f172a;
+}
+
+.pilotage-trajectory-compare-layout {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: 22rem minmax(0, 1fr);
+}
+
+.pilotage-trajectory-radar-card {
+  background:
+    radial-gradient(circle at 35% 30%, rgba(14, 165, 233, 0.12), transparent 36%),
+    linear-gradient(135deg, rgba(248, 250, 252, 0.96), rgba(255, 255, 255, 0.92));
+  border: 1px solid rgba(203, 213, 225, 0.94);
+  border-radius: 1rem;
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.88rem;
+}
+
+.pilotage-trajectory-radar-head {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.pilotage-trajectory-radar-head span {
+  color: #0f172a;
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+
+.pilotage-trajectory-radar-head small {
+  color: #64748b;
+  font-size: 0.7rem;
+  font-weight: 750;
+}
+
+.pilotage-trajectory-radar-body {
+  align-items: center;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: 8.5rem minmax(0, 1fr);
+}
+
+.pilotage-trajectory-radar {
+  height: 8.5rem;
+  width: 8.5rem;
+}
+
+.pilotage-trajectory-radar-grid {
+  fill: none;
+  stroke: rgba(148, 163, 184, 0.38);
+  stroke-width: 1;
+}
+
+.pilotage-trajectory-radar-axis {
+  stroke: rgba(148, 163, 184, 0.26);
+  stroke-width: 1;
+}
+
+.pilotage-trajectory-radar-previous {
+  fill: rgba(100, 116, 139, 0.10);
+  stroke: rgba(100, 116, 139, 0.62);
+  stroke-dasharray: 3 2;
+  stroke-width: 1.8;
+}
+
+.pilotage-trajectory-radar-current {
+  fill: rgba(14, 165, 233, 0.18);
+  stroke: rgba(14, 165, 233, 0.82);
+  stroke-width: 2.4;
+}
+
+.pilotage-trajectory-radar-center {
+  fill: rgba(15, 23, 42, 0.45);
+}
+
+.pilotage-trajectory-radar-values {
+  display: grid;
+  gap: 0.38rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pilotage-trajectory-radar-values li {
+  display: grid;
+  gap: 0.08rem;
+}
+
+.pilotage-trajectory-radar-values span {
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.pilotage-trajectory-radar-values strong {
+  color: #0f172a;
+  font-size: 0.82rem;
+}
+
+.pilotage-trajectory-radar-values small {
+  color: #64748b;
+  font-size: 0.68rem;
+}
+
+.pilotage-trajectory-radar-legend {
+  align-items: center;
+  color: #64748b;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.68rem;
+  font-weight: 750;
+  gap: 0.35rem 0.7rem;
+}
+
+.pilotage-trajectory-radar-legend span {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.28rem;
+}
+
+.pilotage-trajectory-radar-legend i {
+  border-radius: 999px;
+  display: inline-block;
+  height: 0.55rem;
+  width: 0.55rem;
+}
+
+.pilotage-radar-dot-current {
+  background: rgba(14, 165, 233, 0.82);
+}
+
+.pilotage-radar-dot-previous {
+  background: rgba(100, 116, 139, 0.62);
+}
+
+.pilotage-trajectory-visual-item-up {
+  background:
+    linear-gradient(135deg, rgba(240, 249, 255, 0.95), #ffffff);
+}
+
+.pilotage-trajectory-visual-item-flat {
+  background:
+    linear-gradient(135deg, rgba(248, 250, 252, 0.98), #ffffff);
+}
+
+.pilotage-trajectory-visual-item-down {
+  background:
+    linear-gradient(135deg, rgba(255, 247, 237, 0.96), #ffffff);
+}
+
+@media (max-width: 1200px) {
+  .pilotage-trajectory-compare-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .pilotage-trajectory-radar-body {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+}
+
+/* PILOTAGEVISU008D-FIX1 — radar pris au sérieux */
+.pilotage-trajectory-compare-layout {
+  align-items: stretch;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(360px, 430px) minmax(0, 1fr);
+}
+
+.pilotage-trajectory-radar-card {
+  background:
+    radial-gradient(circle at 38% 34%, rgba(14, 165, 233, 0.14), transparent 34%),
+    linear-gradient(135deg, rgba(248, 250, 252, 0.98), rgba(255, 255, 255, 0.96));
+  border-color: rgba(203, 213, 225, 0.96);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.04);
+  gap: 0.9rem;
+  padding: 1rem;
+}
+
+.pilotage-trajectory-radar-head span {
+  font-size: 0.98rem;
+}
+
+.pilotage-trajectory-radar-head small {
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(203, 213, 225, 0.95);
+  border-radius: 999px;
+  color: #475569;
+  font-size: 0.72rem;
+  padding: 0.24rem 0.48rem;
+}
+
+.pilotage-trajectory-radar-body {
+  align-items: center;
+  display: grid;
+  gap: 0.95rem;
+  grid-template-columns: 12rem minmax(0, 1fr);
+}
+
+.pilotage-trajectory-radar {
+  height: 12rem;
+  width: 12rem;
+}
+
+.pilotage-trajectory-radar-grid {
+  stroke: rgba(100, 116, 139, 0.34);
+}
+
+.pilotage-trajectory-radar-grid-outer {
+  stroke-width: 1.2;
+}
+
+.pilotage-trajectory-radar-grid-inner {
+  stroke-dasharray: 2 2;
+}
+
+.pilotage-trajectory-radar-axis {
+  stroke: rgba(100, 116, 139, 0.25);
+}
+
+.pilotage-trajectory-radar-current {
+  fill: rgba(14, 165, 233, 0.20);
+  stroke: rgba(2, 132, 199, 0.88);
+  stroke-width: 2.8;
+}
+
+.pilotage-trajectory-radar-previous {
+  fill: rgba(100, 116, 139, 0.08);
+  stroke: rgba(100, 116, 139, 0.62);
+  stroke-dasharray: 4 3;
+  stroke-width: 2;
+}
+
+.pilotage-trajectory-radar-values {
+  gap: 0.55rem;
+}
+
+.pilotage-trajectory-radar-values li {
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 0.8rem;
+  padding: 0.46rem 0.55rem;
+}
+
+.pilotage-trajectory-radar-values span {
+  color: #475569;
+  font-size: 0.7rem;
+}
+
+.pilotage-trajectory-radar-values strong {
+  color: #0f172a;
+  font-size: 0.9rem;
+}
+
+.pilotage-trajectory-radar-values small {
+  color: #64748b;
+  font-size: 0.7rem;
+}
+
+.pilotage-trajectory-radar-legend {
+  background: rgba(248, 250, 252, 0.78);
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 0.8rem;
+  padding: 0.48rem 0.55rem;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 1fr;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item {
+  min-height: 0;
+  padding: 0.82rem 0.9rem;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item p {
+  margin-top: 0.15rem;
+}
+
+.pilotage-trajectory-global {
+  margin-bottom: 0.15rem;
+}
+
+@media (max-width: 1200px) {
+  .pilotage-trajectory-compare-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .pilotage-trajectory-radar-body {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .pilotage-trajectory-radar-body {
+    grid-template-columns: 1fr;
+  }
+
+  .pilotage-trajectory-radar {
+    justify-self: center;
+  }
+}
+
+/* PILOTAGEVISU008E — radar Chart.js */
+.pilotage-trajectory-chartjs-card {
+  gap: 0.9rem;
+}
+
+.pilotage-trajectory-chartjs-body {
+  align-items: stretch;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 15rem minmax(0, 1fr);
+}
+
+.pilotage-trajectory-chartjs-frame {
+  background:
+    radial-gradient(circle at 50% 48%, rgba(14, 165, 233, 0.08), transparent 58%),
+    rgba(255, 255, 255, 0.68);
+  border: 1px solid rgba(226, 232, 240, 0.94);
+  border-radius: 1rem;
+  min-height: 15rem;
+  padding: 0.55rem;
+  position: relative;
+}
+
+#pilotageTrajectoryRadarChart {
+  height: 100% !important;
+  width: 100% !important;
+}
+
+.pilotage-trajectory-chartjs-card .pilotage-trajectory-radar-values {
+  gap: 0.5rem;
+}
+
+.pilotage-trajectory-chartjs-card .pilotage-trajectory-radar-values li {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.pilotage-trajectory-chartjs-card .pilotage-trajectory-radar-values span {
+  grid-column: 1 / -1;
+}
+
+.pilotage-trajectory-chartjs-card .pilotage-trajectory-radar-values strong {
+  font-size: 0.92rem;
+}
+
+.pilotage-trajectory-chartjs-card .pilotage-trajectory-radar-values small {
+  text-align: right;
+}
+
+.pilotage-trajectory-chartjs-card .pilotage-trajectory-radar-values em {
+  color: #94a3b8;
+  font-size: 0.66rem;
+  font-style: normal;
+  font-weight: 700;
+  grid-column: 1 / -1;
+}
+
+.pilotage-trajectory-radar-method {
+  background: rgba(248, 250, 252, 0.84);
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 0.8rem;
+  color: #64748b;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  margin: 0;
+  padding: 0.52rem 0.62rem;
+}
+
+@media (max-width: 720px) {
+  .pilotage-trajectory-chartjs-body {
+    grid-template-columns: 1fr;
+  }
+
+  .pilotage-trajectory-chartjs-frame {
+    min-height: 16rem;
+  }
+}
+
+/* PILOTAGEVISU008E-FIX1 — radar principal avec respiration et zoom */
+.pilotage-trajectory-compare-layout {
+  align-items: start;
+  display: grid;
+  gap: 1.15rem;
+  grid-template-columns: minmax(620px, 1.15fr) minmax(340px, 0.85fr);
+}
+
+.pilotage-trajectory-chartjs-card {
+  min-width: 0;
+  padding: 1.05rem;
+}
+
+.pilotage-trajectory-chartjs-card .stats-chart-header,
+.pilotage-trajectory-chartjs-card .chart-card-header,
+.pilotage-trajectory-chartjs-card .stats-chart-title-row {
+  margin-bottom: 0.75rem;
+}
+
+.pilotage-trajectory-chartjs-body {
+  align-items: stretch;
+  display: grid;
+  gap: 1.05rem;
+  grid-template-columns: minmax(25rem, 1fr) minmax(12rem, 0.72fr);
+}
+
+.pilotage-trajectory-chartjs-frame {
+  min-height: 25rem;
+  padding: 0.85rem;
+}
+
+.pilotage-trajectory-chartjs-card .pilotage-trajectory-radar-values {
+  align-content: center;
+  gap: 0.65rem;
+}
+
+.pilotage-trajectory-chartjs-card .pilotage-trajectory-radar-values li {
+  background: rgba(255, 255, 255, 0.82);
+  border-color: rgba(203, 213, 225, 0.92);
+  padding: 0.62rem 0.68rem;
+}
+
+.pilotage-trajectory-chartjs-card .pilotage-trajectory-radar-values span {
+  font-size: 0.74rem;
+}
+
+.pilotage-trajectory-chartjs-card .pilotage-trajectory-radar-values strong {
+  font-size: 1rem;
+}
+
+.pilotage-trajectory-chartjs-card .pilotage-trajectory-radar-values small,
+.pilotage-trajectory-chartjs-card .pilotage-trajectory-radar-values em {
+  font-size: 0.72rem;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-grid {
+  align-content: start;
+  align-self: start;
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: 1fr;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item {
+  min-height: 8.4rem;
+  padding: 0.95rem 1rem;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-state {
+  margin-top: 0.25rem;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item p {
+  margin-top: 0.35rem;
+}
+
+.pilotage-trajectory-radar-method {
+  margin-top: 0.1rem;
+}
+
+@media (max-width: 1400px) {
+  .pilotage-trajectory-compare-layout {
+    grid-template-columns: minmax(520px, 1fr) minmax(320px, 0.8fr);
+  }
+
+  .pilotage-trajectory-chartjs-body {
+    grid-template-columns: minmax(20rem, 1fr) minmax(11rem, 0.75fr);
+  }
+
+  .pilotage-trajectory-chartjs-frame {
+    min-height: 22rem;
+  }
+}
+
+@media (max-width: 1100px) {
+  .pilotage-trajectory-compare-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .pilotage-trajectory-chartjs-body {
+    grid-template-columns: minmax(18rem, 1fr) minmax(12rem, 0.7fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .pilotage-trajectory-chartjs-body {
+    grid-template-columns: 1fr;
+  }
+
+  .pilotage-trajectory-chartjs-frame {
+    min-height: 20rem;
+  }
+}
+
+/* PILOTAGEVISU008E-FIX2 — modale zoom dédiée radar */
+.pilotage-trajectory-radar-zoom-shell {
+  display: grid;
+  gap: 1rem;
+}
+
+.pilotage-trajectory-radar-zoom-layout {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) 18rem;
+}
+
+.pilotage-trajectory-radar-zoom-wrap {
+  background:
+    radial-gradient(circle at 50% 48%, rgba(14, 165, 233, 0.08), transparent 58%),
+    rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(226, 232, 240, 0.96);
+  border-radius: 1rem;
+  height: min(66vh, 680px);
+  min-height: 520px;
+  padding: 0.85rem;
+}
+
+#pilotageTrajectoryRadarZoomChart {
+  height: 100% !important;
+  width: 100% !important;
+}
+
+.pilotage-trajectory-radar-zoom-values {
+  background: rgba(248, 250, 252, 0.88);
+  border: 1px solid rgba(226, 232, 240, 0.96);
+  border-radius: 1rem;
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.85rem;
+}
+
+.pilotage-trajectory-radar-zoom-values h3 {
+  color: #0f172a;
+  font-size: 1rem;
+  margin: 0;
+}
+
+.pilotage-trajectory-radar-zoom-values ul {
+  display: grid;
+  gap: 0.62rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pilotage-trajectory-radar-zoom-values li {
+  background: #ffffff;
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  border-radius: 0.85rem;
+  display: grid;
+  gap: 0.12rem;
+  padding: 0.58rem 0.64rem;
+}
+
+.pilotage-trajectory-radar-zoom-values span {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.pilotage-trajectory-radar-zoom-values strong {
+  color: #0f172a;
+  font-size: 1.05rem;
+}
+
+.pilotage-trajectory-radar-zoom-values small,
+.pilotage-trajectory-radar-zoom-values em,
+.pilotage-trajectory-radar-zoom-values p {
+  color: #64748b;
+  font-size: 0.76rem;
+  font-style: normal;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.pilotage-trajectory-radar-zoom-values em {
+  color: #94a3b8;
+  font-weight: 750;
+}
+
+@media (max-width: 960px) {
+  .pilotage-trajectory-radar-zoom-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .pilotage-trajectory-radar-zoom-wrap {
+    min-height: 420px;
+  }
+}
+
+/* PILOTAGEVISU008E-FIX3 — radar plus précis + bulles périodes */
+.pilotage-radar-period-bubbles {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: -0.15rem 0 0.15rem;
+}
+
+.pilotage-radar-period-bubble {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(203, 213, 225, 0.94);
+  border-radius: 999px;
+  color: #475569;
+  display: inline-flex;
+  flex-wrap: wrap;
+  font-size: 0.74rem;
+  gap: 0.28rem;
+  line-height: 1.2;
+  padding: 0.34rem 0.58rem;
+}
+
+.pilotage-radar-period-bubble b {
+  color: #0f172a;
+  font-size: 0.72rem;
+}
+
+.pilotage-radar-period-bubble-current {
+  border-color: rgba(14, 165, 233, 0.34);
+  box-shadow: inset 0 0 0 1px rgba(14, 165, 233, 0.06);
+}
+
+.pilotage-radar-period-bubble-previous {
+  border-color: rgba(100, 116, 139, 0.30);
+}
+
+.pilotage-trajectory-chartjs-body {
+  grid-template-columns: minmax(28rem, 1fr) minmax(14rem, 0.72fr);
+}
+
+.pilotage-trajectory-chartjs-frame {
+  min-height: 28rem;
+}
+
+.pilotage-trajectory-chartjs-card .pilotage-trajectory-radar-values {
+  align-content: stretch;
+}
+
+.pilotage-trajectory-chartjs-card .pilotage-trajectory-radar-values li {
+  min-height: 0;
+}
+
+.pilotage-trajectory-radar-zoom-wrap {
+  min-height: 640px;
+}
+
+.pilotage-trajectory-radar-zoom-values li {
+  padding: 0.68rem 0.72rem;
+}
+
+@media (max-width: 1100px) {
+  .pilotage-trajectory-chartjs-body {
+    grid-template-columns: 1fr;
+  }
+
+  .pilotage-trajectory-chartjs-frame {
+    min-height: 24rem;
+  }
+}
+
+@media (max-width: 720px) {
+  .pilotage-radar-period-bubble {
+    border-radius: 0.85rem;
+    width: 100%;
+  }
+
+  .pilotage-trajectory-chartjs-frame {
+    min-height: 22rem;
+  }
+}
+
+/* PILOTAGEVISU009A — consolidation UX de la synthèse pilotage */
+.pilotage-tab-panel[data-pilotage-panel="summary"]:not(.hidden) {
+  display: grid;
+  gap: 1rem;
+}
+
+/* Le bloc trajectoire devient une vraie étape de lecture */
+.pilotage-trajectory-visual-card {
+  background:
+    radial-gradient(circle at 12% 0%, rgba(99, 102, 241, 0.08), transparent 28%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96));
+  border: 1px solid rgba(203, 213, 225, 0.96);
+  border-left: 5px solid rgba(99, 102, 241, 0.55);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.045);
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.pilotage-trajectory-heading {
+  display: grid;
+  gap: 0.25rem;
+  margin-bottom: 0;
+}
+
+.pilotage-trajectory-heading h3 {
+  font-size: 1.08rem;
+  letter-spacing: -0.01em;
+}
+
+.pilotage-trajectory-heading p {
+  color: #64748b;
+  max-width: 62rem;
+}
+
+/* Les périodes deviennent un vrai référentiel de comparaison */
+.pilotage-trajectory-visual-card .pilotage-radar-period-bubbles {
+  background: rgba(248, 250, 252, 0.72);
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 1rem;
+  gap: 0.55rem;
+  padding: 0.55rem;
+}
+
+.pilotage-trajectory-visual-card .pilotage-radar-period-bubble {
+  background: #ffffff;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  padding: 0.42rem 0.68rem;
+}
+
+.pilotage-trajectory-visual-card .pilotage-radar-period-bubble b {
+  font-size: 0.74rem;
+}
+
+.pilotage-trajectory-visual-card .pilotage-radar-period-bubble-current {
+  border-color: rgba(14, 165, 233, 0.42);
+}
+
+.pilotage-trajectory-visual-card .pilotage-radar-period-bubble-previous {
+  border-color: rgba(100, 116, 139, 0.34);
+}
+
+/* Radar = module principal */
+.pilotage-trajectory-compare-layout {
+  align-items: start;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(680px, 1.18fr) minmax(360px, 0.82fr);
+}
+
+.pilotage-trajectory-chartjs-card {
+  background:
+    radial-gradient(circle at 36% 38%, rgba(14, 165, 233, 0.13), transparent 36%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96));
+  border-color: rgba(203, 213, 225, 0.95);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.035);
+  padding: 1rem;
+}
+
+.pilotage-trajectory-chartjs-card .stats-chart-card-header {
+  align-items: flex-start;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+  margin-bottom: 0.9rem;
+  padding-bottom: 0.75rem;
+}
+
+.pilotage-trajectory-chartjs-card .stats-chart-title-group h3 {
+  font-size: 1.02rem;
+  letter-spacing: -0.01em;
+}
+
+.pilotage-trajectory-chartjs-card .stats-chart-title-group p {
+  color: #64748b;
+  line-height: 1.45;
+  max-width: 42rem;
+}
+
+.pilotage-trajectory-chartjs-body {
+  align-items: stretch;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(30rem, 1fr) minmax(13rem, 0.62fr);
+}
+
+.pilotage-trajectory-chartjs-frame {
+  background:
+    radial-gradient(circle at 50% 48%, rgba(14, 165, 233, 0.09), transparent 58%),
+    rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(226, 232, 240, 0.94);
+  border-radius: 1.1rem;
+  min-height: 31rem;
+  padding: 0.9rem;
+}
+
+/* Les valeurs brutes deviennent une légende scientifique lisible */
+.pilotage-trajectory-chartjs-card .pilotage-trajectory-radar-values {
+  align-content: center;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.pilotage-trajectory-chartjs-card .pilotage-trajectory-radar-values li {
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(203, 213, 225, 0.92);
+  border-radius: 0.95rem;
+  display: grid;
+  gap: 0.14rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 0.66rem 0.72rem;
+}
+
+.pilotage-trajectory-chartjs-card .pilotage-trajectory-radar-values span {
+  color: #475569;
+  font-size: 0.72rem;
+  font-weight: 900;
+  grid-column: 1 / -1;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.pilotage-trajectory-chartjs-card .pilotage-trajectory-radar-values strong {
+  color: #0f172a;
+  font-size: 1.02rem;
+}
+
+.pilotage-trajectory-chartjs-card .pilotage-trajectory-radar-values small {
+  color: #64748b;
+  font-size: 0.72rem;
+  text-align: right;
+}
+
+.pilotage-trajectory-chartjs-card .pilotage-trajectory-radar-values em {
+  color: #94a3b8;
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 750;
+  grid-column: 1 / -1;
+}
+
+.pilotage-trajectory-radar-legend {
+  background: rgba(248, 250, 252, 0.78);
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 0.85rem;
+  margin-top: 0.1rem;
+}
+
+.pilotage-trajectory-radar-method {
+  background: rgba(248, 250, 252, 0.82);
+  border-color: rgba(226, 232, 240, 0.92);
+  color: #64748b;
+  font-size: 0.74rem;
+  line-height: 1.4;
+}
+
+/* Cartes-signal : moins de vide, plus de signal */
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-grid {
+  align-content: start;
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: 1fr;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item {
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.96);
+  border-left-width: 5px;
+  border-radius: 1rem;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.035);
+  display: grid;
+  gap: 0.55rem;
+  min-height: 0;
+  padding: 0.88rem 0.95rem;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item-up {
+  background: linear-gradient(135deg, rgba(240, 249, 255, 0.98), #ffffff);
+  border-left-color: rgba(14, 165, 233, 0.72);
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item-flat {
+  background: linear-gradient(135deg, rgba(248, 250, 252, 0.98), #ffffff);
+  border-left-color: rgba(100, 116, 139, 0.62);
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item-down {
+  background: linear-gradient(135deg, rgba(255, 247, 237, 0.98), #ffffff);
+  border-left-color: rgba(245, 158, 11, 0.72);
+}
+
+.pilotage-trajectory-visual-topline span {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.pilotage-trajectory-visual-topline strong {
+  background: rgba(255, 255, 255, 0.95);
+  height: 1.8rem;
+  width: 1.8rem;
+}
+
+.pilotage-trajectory-visual-state {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.42rem 0.5rem;
+}
+
+.pilotage-trajectory-visual-state strong {
+  color: #0f172a;
+  font-size: 1.02rem;
+  line-height: 1.15;
+}
+
+.pilotage-trajectory-visual-state small {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(203, 213, 225, 0.94);
+  border-radius: 999px;
+  color: #334155;
+  font-size: 0.76rem;
+  font-weight: 850;
+  padding: 0.28rem 0.52rem;
+}
+
+.pilotage-trajectory-visual-item p {
+  background: rgba(248, 250, 252, 0.78);
+  border-radius: 0.72rem;
+  color: #64748b;
+  font-size: 0.76rem;
+  line-height: 1.32;
+  margin: 0;
+  padding: 0.46rem 0.55rem;
+}
+
+/* Le diagnostic devient la conclusion narrative après la comparaison */
+.pilotage-diagnostic-lite-card {
+  border-left-color: rgba(59, 130, 246, 0.58);
+}
+
+.pilotage-diagnostic-lite-card h3 {
+  font-size: 1.02rem;
+}
+
+/* Les blocs suivants restent plus calmes */
+.pilotage-flow-balance-card,
+.pilotage-reference-visual-card {
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.035);
+}
+
+@media (max-width: 1450px) {
+  .pilotage-trajectory-compare-layout {
+    grid-template-columns: minmax(560px, 1fr) minmax(330px, 0.72fr);
+  }
+
+  .pilotage-trajectory-chartjs-body {
+    grid-template-columns: minmax(24rem, 1fr) minmax(12rem, 0.7fr);
+  }
+
+  .pilotage-trajectory-chartjs-frame {
+    min-height: 27rem;
+  }
+}
+
+@media (max-width: 1180px) {
+  .pilotage-trajectory-compare-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .pilotage-trajectory-chartjs-body {
+    grid-template-columns: minmax(22rem, 1fr) minmax(13rem, 0.7fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .pilotage-trajectory-chartjs-body {
+    grid-template-columns: 1fr;
+  }
+
+  .pilotage-trajectory-chartjs-frame {
+    min-height: 22rem;
+  }
+
+  .pilotage-trajectory-visual-card .pilotage-radar-period-bubble {
+    border-radius: 0.85rem;
+    width: 100%;
+  }
+}
+
+/* PILOTAGEVISU009B — équilibrage radar / cartes-signal */
+.pilotage-trajectory-compare-layout {
+  align-items: stretch;
+  grid-template-columns: minmax(660px, 1.08fr) minmax(390px, 0.92fr);
+}
+
+.pilotage-trajectory-chartjs-card {
+  height: 100%;
+}
+
+.pilotage-trajectory-chartjs-body {
+  grid-template-columns: minmax(28rem, 1fr) minmax(13rem, 0.58fr);
+}
+
+.pilotage-trajectory-chartjs-frame {
+  min-height: 30rem;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-grid {
+  align-self: stretch;
+  display: grid;
+  gap: 0.9rem;
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  height: 100%;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item {
+  align-content: center;
+  min-height: 0;
+  padding: 1rem 1.05rem;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-topline {
+  margin-bottom: 0.1rem;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-state {
+  margin-top: 0.15rem;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-state strong {
+  font-size: 1.08rem;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-state small {
+  font-size: 0.78rem;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item p {
+  margin-top: 0.45rem;
+  min-height: 2.2rem;
+}
+
+.pilotage-trajectory-visual-card {
+  gap: 0.9rem;
+}
+
+.pilotage-trajectory-global {
+  margin-bottom: 0;
+}
+
+@media (max-width: 1450px) {
+  .pilotage-trajectory-compare-layout {
+    grid-template-columns: minmax(560px, 1fr) minmax(340px, 0.78fr);
+  }
+
+  .pilotage-trajectory-chartjs-frame {
+    min-height: 27rem;
+  }
+}
+
+@media (max-width: 1180px) {
+  .pilotage-trajectory-compare-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .pilotage-trajectory-compare-layout .pilotage-trajectory-visual-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: none;
+  }
+}
+
+@media (max-width: 840px) {
+  .pilotage-trajectory-compare-layout .pilotage-trajectory-visual-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* PILOTAGEVISU009C — phrases d’analyse dynamiques dans les cartes */
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item {
+  align-content: start;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item p {
+  background:
+    linear-gradient(135deg, rgba(248, 250, 252, 0.92), rgba(255, 255, 255, 0.88));
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 0.85rem;
+  color: #475569;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  margin-top: 0.45rem;
+  padding: 0.58rem 0.65rem;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item p::before {
+  color: #334155;
+  content: "Lecture · ";
+  font-weight: 900;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-grid {
+  grid-template-rows: repeat(3, minmax(0, auto));
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-state {
+  margin-top: 0.2rem;
+}
+
+/* PILOTAGEVISU009D — borne hauteur radar + rééquilibrage cartes trajectoire */
+.pilotage-trajectory-compare-layout {
+  align-items: stretch;
+  grid-template-columns: minmax(620px, 1fr) minmax(430px, 0.88fr);
+}
+
+.pilotage-trajectory-chartjs-card {
+  height: auto;
+  min-height: 0;
+}
+
+.pilotage-trajectory-chartjs-body {
+  align-items: stretch;
+  grid-template-columns: minmax(26rem, 1fr) minmax(14rem, 0.58fr);
+}
+
+.pilotage-trajectory-chartjs-frame {
+  height: clamp(28rem, 46vw, 34rem);
+  min-height: 0;
+  max-height: 34rem;
+  overflow: hidden;
+}
+
+#pilotageTrajectoryRadarChart {
+  display: block;
+  height: 100% !important;
+  max-height: 100% !important;
+  width: 100% !important;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-grid {
+  align-self: stretch;
+  display: grid;
+  gap: 0.9rem;
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  height: 100%;
+  min-height: 100%;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item {
+  align-content: center;
+  min-height: 0;
+  padding: 1rem 1.05rem;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item p {
+  margin-top: 0.5rem;
+  max-height: none;
+}
+
+.pilotage-trajectory-visual-card {
+  overflow: hidden;
+}
+
+/* La modale garde un grand radar, mais borné elle aussi */
+.pilotage-trajectory-radar-zoom-wrap {
+  height: min(66vh, 680px);
+  min-height: 520px;
+  max-height: 680px;
+  overflow: hidden;
+}
+
+#pilotageTrajectoryRadarZoomChart {
+  display: block;
+  height: 100% !important;
+  max-height: 100% !important;
+  width: 100% !important;
+}
+
+@media (max-width: 1450px) {
+  .pilotage-trajectory-compare-layout {
+    grid-template-columns: minmax(540px, 1fr) minmax(360px, 0.82fr);
+  }
+
+  .pilotage-trajectory-chartjs-frame {
+    height: clamp(25rem, 44vw, 30rem);
+    max-height: 30rem;
+  }
+}
+
+@media (max-width: 1180px) {
+  .pilotage-trajectory-compare-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .pilotage-trajectory-compare-layout .pilotage-trajectory-visual-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: none;
+    height: auto;
+    min-height: 0;
+  }
+
+  .pilotage-trajectory-chartjs-frame {
+    height: 28rem;
+    max-height: 28rem;
+  }
+}
+
+@media (max-width: 840px) {
+  .pilotage-trajectory-compare-layout .pilotage-trajectory-visual-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pilotage-trajectory-chartjs-frame {
+    height: 24rem;
+    max-height: 24rem;
+  }
+
+  .pilotage-trajectory-radar-zoom-wrap {
+    height: 60vh;
+    min-height: 420px;
+  }
+}
+
+/* PILOTAGEVISU009E — alignement sémantique radar ↔ cartes d’analyse */
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-grid {
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item {
+  align-content: start;
+  gap: 0.48rem;
+  padding: 0.82rem 0.92rem;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-topline span {
+  color: #475569;
+  font-size: 0.7rem;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-state strong {
+  font-size: 0.98rem;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-state small {
+  font-size: 0.72rem;
+  padding: 0.22rem 0.46rem;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item p {
+  font-size: 0.72rem;
+  line-height: 1.34;
+  margin-top: 0.25rem;
+  padding: 0.48rem 0.55rem;
+}
+
+.pilotage-trajectory-chartjs-card .pilotage-trajectory-radar-values li {
+  position: relative;
+}
+
+.pilotage-trajectory-chartjs-card .pilotage-trajectory-radar-values li::before {
+  align-items: center;
+  background: rgba(14, 165, 233, 0.08);
+  border: 1px solid rgba(14, 165, 233, 0.18);
+  border-radius: 999px;
+  color: #0369a1;
+  content: "axe";
+  display: inline-flex;
+  font-size: 0.58rem;
+  font-weight: 900;
+  justify-content: center;
+  letter-spacing: 0.02em;
+  padding: 0.12rem 0.3rem;
+  position: absolute;
+  right: 0.55rem;
+  top: 0.48rem;
+  text-transform: uppercase;
+}
+
+.pilotage-trajectory-chartjs-card .pilotage-trajectory-radar-values span {
+  padding-right: 2.2rem;
+}
+
+@media (max-width: 1180px) {
+  .pilotage-trajectory-compare-layout .pilotage-trajectory-visual-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .pilotage-trajectory-compare-layout .pilotage-trajectory-visual-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* PILOTAGEVISU009F-SAFE — fusion radar + lecture axe par axe, sans doublon */
+.pilotage-trajectory-chartjs-card .pilotage-trajectory-radar-values {
+  display: none !important;
+}
+
+.pilotage-trajectory-chartjs-body,
+.pilotage-trajectory-chartjs-body.pilotage-trajectory-radar-body {
+  grid-template-columns: 1fr !important;
+}
+
+.pilotage-trajectory-compare-layout {
+  align-items: stretch;
+  grid-template-columns: minmax(500px, 0.9fr) minmax(540px, 1.1fr);
+}
+
+.pilotage-trajectory-chartjs-frame {
+  height: clamp(27rem, 38vw, 31rem);
+  max-height: 31rem;
+}
+
+.pilotage-trajectory-radar-method {
+  background: rgba(248, 250, 252, 0.88);
+  border-color: rgba(203, 213, 225, 0.88);
+  font-weight: 650;
+}
+
+/* Les 4 cartes deviennent explicitement les 4 axes du radar */
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-grid {
+  position: relative;
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item {
+  align-content: start;
+  gap: 0.5rem;
+  overflow: visible;
+  padding: 0.85rem 0.95rem;
+  position: relative;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item::before {
+  background: linear-gradient(90deg, rgba(14, 165, 233, 0), rgba(14, 165, 233, 0.36));
+  content: "";
+  height: 1px;
+  left: -1.05rem;
+  position: absolute;
+  top: 2.1rem;
+  width: 1.05rem;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item-flat::before {
+  background: linear-gradient(90deg, rgba(100, 116, 139, 0), rgba(100, 116, 139, 0.34));
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item-down::before {
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0), rgba(245, 158, 11, 0.42));
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-topline span {
+  color: #475569;
+  font-size: 0.7rem;
+  font-weight: 950;
+  letter-spacing: 0.03em;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-state strong {
+  font-size: 1rem;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-state small {
+  font-size: 0.72rem;
+  padding: 0.22rem 0.46rem;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item p {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.92));
+  border: 1px solid rgba(203, 213, 225, 0.88);
+  color: #475569;
+  font-size: 0.73rem;
+  line-height: 1.38;
+  margin-top: 0.18rem;
+  padding: 0.5rem 0.58rem;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item p::before {
+  color: #0f172a;
+  content: "Axe du radar · ";
+  font-weight: 950;
+}
+
+@media (max-width: 1300px) {
+  .pilotage-trajectory-compare-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .pilotage-trajectory-compare-layout .pilotage-trajectory-visual-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: none;
+  }
+
+  .pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item::before {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .pilotage-trajectory-compare-layout .pilotage-trajectory-visual-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pilotage-trajectory-chartjs-frame {
+    height: 23rem;
+    max-height: 23rem;
+  }
+}
+
+/* PILOTAGEVISU009G — polish lecture axe par axe */
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item p {
+  max-width: 100%;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item p::before {
+  background: rgba(14, 165, 233, 0.08);
+  border: 1px solid rgba(14, 165, 233, 0.18);
+  border-radius: 999px;
+  color: #0369a1;
+  content: "Lecture de l’axe";
+  display: inline-flex;
+  font-size: 0.66rem;
+  font-weight: 950;
+  margin-right: 0.35rem;
+  padding: 0.12rem 0.38rem;
+  white-space: nowrap;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item-flat p::before {
+  background: rgba(100, 116, 139, 0.08);
+  border-color: rgba(100, 116, 139, 0.18);
+  color: #475569;
+}
+
+.pilotage-trajectory-visual-card .pilotage-trajectory-radar-method {
+  font-size: 0.76rem;
+  line-height: 1.42;
+}
+
+.pilotage-trajectory-visual-card .pilotage-radar-period-bubbles {
+  margin-bottom: 0.35rem;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-topline {
+  border-bottom: 1px solid rgba(226, 232, 240, 0.82);
+  padding-bottom: 0.32rem;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-state {
+  padding-top: 0.1rem;
+}
+
+/* PILOTAGEVISU009H — KPI intégrés + fils de suivi radar/cartes */
+.pilotage-trajectory-compare-layout {
+  position: relative;
+}
+
+.pilotage-trajectory-chartjs-card,
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-grid {
+  position: relative;
+  z-index: 2;
+}
+
+.pilotage-trajectory-spider-links {
+  bottom: 0.4rem;
+  height: calc(100% - 0.8rem);
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  top: 0.4rem;
+  width: 100%;
+  z-index: 1;
+}
+
+.pilotage-trajectory-spider-links path {
+  fill: none;
+  stroke: url(#pilotageTrajectoryLinkGradient);
+  stroke-dasharray: 4 7;
+  stroke-linecap: round;
+  stroke-width: 0.18;
+  vector-effect: non-scaling-stroke;
+}
+
+.pilotage-trajectory-spider-links path:first-of-type {
+  stroke: url(#pilotageTrajectoryLinkNeutral);
+}
+
+.pilotage-trajectory-axis-kpis {
+  display: grid;
+  gap: 0.4rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.pilotage-trajectory-axis-kpis span {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.9));
+  border: 1px solid rgba(203, 213, 225, 0.88);
+  border-radius: 0.8rem;
+  display: grid;
+  gap: 0.12rem;
+  padding: 0.44rem 0.48rem;
+}
+
+.pilotage-trajectory-axis-kpis b {
+  color: #64748b;
+  font-size: 0.62rem;
+  font-weight: 950;
+  letter-spacing: 0.03em;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.pilotage-trajectory-axis-kpis strong {
+  color: #0f172a;
+  font-size: 0.84rem;
+  line-height: 1.1;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item p {
+  margin-top: 0.08rem;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item::before {
+  display: none;
+}
+
+@media (max-width: 1300px) {
+  .pilotage-trajectory-spider-links {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .pilotage-trajectory-axis-kpis {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* PILOTAGEVISU009I — fils de suivi radar → cartes plus lisibles */
+.pilotage-trajectory-compare-layout {
+  isolation: isolate;
+  overflow: visible;
+  position: relative;
+}
+
+.pilotage-trajectory-spider-links {
+  bottom: 0;
+  height: 100%;
+  left: 0;
+  opacity: 1;
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  width: 100%;
+  z-index: 4;
+}
+
+.pilotage-trajectory-spider-links path {
+  fill: none;
+  stroke: rgba(14, 165, 233, 0.34);
+  stroke-dasharray: 5 8;
+  stroke-linecap: round;
+  stroke-width: 1.25;
+  vector-effect: non-scaling-stroke;
+}
+
+.pilotage-trajectory-spider-links path:first-of-type {
+  stroke: rgba(100, 116, 139, 0.30);
+}
+
+.pilotage-trajectory-spider-links path:nth-of-type(2),
+.pilotage-trajectory-spider-links path:nth-of-type(3),
+.pilotage-trajectory-spider-links path:nth-of-type(4) {
+  stroke: rgba(14, 165, 233, 0.38);
+}
+
+.pilotage-trajectory-chartjs-card,
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-grid {
+  position: relative;
+  z-index: 5;
+}
+
+/* Petits points d’accroche côté cartes */
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item::after {
+  background: #ffffff;
+  border: 2px solid rgba(14, 165, 233, 0.45);
+  border-radius: 999px;
+  box-shadow: 0 2px 7px rgba(15, 23, 42, 0.10);
+  content: "";
+  height: 0.55rem;
+  left: -0.38rem;
+  position: absolute;
+  top: 1.82rem;
+  width: 0.55rem;
+  z-index: 6;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item-flat::after {
+  border-color: rgba(100, 116, 139, 0.42);
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item-down::after {
+  border-color: rgba(245, 158, 11, 0.55);
+}
+
+/* Laisser respirer le couloir entre radar et cartes */
+.pilotage-trajectory-compare-layout {
+  column-gap: 1.45rem;
+}
+
+.pilotage-trajectory-chartjs-card {
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.035);
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item {
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.032);
+}
+
+@media (max-width: 1300px) {
+  .pilotage-trajectory-spider-links,
+  .pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item::after {
+    display: none;
+  }
+}
+
+/* PILOTAGEVISU009J — fils dynamiques souples radar/cartes */
+.pilotage-trajectory-spider-links {
+  inset: 0;
+  overflow: visible;
+}
+
+.pilotage-trajectory-spider-links path {
+  fill: none;
+  opacity: 0.72;
+  stroke: rgba(14, 165, 233, 0.34);
+  stroke-dasharray: 6 9;
+  stroke-linecap: round;
+  stroke-width: 1.35;
+  transition:
+    d 160ms ease-out,
+    opacity 160ms ease-out,
+    stroke 160ms ease-out;
+  vector-effect: non-scaling-stroke;
+}
+
+.pilotage-trajectory-spider-links path[data-axis-index="1"] {
+  stroke: rgba(100, 116, 139, 0.34);
+}
+
+.pilotage-trajectory-spider-links path[data-axis-index="2"],
+.pilotage-trajectory-spider-links path[data-axis-index="3"],
+.pilotage-trajectory-spider-links path[data-axis-index="4"] {
+  stroke: rgba(14, 165, 233, 0.38);
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item::after {
+  top: 2.15rem;
+}
+
+.pilotage-trajectory-chartjs-card {
+  position: relative;
+}
+
+.pilotage-trajectory-chartjs-card::after {
+  background:
+    radial-gradient(circle, rgba(14, 165, 233, 0.18), transparent 62%);
+  border-radius: 999px;
+  content: "";
+  height: 0.72rem;
+  position: absolute;
+  right: -0.36rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0.72rem;
+  z-index: 7;
+}
+
+@media (max-width: 1300px) {
+  .pilotage-trajectory-chartjs-card::after {
+    display: none;
+  }
+}
+
+/* PILOTAGEVISU009K — fils d’araignée visibles, pédagogiques */
+.pilotage-trajectory-spider-links {
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 20;
+}
+
+.pilotage-trajectory-spider-links path {
+  fill: none;
+  opacity: 0.92;
+  stroke: rgba(14, 165, 233, 0.46);
+  stroke-dasharray: 7 8;
+  stroke-linecap: round;
+  stroke-width: 1.55;
+  vector-effect: non-scaling-stroke;
+}
+
+.pilotage-trajectory-spider-links path[data-axis-index="1"] {
+  stroke: rgba(100, 116, 139, 0.46);
+}
+
+.pilotage-trajectory-spider-links path[data-axis-index="2"] {
+  stroke: rgba(14, 165, 233, 0.56);
+}
+
+.pilotage-trajectory-spider-links path[data-axis-index="3"] {
+  stroke: rgba(14, 165, 233, 0.50);
+}
+
+.pilotage-trajectory-spider-links path[data-axis-index="4"] {
+  stroke: rgba(14, 165, 233, 0.46);
+}
+
+.pilotage-trajectory-chartjs-card,
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-grid {
+  position: relative;
+  z-index: 10;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item::after {
+  z-index: 25;
+}
+
+.pilotage-trajectory-chartjs-frame {
+  position: relative;
+}
+
+.pilotage-trajectory-chartjs-frame::after {
+  background: rgba(14, 165, 233, 0.16);
+  border: 1px solid rgba(14, 165, 233, 0.18);
+  border-radius: 999px;
+  content: "";
+  height: 58%;
+  left: 21%;
+  pointer-events: none;
+  position: absolute;
+  top: 22%;
+  width: 58%;
+  z-index: 0;
+}
+
+#pilotageTrajectoryRadarChart {
+  position: relative;
+  z-index: 2;
+}
+
+@media (max-width: 1300px) {
+  .pilotage-trajectory-spider-links,
+  .pilotage-trajectory-chartjs-frame::after,
+  .pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item::after {
+    display: none;
+  }
+}
+
+/* PILOTAGEVISU009L — correction visuelle des connecteurs */
+.pilotage-trajectory-chartjs-frame::after {
+  display: none !important;
+}
+
+/* Réouvrir un vrai couloir graphique entre radar et cartes */
+.pilotage-trajectory-compare-layout {
+  column-gap: 1.8rem;
+  overflow: visible;
+  position: relative;
+}
+
+.pilotage-trajectory-spider-links {
+  display: block;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+  position: absolute;
+  z-index: 18;
+}
+
+.pilotage-trajectory-spider-links path {
+  fill: none;
+  opacity: 0.82;
+  stroke: rgba(14, 165, 233, 0.46);
+  stroke-dasharray: 5 7;
+  stroke-linecap: round;
+  stroke-width: 1.45;
+  vector-effect: non-scaling-stroke;
+}
+
+.pilotage-trajectory-spider-links path[data-axis-index="1"] {
+  stroke: rgba(100, 116, 139, 0.48);
+}
+
+.pilotage-trajectory-spider-links path[data-axis-index="2"] {
+  stroke: rgba(14, 165, 233, 0.56);
+}
+
+.pilotage-trajectory-spider-links path[data-axis-index="3"] {
+  stroke: rgba(14, 165, 233, 0.50);
+}
+
+.pilotage-trajectory-spider-links path[data-axis-index="4"] {
+  stroke: rgba(14, 165, 233, 0.44);
+}
+
+.pilotage-trajectory-chartjs-card,
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-grid {
+  position: relative;
+  z-index: 20;
+}
+
+/* Points d’accroche plus nets côté cartes */
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item::after {
+  background: #ffffff;
+  border: 2px solid rgba(14, 165, 233, 0.62);
+  border-radius: 999px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.14);
+  content: "";
+  height: 0.62rem;
+  left: -0.43rem;
+  position: absolute;
+  top: 1.95rem;
+  width: 0.62rem;
+  z-index: 24;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item-flat::after {
+  border-color: rgba(100, 116, 139, 0.58);
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item-down::after {
+  border-color: rgba(245, 158, 11, 0.64);
+}
+
+/* Petite sortie visuelle côté radar */
+.pilotage-trajectory-chartjs-card::after {
+  background: #ffffff;
+  border: 2px solid rgba(14, 165, 233, 0.45);
+  border-radius: 999px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.10);
+  content: "";
+  height: 0.68rem;
+  position: absolute;
+  right: -0.42rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0.68rem;
+  z-index: 24;
+}
+
+@media (max-width: 1300px) {
+  .pilotage-trajectory-spider-links,
+  .pilotage-trajectory-chartjs-card::after,
+  .pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item::after {
+    display: none !important;
+  }
+}
+
+/* PILOTAGEVISU009M — fil conducteur axe radar → cartes */
+.pilotage-trajectory-spider-links {
+  display: none !important;
+}
+
+.pilotage-trajectory-chartjs-card::after {
+  display: none !important;
+}
+
+.pilotage-trajectory-compare-layout {
+  column-gap: 1.35rem;
+  overflow: visible;
+}
+
+/* Colonne des cartes : rail pédagogique */
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-grid {
+  isolation: isolate;
+  position: relative;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-grid::before {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(148, 163, 184, 0.12),
+      rgba(14, 165, 233, 0.42) 28%,
+      rgba(14, 165, 233, 0.42) 74%,
+      rgba(148, 163, 184, 0.12)
+    );
+  border-radius: 999px;
+  bottom: 1.9rem;
+  content: "";
+  left: -0.82rem;
+  position: absolute;
+  top: 1.9rem;
+  width: 2px;
+  z-index: 1;
+}
+
+/* Branche courte vers chaque carte */
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item::before {
+  background: linear-gradient(90deg, rgba(14, 165, 233, 0.48), rgba(14, 165, 233, 0));
+  content: "";
+  display: block !important;
+  height: 2px;
+  left: -0.82rem;
+  position: absolute;
+  top: 2.05rem;
+  width: 0.82rem;
+  z-index: 2;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item-flat::before {
+  background: linear-gradient(90deg, rgba(100, 116, 139, 0.46), rgba(100, 116, 139, 0));
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item-down::before {
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.55), rgba(245, 158, 11, 0));
+}
+
+/* Nœud d’accroche sur le rail */
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item::after {
+  background: #ffffff;
+  border: 2px solid rgba(14, 165, 233, 0.62);
+  border-radius: 999px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.14);
+  content: "";
+  display: block !important;
+  height: 0.62rem;
+  left: -1.12rem;
+  position: absolute;
+  top: 1.72rem;
+  width: 0.62rem;
+  z-index: 3;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item-flat::after {
+  border-color: rgba(100, 116, 139, 0.58);
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item-down::after {
+  border-color: rgba(245, 158, 11, 0.64);
+}
+
+/* Indice discret côté radar : le radar alimente le rail */
+.pilotage-trajectory-chartjs-card {
+  position: relative;
+}
+
+.pilotage-trajectory-chartjs-card::before {
+  background:
+    linear-gradient(90deg, rgba(14, 165, 233, 0), rgba(14, 165, 233, 0.28));
+  border-radius: 999px;
+  content: "";
+  height: 2px;
+  position: absolute;
+  right: -1.35rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1.35rem;
+  z-index: 3;
+}
+
+@media (max-width: 1300px) {
+  .pilotage-trajectory-chartjs-card::before,
+  .pilotage-trajectory-compare-layout .pilotage-trajectory-visual-grid::before,
+  .pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item::before,
+  .pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item::after {
+    display: none !important;
+  }
+}
+
+/* PILOTAGEVISU009N — fils superposés au radar, visibles et souples */
+.pilotage-trajectory-compare-layout {
+  isolation: isolate;
+  overflow: visible !important;
+  position: relative;
+}
+
+.pilotage-trajectory-spider-links {
+  display: block !important;
+  inset: 0;
+  height: 100% !important;
+  left: 0;
+  opacity: 1 !important;
+  overflow: visible !important;
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  width: 100% !important;
+  z-index: 120 !important;
+}
+
+.pilotage-trajectory-spider-links path {
+  fill: none !important;
+  opacity: 0.78 !important;
+  stroke: rgba(14, 165, 233, 0.62) !important;
+  stroke-dasharray: 8 10;
+  stroke-linecap: round;
+  stroke-width: 1.75 !important;
+  vector-effect: non-scaling-stroke;
+}
+
+.pilotage-trajectory-spider-links path[data-axis-index="1"] {
+  stroke: rgba(100, 116, 139, 0.62) !important;
+}
+
+.pilotage-trajectory-spider-links path[data-axis-index="2"] {
+  stroke: rgba(14, 165, 233, 0.72) !important;
+}
+
+.pilotage-trajectory-spider-links path[data-axis-index="3"] {
+  stroke: rgba(14, 165, 233, 0.66) !important;
+}
+
+.pilotage-trajectory-spider-links path[data-axis-index="4"] {
+  stroke: rgba(14, 165, 233, 0.58) !important;
+}
+
+/* Le radar et les cartes restent cliquables/lisibles, mais les fils passent visuellement par-dessus */
+.pilotage-trajectory-chartjs-card,
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-grid {
+  position: relative;
+  z-index: 30 !important;
+}
+
+.pilotage-trajectory-chartjs-frame {
+  position: relative;
+}
+
+.pilotage-trajectory-chartjs-frame::after {
+  display: none !important;
+}
+
+.pilotage-trajectory-chartjs-card::before,
+.pilotage-trajectory-chartjs-card::after {
+  display: none !important;
+}
+
+/* Points sources sur le radar pour rendre le départ des fils lisible */
+.pilotage-trajectory-chartjs-frame::before {
+  background:
+    radial-gradient(circle at 50% 22%, rgba(14, 165, 233, 0.42) 0 0.22rem, transparent 0.25rem),
+    radial-gradient(circle at 80% 52%, rgba(14, 165, 233, 0.42) 0 0.22rem, transparent 0.25rem),
+    radial-gradient(circle at 50% 82%, rgba(14, 165, 233, 0.42) 0 0.22rem, transparent 0.25rem),
+    radial-gradient(circle at 20% 52%, rgba(14, 165, 233, 0.34) 0 0.22rem, transparent 0.25rem);
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 6;
+}
+
+/* Points d’arrivée côté cartes */
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item::after {
+  background: #ffffff;
+  border: 2px solid rgba(14, 165, 233, 0.72);
+  border-radius: 999px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.16);
+  content: "";
+  display: block !important;
+  height: 0.62rem;
+  left: -0.42rem;
+  position: absolute;
+  top: 1.88rem;
+  width: 0.62rem;
+  z-index: 140 !important;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item-flat::after {
+  border-color: rgba(100, 116, 139, 0.68);
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item-down::after {
+  border-color: rgba(245, 158, 11, 0.72);
+}
+
+@media (max-width: 1300px) {
+  .pilotage-trajectory-spider-links,
+  .pilotage-trajectory-chartjs-frame::before,
+  .pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item::after {
+    display: none !important;
+  }
+}
+
+/* PILOTAGEVISU010A — connecteurs LeaderLine, remplacement des fils SVG maison */
+.pilotage-trajectory-spider-links {
+  display: none !important;
+}
+
+.pilotage-trajectory-chartjs-card::before,
+.pilotage-trajectory-chartjs-card::after,
+.pilotage-trajectory-chartjs-frame::before,
+.pilotage-trajectory-chartjs-frame::after,
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-grid::before,
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item::before,
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item::after {
+  display: none !important;
+}
+
+.pilotage-trajectory-chartjs-frame,
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item {
+  position: relative;
+}
+
+.pilotage-leaderline-anchor-radar,
+.pilotage-leaderline-anchor-card {
+  background: #ffffff;
+  border: 2px solid rgba(14, 165, 233, 0.58);
+  border-radius: 999px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+  height: 0.62rem;
+  pointer-events: none;
+  position: absolute;
+  width: 0.62rem;
+  z-index: 40;
+}
+
+.pilotage-leaderline-anchor-radar[data-axis="1"] {
+  left: 50%;
+  top: 22%;
+  transform: translate(-50%, -50%);
+}
+
+.pilotage-leaderline-anchor-radar[data-axis="2"] {
+  left: 80%;
+  top: 52%;
+  transform: translate(-50%, -50%);
+}
+
+.pilotage-leaderline-anchor-radar[data-axis="3"] {
+  left: 50%;
+  top: 82%;
+  transform: translate(-50%, -50%);
+}
+
+.pilotage-leaderline-anchor-radar[data-axis="4"] {
+  border-color: rgba(100, 116, 139, 0.58);
+  left: 20%;
+  top: 52%;
+  transform: translate(-50%, -50%);
+}
+
+.pilotage-leaderline-anchor-card {
+  left: -0.36rem;
+  top: 1.72rem;
+  transform: translate(-50%, -50%);
+}
+
+.pilotage-trajectory-visual-item-flat .pilotage-leaderline-anchor-card {
+  border-color: rgba(100, 116, 139, 0.58);
+}
+
+.leader-line {
+  z-index: 999 !important;
+}
+
+@media (max-width: 1300px) {
+  .pilotage-leaderline-anchor-radar,
+  .pilotage-leaderline-anchor-card {
+    display: none !important;
+  }
+}
+
+/* PILOTAGEVISU010B — polish visuel radar/cartes/connecteurs */
+.pilotage-trajectory-visual-card {
+  background:
+    radial-gradient(circle at 12% 8%, rgba(99, 102, 241, 0.055), transparent 30%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96));
+}
+
+/* Couloir de connexion plus propre */
+.pilotage-trajectory-compare-layout {
+  column-gap: 1.9rem;
+  overflow: visible;
+}
+
+/* Nettoyage des anciens connecteurs maison */
+.pilotage-trajectory-spider-links,
+.pilotage-trajectory-chartjs-card::before,
+.pilotage-trajectory-chartjs-card::after,
+.pilotage-trajectory-chartjs-frame::before,
+.pilotage-trajectory-chartjs-frame::after,
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-grid::before,
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item::before,
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item::after {
+  display: none !important;
+}
+
+/* Points d’ancrage plus subtils */
+.pilotage-leaderline-anchor-radar,
+.pilotage-leaderline-anchor-card {
+  background: rgba(255, 255, 255, 0.96);
+  border: 2px solid rgba(14, 165, 233, 0.50);
+  border-radius: 999px;
+  box-shadow: 0 2px 9px rgba(15, 23, 42, 0.12);
+  height: 0.58rem;
+  opacity: 0.72;
+  pointer-events: auto;
+  position: absolute;
+  transition:
+    opacity 150ms ease,
+    transform 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+  width: 0.58rem;
+  z-index: 80;
+}
+
+.pilotage-leaderline-anchor-radar[data-axis="1"],
+.pilotage-leaderline-anchor-radar[data-axis="4"],
+.pilotage-trajectory-visual-item-flat .pilotage-leaderline-anchor-card {
+  border-color: rgba(100, 116, 139, 0.52);
+}
+
+.pilotage-leaderline-anchor-radar:hover,
+.pilotage-leaderline-anchor-active,
+.pilotage-axis-card-active .pilotage-leaderline-anchor-card {
+  border-color: rgba(14, 165, 233, 0.92);
+  box-shadow:
+    0 0 0 4px rgba(14, 165, 233, 0.10),
+    0 4px 12px rgba(15, 23, 42, 0.16);
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1.18);
+}
+
+/* Positionnement des points : plus proche du graphe réel */
+.pilotage-leaderline-anchor-radar[data-axis="1"] {
+  left: 50%;
+  top: 27%;
+  transform: translate(-50%, -50%);
+}
+
+.pilotage-leaderline-anchor-radar[data-axis="2"] {
+  left: 67%;
+  top: 52%;
+  transform: translate(-50%, -50%);
+}
+
+.pilotage-leaderline-anchor-radar[data-axis="3"] {
+  left: 50%;
+  top: 72%;
+  transform: translate(-50%, -50%);
+}
+
+.pilotage-leaderline-anchor-radar[data-axis="4"] {
+  left: 33%;
+  top: 52%;
+  transform: translate(-50%, -50%);
+}
+
+.pilotage-leaderline-anchor-card {
+  left: -0.18rem;
+  top: 1.6rem;
+  transform: translate(-50%, -50%);
+}
+
+/* Cartes : lecture plus moderne, avec feedback au survol */
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item {
+  transition:
+    transform 150ms ease,
+    box-shadow 150ms ease,
+    border-color 150ms ease,
+    background 150ms ease;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item:hover,
+.pilotage-axis-card-active {
+  box-shadow:
+    0 12px 28px rgba(15, 23, 42, 0.07),
+    0 0 0 1px rgba(14, 165, 233, 0.08);
+  transform: translateX(2px);
+}
+
+.pilotage-axis-card-active {
+  background:
+    radial-gradient(circle at 0% 10%, rgba(14, 165, 233, 0.10), transparent 22%),
+    linear-gradient(135deg, rgba(240, 249, 255, 0.98), #ffffff) !important;
+}
+
+.pilotage-axis-card-active .pilotage-trajectory-axis-kpis span {
+  border-color: rgba(14, 165, 233, 0.22);
+}
+
+/* LeaderLine SVG placé au-dessus de la page sans bloquer */
+.leader-line {
+  filter: drop-shadow(0 2px 4px rgba(15, 23, 42, 0.08));
+  pointer-events: none !important;
+  z-index: 999 !important;
+}
+
+/* Légende radar plus calme */
+.pilotage-trajectory-radar-legend {
+  background: rgba(248, 250, 252, 0.72);
+}
+
+.pilotage-trajectory-radar-method {
+  color: #64748b;
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+/* Les cartes KPI respirent un peu plus */
+.pilotage-trajectory-axis-kpis {
+  gap: 0.45rem;
+}
+
+.pilotage-trajectory-axis-kpis span {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94));
+}
+
+@media (max-width: 1300px) {
+  .pilotage-leaderline-anchor-radar,
+  .pilotage-leaderline-anchor-card {
+    display: none !important;
+  }
+}
+
+/* PILOTAGEVISU010C — lisibilité pédagogique des phrases d’axes */
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item p {
+  color: #475569;
+  font-size: 0.76rem;
+  line-height: 1.48;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item p::before {
+  content: "Lecture guidée";
+  margin-right: 0.42rem;
+}
+
+.pilotage-trajectory-radar-method {
+  color: #475569;
+  font-size: 0.78rem;
+  line-height: 1.48;
+}
+
+.pilotage-trajectory-heading p {
+  color: #64748b;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.pilotage-trajectory-axis-kpis b {
+  color: #64748b;
+}
+
+.pilotage-trajectory-axis-kpis strong {
+  letter-spacing: -0.01em;
+}
+
+/* PILOTAGEVISU010D — phrases plus pédagogiques et lisibles */
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item p {
+  color: #475569;
+  font-size: 0.76rem;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item p::before {
+  content: "Lecture métier";
+  margin-right: 0.42rem;
+}
+
+.pilotage-trajectory-radar-method {
+  color: #475569;
+  font-size: 0.78rem;
+  font-weight: 650;
+  line-height: 1.48;
+  text-wrap: pretty;
+}
+
+.pilotage-trajectory-axis-kpis strong {
+  letter-spacing: -0.015em;
+}
+
+.pilotage-trajectory-axis-kpis span {
+  min-height: 2.6rem;
+}
+
+/* PILOTAGEVISU010E — cartes plus accompagnantes */
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item {
+  gap: 0.62rem;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item p {
+  color: #3f4f66;
+  font-size: 0.78rem;
+  line-height: 1.56;
+  padding: 0.62rem 0.7rem;
+  text-wrap: pretty;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item p::before {
+  content: "Lecture accompagnée";
+  margin-right: 0.42rem;
+}
+
+.pilotage-trajectory-axis-kpis {
+  gap: 0.5rem;
+}
+
+.pilotage-trajectory-axis-kpis span {
+  min-height: 2.72rem;
+}
+
+.pilotage-trajectory-radar-method {
+  color: #3f4f66;
+  font-size: 0.79rem;
+  line-height: 1.52;
+  padding: 0.68rem 0.78rem;
+}
+
+@media (max-width: 1450px) {
+  .pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item p {
+    font-size: 0.76rem;
+    line-height: 1.5;
+  }
+}
+
+/* PILOTAGEVISU010F — radar plus technique et scores normalisés */
+.pilotage-trajectory-chartjs-frame {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(14, 165, 233, 0.08), transparent 58%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.94));
+}
+
+.pilotage-radar-technical-scores {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 0.58rem;
+}
+
+.pilotage-radar-score {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.92));
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  border-radius: 0.85rem;
+  display: grid;
+  gap: 0.12rem;
+  padding: 0.46rem 0.52rem;
+}
+
+.pilotage-radar-score b {
+  color: #64748b;
+  font-size: 0.64rem;
+  font-weight: 950;
+  letter-spacing: 0.03em;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.pilotage-radar-score strong {
+  color: #0f172a;
+  font-size: 0.92rem;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.pilotage-radar-score em {
+  color: #64748b;
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 750;
+  line-height: 1.1;
+}
+
+.pilotage-radar-score-up {
+  border-color: rgba(14, 165, 233, 0.28);
+}
+
+.pilotage-radar-score-up em {
+  color: #0369a1;
+}
+
+.pilotage-radar-score-down {
+  border-color: rgba(245, 158, 11, 0.30);
+}
+
+.pilotage-radar-score-down em {
+  color: #b45309;
+}
+
+.pilotage-radar-score-flat {
+  border-color: rgba(100, 116, 139, 0.22);
+}
+
+.pilotage-trajectory-radar-method {
+  margin-top: 0.58rem;
+}
+
+.pilotage-trajectory-chartjs-card .stats-chart-title-group p {
+  max-width: 48rem;
+}
+
+.pilotage-trajectory-chartjs-frame canvas {
+  filter: drop-shadow(0 8px 18px rgba(14, 165, 233, 0.08));
+}
+
+.pilotage-trajectory-radar-zoom-wrap {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(14, 165, 233, 0.08), transparent 58%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.94));
+}
+
+@media (max-width: 1100px) {
+  .pilotage-radar-technical-scores {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .pilotage-radar-technical-scores {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* PILOTAGEVISU010G — polish global page synthèse / chemin de lecture */
+.pilotage-tab-panel[data-pilotage-panel="summary"]:not(.hidden) {
+  display: grid;
+  gap: 1.05rem;
+}
+
+/* Respiration générale */
+.monetary-pilotage-view {
+  --pilotage-card-radius: 1.05rem;
+  --pilotage-soft-border: rgba(203, 213, 225, 0.86);
+  --pilotage-soft-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
+}
+
+/* Rail onglets plus compact et institutionnel */
+.pilotage-tabs {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 252, 0.88));
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.025);
+}
+
+/* Hero : point d’entrée plus calme, moins massif */
+.pilotage-hero {
+  background:
+    radial-gradient(circle at 88% 24%, rgba(99, 102, 241, 0.12), transparent 34%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94));
+  border-color: rgba(199, 210, 254, 0.72);
+  box-shadow: var(--pilotage-soft-shadow);
+  min-height: 0;
+}
+
+.pilotage-hero h2 {
+  letter-spacing: -0.035em;
+}
+
+.pilotage-hero p {
+  line-height: 1.55;
+  max-width: 66rem;
+}
+
+.pilotage-hero-aside .card {
+  border-color: rgba(226, 232, 240, 0.92);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.04);
+}
+
+/* 4 instruments : vrais tableaux de bord, mais moins écrasants */
+.pilotage-primary-kpi-grid,
+.pilotage-summary-kpi-grid,
+.pilotage-instrument-grid {
+  gap: 1rem;
+}
+
+.pilotage-instrument-card {
+  border-radius: var(--pilotage-card-radius);
+  box-shadow: var(--pilotage-soft-shadow);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pilotage-instrument-card::before {
+  opacity: 0.72;
+}
+
+.pilotage-instrument-card h3,
+.pilotage-instrument-card .pilotage-instrument-title {
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 780;
+}
+
+.pilotage-instrument-card .pilotage-instrument-value,
+.pilotage-instrument-card .pilotage-primary-kpi-value {
+  letter-spacing: -0.04em;
+}
+
+.pilotage-delta-line {
+  width: fit-content;
+}
+
+/* Légende : lecture transversale discrète */
+.pilotage-reference-legend {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.92));
+  border-color: rgba(203, 213, 225, 0.88);
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.025);
+  color: #475569;
+}
+
+/* Trajectoire : étape centrale de la page */
+.pilotage-trajectory-visual-card {
+  border-radius: 1.15rem;
+  border-left-width: 6px;
+  box-shadow:
+    0 14px 34px rgba(15, 23, 42, 0.055),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  margin-top: 0.15rem;
+  padding: 1.05rem;
+}
+
+.pilotage-trajectory-heading {
+  border-bottom: 1px solid rgba(226, 232, 240, 0.86);
+  padding-bottom: 0.7rem;
+}
+
+.pilotage-trajectory-heading h3 {
+  letter-spacing: -0.025em;
+}
+
+.pilotage-trajectory-global {
+  background:
+    linear-gradient(135deg, rgba(248, 250, 252, 0.86), rgba(255, 255, 255, 0.92));
+  border-color: rgba(203, 213, 225, 0.86);
+}
+
+/* Radar : plus technique, mais intégré */
+.pilotage-trajectory-chartjs-card {
+  border-color: rgba(203, 213, 225, 0.9);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+}
+
+.pilotage-trajectory-chartjs-frame {
+  border-color: rgba(203, 213, 225, 0.82);
+}
+
+.pilotage-radar-technical-scores {
+  margin-top: 0.75rem;
+}
+
+.pilotage-radar-score {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+/* Cartes d’axes : lecture accompagnée, plus lisible */
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-grid {
+  gap: 0.95rem;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item {
+  border-radius: 1.05rem;
+  box-shadow:
+    0 8px 18px rgba(15, 23, 42, 0.035),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+.pilotage-trajectory-visual-topline {
+  align-items: center;
+}
+
+.pilotage-trajectory-visual-topline span {
+  letter-spacing: 0.04em;
+}
+
+.pilotage-trajectory-axis-kpis span {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item p {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.92));
+  border-color: rgba(203, 213, 225, 0.82);
+}
+
+/* Diagnostic + balance : deuxième niveau de lecture, côte à côte sur grand écran */
+@media (min-width: 1280px) {
+  .pilotage-tab-panel[data-pilotage-panel="summary"]:not(.hidden) {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+
+  .pilotage-tab-panel[data-pilotage-panel="summary"]:not(.hidden) > * {
+    grid-column: 1 / -1;
+  }
+
+  .pilotage-diagnostic-lite-card {
+    grid-column: 1 / span 5 !important;
+  }
+
+  .pilotage-flow-balance-card {
+    grid-column: 6 / -1 !important;
+  }
+
+  .pilotage-reference-visual-card,
+  .pilotage-methodology-note {
+    grid-column: 1 / -1 !important;
+  }
+}
+
+.pilotage-diagnostic-lite-card,
+.pilotage-flow-balance-card {
+  border-radius: var(--pilotage-card-radius);
+  box-shadow: var(--pilotage-soft-shadow);
+}
+
+.pilotage-diagnostic-lite-card {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(239, 246, 255, 0.74));
+  border-left-width: 5px;
+}
+
+.pilotage-diagnostic-lite-card h3,
+.pilotage-flow-balance-card h3,
+.pilotage-reference-visual-card h3 {
+  letter-spacing: -0.02em;
+}
+
+.pilotage-diagnostic-lite-card .pilotage-reading-copy {
+  gap: 0.58rem;
+}
+
+.pilotage-diagnostic-lite-card .pilotage-reading-copy p {
+  line-height: 1.5;
+}
+
+/* Balance : lecture plus immédiate */
+.pilotage-flow-balance-card {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(240, 249, 255, 0.72));
+  border-left-width: 5px;
+}
+
+.pilotage-flow-balance-row {
+  align-items: center;
+}
+
+.pilotage-flow-balance-track {
+  height: 0.62rem;
+}
+
+.pilotage-flow-balance-net {
+  background:
+    linear-gradient(135deg, rgba(248, 250, 252, 0.98), rgba(255, 255, 255, 0.96));
+  border-color: rgba(203, 213, 225, 0.9);
+}
+
+/* Grandeurs de référence : socle plus compact, moins dominant */
+.pilotage-reference-visual-card {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94));
+  border-radius: var(--pilotage-card-radius);
+  box-shadow: var(--pilotage-soft-shadow);
+}
+
+.pilotage-reference-visual-card .pilotage-section-heading {
+  border-bottom: 1px solid rgba(226, 232, 240, 0.86);
+  margin-bottom: 0.8rem;
+  padding-bottom: 0.65rem;
+}
+
+.pilotage-reference-visual-grid {
+  gap: 0.78rem;
+}
+
+.pilotage-reference-no-gauge-item,
+.pilotage-reference-visual-item {
+  border-color: rgba(203, 213, 225, 0.86);
+  border-radius: 0.92rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.74);
+}
+
+.pilotage-reference-visual-value {
+  letter-spacing: -0.025em;
+}
+
+/* Méthodo finale : note de bas de page, pas bloc concurrent */
+.pilotage-methodology-note {
+  background:
+    linear-gradient(135deg, rgba(248, 250, 252, 0.96), rgba(255, 255, 255, 0.92));
+  border-color: rgba(226, 232, 240, 0.9);
+  border-radius: 1rem;
+  color: #475569;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  padding: 0.9rem 1rem;
+}
+
+.pilotage-methodology-note strong {
+  color: #0f172a;
+}
+
+/* Meilleur comportement sur écrans moyens */
+@media (max-width: 1500px) {
+  .pilotage-trajectory-compare-layout {
+    grid-template-columns: minmax(500px, 0.88fr) minmax(520px, 1.12fr);
+  }
+
+  .pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item p {
+    font-size: 0.74rem;
+    line-height: 1.45;
+  }
+}
+
+@media (max-width: 1300px) {
+  .pilotage-trajectory-compare-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .pilotage-trajectory-compare-layout .pilotage-trajectory-visual-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .pilotage-trajectory-compare-layout .pilotage-trajectory-visual-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pilotage-methodology-note {
+    font-size: 0.82rem;
+  }
+}
+
+/* PILOTAGEVISU010H — réagencement visible de la synthèse pilotage */
+.pilotage-tab-panel[data-pilotage-panel="summary"]:not(.hidden) {
+  display: grid !important;
+  gap: 1.15rem !important;
+}
+
+/* Ordre de lecture explicite */
+.pilotage-tab-panel[data-pilotage-panel="summary"] .pilotage-hero {
+  order: 10;
+}
+
+.pilotage-tab-panel[data-pilotage-panel="summary"] .pilotage-primary-kpi-grid,
+.pilotage-tab-panel[data-pilotage-panel="summary"] .pilotage-instrument-grid {
+  order: 20;
+}
+
+.pilotage-tab-panel[data-pilotage-panel="summary"] .pilotage-reference-legend {
+  order: 25;
+}
+
+.pilotage-tab-panel[data-pilotage-panel="summary"] .pilotage-trajectory-visual-card {
+  order: 30;
+}
+
+.pilotage-tab-panel[data-pilotage-panel="summary"] .pilotage-diagnostic-lite-card {
+  order: 40;
+}
+
+.pilotage-tab-panel[data-pilotage-panel="summary"] .pilotage-flow-balance-card {
+  order: 41;
+}
+
+.pilotage-tab-panel[data-pilotage-panel="summary"] .pilotage-reference-visual-card {
+  order: 50;
+}
+
+.pilotage-tab-panel[data-pilotage-panel="summary"] .pilotage-methodology-note {
+  order: 60;
+}
+
+/* Hero plus compact et plus directionnel */
+.pilotage-hero {
+  min-height: 0 !important;
+  padding: 1.25rem 1.35rem !important;
+  border-radius: 1.15rem !important;
+  background:
+    radial-gradient(circle at 86% 28%, rgba(99, 102, 241, 0.14), transparent 32%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.99), rgba(248, 250, 252, 0.94)) !important;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.045) !important;
+}
+
+.pilotage-hero h2 {
+  font-size: clamp(1.75rem, 2.1vw, 2.55rem) !important;
+  line-height: 1.04 !important;
+  max-width: 48rem !important;
+}
+
+.pilotage-hero p {
+  max-width: 56rem !important;
+}
+
+.pilotage-hero-aside {
+  gap: 0.75rem !important;
+}
+
+.pilotage-hero-aside .card {
+  padding: 1rem 1.1rem !important;
+}
+
+/* KPI cockpit : plus dense, plus tableau de bord */
+.pilotage-primary-kpi-grid,
+.pilotage-instrument-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 0.9rem !important;
+}
+
+.pilotage-instrument-card,
+.pilotage-primary-kpi-card {
+  min-height: 13rem !important;
+  padding: 1rem 1.05rem !important;
+  border-radius: 1.05rem !important;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(14, 165, 233, 0.08), transparent 32%),
+    linear-gradient(135deg, #ffffff, rgba(248, 250, 252, 0.96)) !important;
+  box-shadow:
+    0 8px 22px rgba(15, 23, 42, 0.045),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
+}
+
+.pilotage-instrument-card .pilotage-primary-kpi-value,
+.pilotage-instrument-card .pilotage-instrument-value,
+.pilotage-primary-kpi-card .pilotage-primary-kpi-value {
+  font-size: clamp(1.65rem, 1.85vw, 2.25rem) !important;
+}
+
+.pilotage-instrument-card svg,
+.pilotage-instrument-card canvas,
+.pilotage-primary-kpi-card svg,
+.pilotage-primary-kpi-card canvas {
+  max-height: 3.9rem !important;
+}
+
+/* Légende comme bandeau de lecture, pas bloc concurrent */
+.pilotage-reference-legend {
+  padding: 0.72rem 0.95rem !important;
+  border-radius: 999px !important;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94)) !important;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.025) !important;
+}
+
+/* Bloc trajectoire : vrai moment central de la page */
+.pilotage-trajectory-visual-card {
+  padding: 1.25rem !important;
+  border-left: 7px solid rgba(99, 102, 241, 0.58) !important;
+  border-radius: 1.25rem !important;
+  background:
+    radial-gradient(circle at 6% 8%, rgba(99, 102, 241, 0.08), transparent 26%),
+    radial-gradient(circle at 78% 28%, rgba(14, 165, 233, 0.065), transparent 32%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.99), rgba(248, 250, 252, 0.94)) !important;
+  box-shadow:
+    0 16px 42px rgba(15, 23, 42, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82) !important;
+}
+
+.pilotage-trajectory-heading {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  align-items: end !important;
+  gap: 1rem !important;
+}
+
+.pilotage-trajectory-heading::after {
+  content: "Étape 2 · comparer";
+  justify-self: end;
+  width: fit-content;
+  padding: 0.28rem 0.62rem;
+  border-radius: 999px;
+  background: rgba(99, 102, 241, 0.09);
+  border: 1px solid rgba(99, 102, 241, 0.18);
+  color: #4f46e5;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Radar + cartes : renforcer le couloir visuel */
+.pilotage-trajectory-compare-layout {
+  grid-template-columns: minmax(520px, 0.86fr) minmax(560px, 1.14fr) !important;
+  column-gap: 2.05rem !important;
+}
+
+.pilotage-trajectory-chartjs-card {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.99), rgba(248, 250, 252, 0.94)) !important;
+}
+
+.pilotage-trajectory-compare-layout .pilotage-trajectory-visual-item {
+  background:
+    radial-gradient(circle at 0% 0%, rgba(14, 165, 233, 0.075), transparent 28%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.99), rgba(248, 250, 252, 0.96)) !important;
+}
+
+/* Regrouper diagnostic + balance en lecture rapide */
+@media (min-width: 1280px) {
+  .pilotage-tab-panel[data-pilotage-panel="summary"]:not(.hidden) {
+    grid-template-columns: repeat(12, minmax(0, 1fr)) !important;
+  }
+
+  .pilotage-tab-panel[data-pilotage-panel="summary"]:not(.hidden) > * {
+    grid-column: 1 / -1;
+  }
+
+  .pilotage-diagnostic-lite-card {
+    grid-column: 1 / span 5 !important;
+  }
+
+  .pilotage-flow-balance-card {
+    grid-column: 6 / -1 !important;
+  }
+}
+
+.pilotage-diagnostic-lite-card,
+.pilotage-flow-balance-card {
+  min-height: 12rem !important;
+  border-radius: 1.1rem !important;
+  box-shadow:
+    0 10px 26px rgba(15, 23, 42, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.78) !important;
+}
+
+.pilotage-diagnostic-lite-card::before,
+.pilotage-flow-balance-card::before {
+  display: inline-flex;
+  margin-bottom: 0.45rem;
+  padding: 0.24rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 950;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pilotage-diagnostic-lite-card::before {
+  content: "Étape 3 · lire";
+  color: #1d4ed8;
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.16);
+}
+
+.pilotage-flow-balance-card::before {
+  content: "Étape 4 · vérifier";
+  color: #0e7490;
+  background: rgba(14, 165, 233, 0.08);
+  border: 1px solid rgba(14, 165, 233, 0.16);
+}
+
+/* Grandeurs de référence : socle technique assumé */
+.pilotage-reference-visual-card {
+  border-radius: 1.1rem !important;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.99), rgba(248, 250, 252, 0.95)) !important;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.04) !important;
+}
+
+.pilotage-reference-visual-card .pilotage-section-heading::before {
+  content: "Socle technique";
+  display: inline-flex;
+  margin-bottom: 0.42rem;
+  padding: 0.24rem 0.55rem;
+  border-radius: 999px;
+  color: #475569;
+  background: rgba(100, 116, 139, 0.08);
+  border: 1px solid rgba(100, 116, 139, 0.16);
+  font-size: 0.68rem;
+  font-weight: 950;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pilotage-reference-visual-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+}
+
+.pilotage-reference-visual-item,
+.pilotage-reference-no-gauge-item {
+  min-height: 7.1rem !important;
+}
+
+/* Point méthodo comme note finale */
+.pilotage-methodology-note {
+  border-radius: 999px !important;
+  background:
+    linear-gradient(135deg, rgba(248, 250, 252, 0.98), rgba(255, 255, 255, 0.94)) !important;
+  color: #475569 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.76) !important;
+}
+
+/* Responsive */
+@media (max-width: 1500px) {
+  .pilotage-primary-kpi-grid,
+  .pilotage-instrument-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .pilotage-trajectory-compare-layout {
+    grid-template-columns: 1fr !important;
+  }
+
+  .pilotage-reference-visual-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 780px) {
+  .pilotage-primary-kpi-grid,
+  .pilotage-instrument-grid,
+  .pilotage-reference-visual-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .pilotage-hero {
+    padding: 1rem !important;
+  }
+
+  .pilotage-reference-legend,
+  .pilotage-methodology-note {
+    border-radius: 1rem !important;
+  }
+}
+

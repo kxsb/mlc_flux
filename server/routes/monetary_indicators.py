@@ -1744,6 +1744,100 @@ def monetary_indicators_pilotage_lm3_chains():
     })
 
 
+
+
+def _build_pilotage_summary_benchmarks():
+    """
+    Repères documentaires exposés au front pour éviter les seuils codés en dur.
+
+    Ces valeurs ne sont pas des seuils réglementaires ni des verdicts automatiques.
+    Elles qualifient les jauges de synthèse avec un statut méthodologique explicite.
+    """
+    national_reconversion_rate_2022 = 0.868
+    national_retention_apparent_2022 = round(
+        1.0 - national_reconversion_rate_2022,
+        3,
+    )
+
+    return {
+        "reference_types": {
+            "displayed_period": {
+                "label": "Période affichée",
+                "description": "Comparaison aux mois visibles dans la période demandée.",
+                "status": "internal_relative",
+            },
+            "national_survey": {
+                "label": "Enquête nationale",
+                "description": (
+                    "Point documentaire externe, utile pour situer l’ordre de grandeur, "
+                    "non prescriptif."
+                ),
+                "status": "external_context",
+            },
+            "internal_proxy": {
+                "label": "Proxy interne",
+                "description": (
+                    "Indicateur MLCFlux construit pour le pilotage, "
+                    "sans équivalence scientifique directe."
+                ),
+                "status": "internal_proxy",
+            },
+            "internal_caution": {
+                "label": "Prudence interne",
+                "description": (
+                    "Signal de contexte et d’alerte douce, "
+                    "pas un seuil réglementaire."
+                ),
+                "status": "internal_caution",
+            },
+        },
+        "net_inflow_retention_rate": {
+            "reference_type": "national_survey",
+            "label": "Repère national 2022 indicatif",
+            "value": national_retention_apparent_2022,
+            "source": "Enquête nationale 2023 sur les monnaies locales en France",
+            "method_note": (
+                "Rétention apparente dérivée du taux moyen de reconversion national 2022 "
+                "de 86,8 % : 100 % - 86,8 % = 13,2 %. "
+                "À comparer avec prudence, selon les périodes et périmètres."
+            ),
+        },
+        "annualized_rotation": {
+            "reference_type": "displayed_period",
+            "label": "Médiane de la période affichée",
+            "method_note": "Repère interne calculé côté front à partir des mois visibles.",
+        },
+        "economic_activity_per_outflow": {
+            "reference_type": "internal_proxy",
+            "label": "Proxy interne de rendement avant sortie",
+            "method_note": (
+                "Rapport entre activité économique observée et sorties du circuit. "
+                "À ne pas confondre avec un LM3 strict."
+            ),
+        },
+        "apparent_reconversion_coverage": {
+            "reference_type": "internal_caution",
+            "label": "Repère prudentiel interne",
+            "method_note": (
+                "Couverture apparente exprimée en jours ou mois de sorties moyennes. "
+                "Ce n’est pas un ratio bancaire ou réglementaire."
+            ),
+        },
+        "lm3_literature": {
+            "reference_type": "scientific_literature",
+            "label": "Repères LM3 documentaires",
+            "observed_range_local_currencies": {
+                "min": 1.63,
+                "max": 2.34,
+            },
+            "method_note": (
+                "Repère documentaire pour le LM3 estimé, à utiliser dans l’onglet "
+                "Circulation & rendement plutôt que pour le proxy activité / sorties."
+            ),
+        },
+    }
+
+
 @monetary_indicators_bp.route(
     "/api/monetary-indicators/pilotage-summary",
     methods=["GET"],
@@ -2027,6 +2121,7 @@ def monetary_indicators_pilotage_summary():
             },
             "lm3": lm3_metrics,
         },
+        "benchmarks": _build_pilotage_summary_benchmarks(),
     })
 
 
