@@ -692,6 +692,7 @@ async function renderSectorsView(forceReload = false) {
 
   destroyCartographyMap();
 
+  cleanupPilotageTrajectoryConnectorsIfLeaving("sectors");
   appState.currentView = "sectors";
   syncSidebarView("sectors");
   setTitle("Analyse sectorielle");
@@ -789,6 +790,7 @@ async function renderTerritoriesView(forceReload = false) {
 
   destroyCartographyMap();
 
+  cleanupPilotageTrajectoryConnectorsIfLeaving("territories");
   appState.currentView = "territories";
   syncSidebarView("territories");
   setTitle("Analyse territoriale — codes postaux");
@@ -882,6 +884,7 @@ async function renderCartographyView(forceReload = false) {
     destroyCartographyMap();
   }
 
+  cleanupPilotageTrajectoryConnectorsIfLeaving("cartography");
   appState.currentView = "cartography";
   syncSidebarView("cartography");
   setTitle("Cartographie des professionnels");
@@ -5208,6 +5211,7 @@ const PROGRESSIVE_VIEW_SHELLS = {
 };
 
 function renderProgressiveViewShell(viewKey) {
+  cleanupPilotageTrajectoryConnectorsIfLeaving(viewKey);
   const shell = PROGRESSIVE_VIEW_SHELLS[viewKey];
   if (!shell) return false;
 
@@ -6261,6 +6265,7 @@ function bindInfoEditor() {
 }
 
 async function renderInfoView(forceReload = false, requestedPageSlug = null) {
+  cleanupPilotageTrajectoryConnectorsIfLeaving("info");
   appState.currentView = "info";
   syncSidebarView("info");
   destroyCartographyMap();
@@ -7108,6 +7113,7 @@ function bindAdministrationViewInteractions() {
 
 async function renderAdministrationView() {
   destroyCartographyMap();
+  cleanupPilotageTrajectoryConnectorsIfLeaving("admin");
   appState.currentView = "admin";
   syncSidebarView("admin");
   setTitle("Administration & paramètres");
@@ -8670,6 +8676,7 @@ function bindTicketsViewInteractions() {
 
 async function renderTicketsView(forceReload = false) {
   destroyCartographyMap();
+  cleanupPilotageTrajectoryConnectorsIfLeaving("tickets");
   appState.currentView = "tickets";
   syncSidebarView("tickets");
   setTitle("Tickets & retours");
@@ -8889,6 +8896,7 @@ function bindTicketDetailInteractions(slug) {
 
 async function renderTicketDetail(slug, feedbackMessage = "") {
   destroyCartographyMap();
+  cleanupPilotageTrajectoryConnectorsIfLeaving("tickets");
   appState.currentView = "tickets";
   syncSidebarView("tickets");
   setTitle("Ticket");
@@ -9117,6 +9125,7 @@ async function renderStatsView(forceReload = false) {
   const preserveVisibleView = shouldPreservePeriodRefreshView("stats", forceReload);
 
   destroyCartographyMap();
+  cleanupPilotageTrajectoryConnectorsIfLeaving("stats");
   appState.currentView = "stats";
   syncSidebarView("stats");
   setTitle("Statistiques globales");
@@ -17580,6 +17589,7 @@ async function renderProsView(forceReload = false) {
     destroyCartographyMap();
   }
 
+  cleanupPilotageTrajectoryConnectorsIfLeaving("pros");
   appState.currentView = "pros";
   syncSidebarView("pros");
   setTitle("Professionnels & particuliers");
@@ -20862,6 +20872,7 @@ async function renderUserDetail(userCode) {
     return;
   }
 
+  cleanupPilotageTrajectoryConnectorsIfLeaving("user-detail");
   appState.currentView = "user-detail";
   setTitle(`Fiche particulier : ${userCode}`);
 
@@ -24391,6 +24402,7 @@ async function renderProDetail(numProf, detailMode = "all") {
   const needReload = !isSameProfessional || !appState.detailData;
   const isDetailModeChanged = appState.detailMode !== detailMode;
 
+  cleanupPilotageTrajectoryConnectorsIfLeaving("pro-detail");
   appState.currentView = "pro-detail";
   syncSidebarView("pro-detail");
   appState.currentPro = numProf;
@@ -24710,6 +24722,11 @@ function updatePilotageTrajectorySpiderLinks() {
 }
 
 function forcePilotageTrajectorySpiderLinksUpdate() {
+  if (appState.currentView !== "monetary-pilotage") {
+    cleanupPilotageTrajectoryConnectors();
+    return;
+  }
+
   updatePilotageTrajectorySpiderLinks();
 
   window.requestAnimationFrame(() => {
@@ -24721,6 +24738,11 @@ function forcePilotageTrajectorySpiderLinksUpdate() {
 }
 
 window.addEventListener("resize", () => {
+  if (appState.currentView !== "monetary-pilotage") {
+    cleanupPilotageTrajectoryConnectors();
+    return;
+  }
+
   clearTimeout(window.__pilotageTrajectorySpiderLinksTimer);
   window.__pilotageTrajectorySpiderLinksTimer = setTimeout(forcePilotageTrajectorySpiderLinksUpdate, 120);
 });
@@ -24764,6 +24786,31 @@ function destroyPilotageLeaderLines() {
   });
 
   window.__pilotageLeaderLines = [];
+
+  // PILOTAGEWIRES002 — filet de sécurité : LeaderLine attache ses SVG au document.
+  // En cas de changement de vue pendant un rendu asynchrone, certaines lignes peuvent
+  // rester orphelines même si la référence JS a été perdue.
+  document.querySelectorAll("svg.leader-line, .leader-line").forEach((node) => {
+    try {
+      node.remove();
+    } catch (error) {
+      console.warn("LeaderLine orphan remove failed", error);
+    }
+  });
+}
+
+function cleanupPilotageTrajectoryConnectors() {
+  clearTimeout(window.__pilotageTrajectorySpiderLinksTimer);
+  destroyPilotageLeaderLines();
+}
+
+function cleanupPilotageTrajectoryConnectorsIfLeaving(nextViewKey) {
+  if (
+    appState.currentView === "monetary-pilotage"
+    && nextViewKey !== "monetary-pilotage"
+  ) {
+    cleanupPilotageTrajectoryConnectors();
+  }
 }
 
 function ensurePilotageLeaderLineAnchors() {
@@ -24819,6 +24866,14 @@ function renderPilotageLeaderLines() {
 
   loadPilotageLeaderLineLibrary()
     .then((LeaderLine) => {
+      if (
+        appState.currentView !== "monetary-pilotage"
+        || !document.body.contains(anchors.layout)
+      ) {
+        destroyPilotageLeaderLines();
+        return;
+      }
+
       destroyPilotageLeaderLines();
 
       const lineConfigByAxis = [
