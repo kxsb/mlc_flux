@@ -4842,20 +4842,226 @@ function formatIsoDateForSidebar(dateString) {
 function setCustomPeriodFieldsExpanded(expanded) {
   const customFields = document.getElementById("customPeriodFields");
   const activeSummary = document.getElementById("periodActiveSummary");
-  const isExpanded = Boolean(expanded);
+  const pickerPanel = document.getElementById("periodPickerPanel");
 
   if (customFields) {
-    customFields.classList.toggle("hidden", !isExpanded);
+    customFields.classList.toggle("hidden", !expanded);
   }
 
-  if (activeSummary) {
-    activeSummary.setAttribute("aria-expanded", isExpanded ? "true" : "false");
+  // Quand le nouveau panneau compact existe, aria-expanded décrit
+  // l'ouverture du panneau, pas seulement celle des champs personnalisés.
+  if (activeSummary && !pickerPanel) {
+    activeSummary.setAttribute("aria-expanded", expanded ? "true" : "false");
   }
 }
 
 function toggleCustomPeriodFields(preset) {
   setCustomPeriodFieldsExpanded(preset === "custom");
 }
+
+/* SIDEPANEL003B — panneau période compact ouvert depuis la période active */
+function setPeriodPickerPanelOpen(open) {
+  const panel = document.getElementById("periodPickerPanel");
+  const activeSummary = document.getElementById("periodActiveSummary");
+
+  if (!panel || !activeSummary) return;
+
+  panel.classList.toggle("hidden", !open);
+  activeSummary.setAttribute("aria-expanded", open ? "true" : "false");
+
+  if (open) {
+    window.requestAnimationFrame(() => {
+      document.getElementById("periodPreset")?.focus({ preventScroll: true });
+    });
+  }
+}
+
+function togglePeriodPickerPanel() {
+  const panel = document.getElementById("periodPickerPanel");
+  setPeriodPickerPanelOpen(panel?.classList.contains("hidden") ?? true);
+}
+
+
+/* SIDEPANEL004A — menu période direct, sans select natif visible */
+function updatePeriodQuickPresetButtons() {
+  const presetEl = document.getElementById("periodPreset");
+  const activePreset = presetEl?.value || appState.analysisPeriod?.preset || "custom";
+
+  document.querySelectorAll("[data-period-quick-preset]").forEach((button) => {
+    const isActive = button.dataset.periodQuickPreset === activePreset;
+    button.classList.toggle("period-quick-preset-btn-active", isActive);
+    button.setAttribute("aria-pressed", isActive ? "true" : "false");
+  });
+}
+
+function buildPeriodQuickPresetButtons(presetEl) {
+  const options = Array.from(presetEl?.options || []);
+
+  return options.map((option) => {
+    const value = String(option.value || "");
+    const label = String(option.textContent || option.label || value).trim();
+
+    return `
+      <button
+        type="button"
+        class="period-quick-preset-btn"
+        data-period-quick-preset="${escapeHtml(value)}"
+        aria-pressed="false"
+      >
+        ${escapeHtml(label)}
+      </button>
+    `;
+  }).join("");
+}
+
+function bindPeriodQuickPresetButtons() {
+  document.querySelectorAll("[data-period-quick-preset]").forEach((button) => {
+    if (button.dataset.bound === "true") return;
+
+    button.addEventListener("click", async () => {
+      const presetEl = document.getElementById("periodPreset");
+      const preset = button.dataset.periodQuickPreset || "custom";
+
+      if (!presetEl) return;
+
+      presetEl.value = preset;
+      updatePeriodDraftFromPreset(preset);
+      updatePeriodQuickPresetButtons();
+
+      if (preset === "custom") {
+        setPeriodPickerPanelOpen(true);
+        window.requestAnimationFrame(() => {
+          document.getElementById("periodStart")?.focus({ preventScroll: true });
+        });
+        return;
+      }
+
+      await applyAnalysisPeriod();
+
+      // SIDEPANEL004C — ne pas refermer automatiquement après sélection.
+      // L’utilisateur referme volontairement en recliquant sur la carte Période active.
+      setPeriodPickerPanelOpen(true);
+    });
+
+    button.dataset.bound = "true";
+  });
+}
+
+function hideOrphanPeriodPresetLabels(block, panel, activeSummary) {
+  if (!block || !panel) return;
+
+  Array.from(block.querySelectorAll("label, .sidebar-field-label, h4, p, span")).forEach((node) => {
+    if (panel.contains(node) || activeSummary?.contains(node)) return;
+
+    const normalized = String(node.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+
+    if (normalized === "période rapide" || normalized === "periode rapide") {
+      node.classList.add("period-orphan-preset-label-hidden");
+    }
+  });
+}
+
+function ensurePeriodPickerPanel() {
+  const activeSummary = document.getElementById("periodActiveSummary");
+  const presetEl = document.getElementById("periodPreset");
+  const customFields = document.getElementById("customPeriodFields");
+
+  if (!activeSummary || !presetEl || !customFields) return;
+
+  const block = activeSummary.closest(".period-filter-block");
+  if (!block) return;
+
+  block.classList.add("period-picker-enabled");
+
+  let panel = document.getElementById("periodPickerPanel");
+
+  if (!panel) {
+    panel = document.createElement("div");
+    panel.id = "periodPickerPanel";
+    panel.className = "period-picker-panel hidden";
+    panel.innerHTML = `
+      <div class="period-picker-panel-header">
+        <span>Choisir la période</span>
+        <small>Période prédéfinie ou dates personnalisées</small>
+      </div>
+      <div id="periodQuickPresetGrid" class="period-quick-preset-grid" aria-label="Périodes rapides">
+        ${buildPeriodQuickPresetButtons(presetEl)}
+      </div>
+    `;
+
+    activeSummary.insertAdjacentElement("afterend", panel);
+  } else {
+    const grid = panel.querySelector("#periodQuickPresetGrid");
+    if (grid) {
+      grid.innerHTML = buildPeriodQuickPresetButtons(presetEl);
+    }
+  }
+
+  let nativeStore = document.getElementById("periodNativePresetStore");
+
+  if (!nativeStore) {
+    nativeStore = document.createElement("div");
+    nativeStore.id = "periodNativePresetStore";
+    nativeStore.className = "period-native-preset-store";
+  }
+
+  const nativeWrapper =
+    presetEl.closest(".sidebar-field-label")
+    || presetEl.closest("label")
+    || document.querySelector('label[for="periodPreset"]')
+    || presetEl;
+
+  if (!nativeStore.contains(nativeWrapper)) {
+    nativeStore.appendChild(nativeWrapper);
+  }
+
+  if (!nativeStore.contains(presetEl)) {
+    nativeStore.appendChild(presetEl);
+  }
+
+  if (!panel.contains(nativeStore)) {
+    panel.appendChild(nativeStore);
+  }
+
+  if (!panel.contains(customFields)) {
+    panel.appendChild(customFields);
+  }
+
+  hideOrphanPeriodPresetLabels(block, panel, activeSummary);
+
+  activeSummary.setAttribute("aria-controls", "periodPickerPanel");
+  activeSummary.setAttribute(
+    "aria-expanded",
+    panel.classList.contains("hidden") ? "false" : "true"
+  );
+
+  if (activeSummary.dataset.periodPickerBound !== "true") {
+    activeSummary.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      togglePeriodPickerPanel();
+    }, true);
+
+    activeSummary.dataset.periodPickerBound = "true";
+  }
+
+  if (document.body.dataset.periodPickerOutsideBound !== "true") {
+    // SIDEPANEL004C — pas de fermeture au clic extérieur.
+    // Le panneau se ferme par re-clic sur la carte Période active.
+    // On conserve Échap comme raccourci clavier d’accessibilité.
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        setPeriodPickerPanelOpen(false);
+      }
+    });
+
+    document.body.dataset.periodPickerOutsideBound = "true";
+  }
+
+  bindPeriodQuickPresetButtons();
+  updatePeriodQuickPresetButtons();
+}
+
 
 function getPresetPeriod(preset) {
   const { min, max } = appState.periodBounds;
@@ -4901,21 +5107,123 @@ function getPresetPeriod(preset) {
   };
 }
 
+
+/* SIDEPANEL005B — mini timeline robuste de la période d'analyse */
+function parseSidebarIsoDateSafe(value) {
+  if (!value) return null;
+  const normalized = String(value).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return null;
+  const date = new Date(`${normalized}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function sidebarDiffDays(start, end) {
+  const startDate = parseSidebarIsoDateSafe(start);
+  const endDate = parseSidebarIsoDateSafe(end);
+  if (!startDate || !endDate) return null;
+  return Math.max(0, Math.round((endDate.getTime() - startDate.getTime()) / 86400000));
+}
+
+function sidebarClampPercent(value) {
+  return Math.min(100, Math.max(0, value));
+}
+
+function ensurePeriodMiniTimelineMount() {
+  const summary = document.getElementById("periodActiveSummary");
+  if (!summary) return null;
+
+  let mount = summary.querySelector(".period-mini-timeline");
+
+  if (!mount) {
+    mount = document.createElement("div");
+    mount.className = "period-mini-timeline hidden";
+    mount.innerHTML = `
+      <div class="period-mini-timeline-track">
+        <div class="period-mini-timeline-selection"></div>
+        <span class="period-mini-timeline-handle period-mini-timeline-handle-start"></span>
+        <span class="period-mini-timeline-handle period-mini-timeline-handle-end"></span>
+      </div>
+      <div class="period-mini-timeline-labels">
+        <span class="period-mini-timeline-bound-start"></span>
+        <span class="period-mini-timeline-bound-end"></span>
+      </div>
+    `;
+
+    const valueEl =
+      summary.querySelector(".period-active-value")
+      || document.getElementById("periodFilterHint");
+
+    if (valueEl) {
+      valueEl.insertAdjacentElement("afterend", mount);
+    } else {
+      summary.appendChild(mount);
+    }
+  }
+
+  return mount;
+}
+
+function renderPeriodMiniTimeline(selectedStart, selectedEnd) {
+  const mount = ensurePeriodMiniTimelineMount();
+  if (!mount) return;
+
+  const bounds = appState.periodBounds || {};
+  const totalStart = bounds.min || bounds.start || bounds.min_date;
+  const totalEnd = bounds.max || bounds.end || bounds.max_date;
+
+  const totalDays = sidebarDiffDays(totalStart, totalEnd);
+  const startOffset = sidebarDiffDays(totalStart, selectedStart);
+  const endOffset = sidebarDiffDays(totalStart, selectedEnd);
+
+  if (
+    totalDays === null
+    || totalDays <= 0
+    || startOffset === null
+    || endOffset === null
+  ) {
+    mount.classList.add("hidden");
+    return;
+  }
+
+  const leftPct = sidebarClampPercent((startOffset / totalDays) * 100);
+  const rightPct = sidebarClampPercent((endOffset / totalDays) * 100);
+  const widthPct = Math.max(1.2, rightPct - leftPct);
+
+  mount.querySelector(".period-mini-timeline-selection").style.left = `${leftPct}%`;
+  mount.querySelector(".period-mini-timeline-selection").style.width = `${widthPct}%`;
+  mount.querySelector(".period-mini-timeline-handle-start").style.left = `${leftPct}%`;
+  mount.querySelector(".period-mini-timeline-handle-end").style.left = `${Math.min(100, leftPct + widthPct)}%`;
+
+  mount.querySelector(".period-mini-timeline-bound-start").textContent = formatIsoDateForSidebar(totalStart);
+  mount.querySelector(".period-mini-timeline-bound-end").textContent = formatIsoDateForSidebar(totalEnd);
+
+  mount.classList.remove("hidden");
+}
+
+
 function updatePeriodHint(text = null) {
+  window.requestAnimationFrame(() => {
+    ensureCollapsedSidebarRail();
+    syncCollapsedSidebarState();
+  });
+
   const hint = document.getElementById("periodFilterHint");
   if (!hint) return;
 
   if (text) {
     hint.textContent = text;
+    ensurePeriodMiniTimelineMount()?.classList.add("hidden");
     return;
   }
 
   const { start, end } = appState.analysisPeriod;
 
   if (start && end) {
-    hint.textContent = `${formatIsoDateForSidebar(start)} → ${formatIsoDateForSidebar(end)}`;
+    hint.textContent = `${formatIsoDateForSidebar(start)}→${formatIsoDateForSidebar(end)}`;
+    renderPeriodMiniTimeline(start, end);
   } else {
     hint.textContent = "Aucune période disponible.";
+    ensurePeriodMiniTimelineMount()?.classList.add("hidden");
   }
 }
 
@@ -5376,6 +5684,7 @@ async function applyAnalysisPeriod() {
 
   syncPeriodInputsFromValues(appState.analysisPeriod.preset, start, end);
   updatePeriodHint();
+  updatePeriodQuickPresetButtons();
 
   await reloadCurrentViewForPeriod();
 }
@@ -5391,6 +5700,7 @@ async function resetAnalysisPeriod() {
 
   syncPeriodInputsFromValues("all", start, end);
   updatePeriodHint();
+  updatePeriodQuickPresetButtons();
 
   await reloadCurrentViewForPeriod();
 }
@@ -5402,6 +5712,8 @@ async function initPeriodFilter() {
   const activeSummary = document.getElementById("periodActiveSummary");
 
   if (!presetEl || !startEl || !endEl || !activeSummary) return;
+
+  ensurePeriodPickerPanel();
 
   try {
     const bounds = await apiGet("/api/period-bounds");
@@ -5421,6 +5733,7 @@ async function initPeriodFilter() {
 
     syncPeriodInputsFromValues("currentYear", start, end);
     updatePeriodHint();
+    ensurePeriodPickerPanel();
   } catch (err) {
     console.error("Impossible de charger les bornes temporelles :", err);
     updatePeriodHint("Impossible de charger la période disponible.");
@@ -7985,6 +8298,65 @@ async function loadTicketRoadmapData(forceReload = false) {
   }
 }
 
+
+/* TABSCORE002A / TABSCORE003A — composant centralisé des rails d’onglets analytiques */
+function renderAnalysisViewTabs({
+  className = "",
+  ariaLabel = "Navigation interne",
+  title = "",
+  eyebrow = "Vue",
+  tabs = [],
+  activeKey = "",
+  dataAttribute = "data-analysis-tab",
+  buttonClass = "tab-btn",
+  activeClass = "tab-btn-active"
+} = {}) {
+  const safeTabs = Array.isArray(tabs) ? tabs : [];
+  const resolvedActiveKey = activeKey || safeTabs[0]?.key || "";
+  const navClasses = ["analysis-view-tabs", className].filter(Boolean).join(" ");
+
+  const titleHtml = title
+    ? `
+      <div class="analysis-view-tabs-title" aria-hidden="true">
+        <span>${escapeHtml(eyebrow)}</span>
+        <strong>${escapeHtml(title)}</strong>
+      </div>
+    `
+    : "";
+
+  const buttonsHtml = safeTabs.map((tab) => {
+    const key = String(tab.key || "");
+    const label = String(tab.label || key);
+    const isActive = key === resolvedActiveKey;
+    const extraClass = tab.className ? ` ${escapeHtml(tab.className)}` : "";
+    const titleAttr = tab.title ? ` title="${escapeHtml(tab.title)}"` : "";
+    const disabledAttr = tab.disabled ? ` disabled aria-disabled="true"` : "";
+
+    return `
+      <button
+        type="button"
+        class="${escapeHtml(buttonClass)}${extraClass}${isActive ? ` ${escapeHtml(activeClass)}` : ""}"
+        ${dataAttribute}="${escapeHtml(key)}"
+        aria-selected="${isActive ? "true" : "false"}"
+        role="tab"
+        ${titleAttr}
+        ${disabledAttr}
+      >
+        ${escapeHtml(label)}
+      </button>
+    `;
+  }).join("");
+
+  return `
+    <nav class="${escapeHtml(navClasses)}" aria-label="${escapeHtml(ariaLabel)}">
+      ${titleHtml}
+      <div class="analysis-view-tabs-scroll" role="tablist">
+        ${buttonsHtml}
+      </div>
+    </nav>
+  `;
+}
+
 function renderTicketsViewMarkup(data) {
   const filters = appState.tickets.filters;
   const total = data?.pagination?.total ?? 0;
@@ -7996,43 +8368,19 @@ function renderTicketsViewMarkup(data) {
 
   return `
     <div class="tickets-view">
-      <nav class="tickets-main-tabs analysis-view-tabs" aria-label="Sections Tickets & retours">
-        <button
-          type="button"
-          class="tab-btn tickets-main-tab ${activeTab === "kanban" ? "tab-btn-active" : ""}"
-          data-ticket-main-tab="kanban"
-          aria-selected="${activeTab === "kanban" ? "true" : "false"}"
-        >
-          Kanban
-        </button>
-
-        <button
-          type="button"
-          class="tab-btn tickets-main-tab ${activeTab === "list" ? "tab-btn-active" : ""}"
-          data-ticket-main-tab="list"
-          aria-selected="${activeTab === "list" ? "true" : "false"}"
-        >
-          Liste
-        </button>
-
-        <button
-          type="button"
-          class="tab-btn tickets-main-tab ${activeTab === "roadmap" ? "tab-btn-active" : ""}"
-          data-ticket-main-tab="roadmap"
-          aria-selected="${activeTab === "roadmap" ? "true" : "false"}"
-        >
-          Roadmap
-        </button>
-
-        <button
-          type="button"
-          class="tab-btn tickets-main-tab ${activeTab === "new_ticket" ? "tab-btn-active" : ""}"
-          data-ticket-main-tab="new_ticket"
-          aria-selected="${activeTab === "new_ticket" ? "true" : "false"}"
-        >
-          Nouveau ticket
-        </button>
-      </nav>
+      ${renderAnalysisViewTabs({
+        className: "tickets-main-tabs",
+        title: "Tickets & retours",
+        ariaLabel: "Sections Tickets & retours",
+        dataAttribute: "data-ticket-main-tab",
+        activeKey: activeTab,
+        tabs: [
+          { key: "kanban", label: "Kanban" },
+          { key: "list", label: "Liste" },
+          { key: "roadmap", label: `Roadmap${roadmapDatedCount ? ` (${roadmapDatedCount})` : ""}` },
+          { key: "new_ticket", label: "Nouveau ticket" }
+        ]
+      })}
 
       ${
         activeTab === "kanban" || activeTab === "list"
@@ -9309,40 +9657,19 @@ function renderStatsCardsAndCharts(stats, charts) {
   }).join("");
 
   content.innerHTML = `
-    <nav class="pro-tabs stats-tabs analysis-view-tabs" aria-label="Sections des statistiques globales">
-      <button
-        class="tab-btn tab-btn-active"
-        type="button"
-        data-stats-tab="activity"
-        aria-selected="true"
-      >
-        Activité économique
-      </button>
-      <button
-        class="tab-btn"
-        type="button"
-        data-stats-tab="circuit"
-        aria-selected="false"
-      >
-        Alimentation / sorties
-      </button>
-      <button
-        class="tab-btn"
-        type="button"
-        data-stats-tab="operations"
-        aria-selected="false"
-      >
-        Opérations associatives / techniques
-      </button>
-      <button
-        class="tab-btn"
-        type="button"
-        data-stats-tab="monetary"
-        aria-selected="false"
-      >
-        Masse monétaire &amp; garanties
-      </button>
-    </nav>
+    ${renderAnalysisViewTabs({
+      className: "pro-tabs stats-tabs",
+      title: "Statistiques globales",
+      ariaLabel: "Sections des statistiques globales",
+      dataAttribute: "data-stats-tab",
+      activeKey: "activity",
+      tabs: [
+        { key: "activity", label: "Activité économique" },
+        { key: "circuit", label: "Alimentation / sorties" },
+        { key: "operations", label: "Opérations associatives / techniques" },
+        { key: "monetary", label: "Masse monétaire & garanties" }
+      ]
+    })}
 
     <section class="card analysis-view-masthead stats-analysis-masthead">
       <div class="analysis-view-masthead-main">
@@ -13927,43 +14254,19 @@ async function renderMonetaryPilotageView(forceReload = false) {
     }
 
     content.innerHTML = `
-      <nav class="stats-tabs pilotage-tabs analysis-view-tabs" aria-label="Lectures du pilotage monétaire">
-        <button
-          class="tab-btn tab-btn-active"
-          type="button"
-          data-pilotage-tab="summary"
-          aria-selected="true"
-        >
-          Synthèse
-        </button>
-
-        <button
-          class="tab-btn"
-          type="button"
-          data-pilotage-tab="circulation"
-          aria-selected="false"
-        >
-          Circulation &amp; rendement
-        </button>
-
-        <button
-          class="tab-btn"
-          type="button"
-          data-pilotage-tab="flows"
-          aria-selected="false"
-        >
-          Entrées, sorties &amp; garanties
-        </button>
-
-        <button
-          class="tab-btn"
-          type="button"
-          data-pilotage-tab="holdings"
-          aria-selected="false"
-        >
-          Détention &amp; ancrage
-        </button>
-      </nav>
+      ${renderAnalysisViewTabs({
+        className: "stats-tabs pilotage-tabs",
+        title: "Pilotage monétaire",
+        ariaLabel: "Lectures du pilotage monétaire",
+        dataAttribute: "data-pilotage-tab",
+        activeKey: "summary",
+        tabs: [
+          { key: "summary", label: "Synthèse" },
+          { key: "circulation", label: "Circulation & rendement" },
+          { key: "flows", label: "Entrées, sorties & garanties" },
+          { key: "holdings", label: "Détention & ancrage" }
+        ]
+      })}
 
       <section class="card pilotage-overview-card analysis-view-masthead pilotage-analysis-masthead">
         <div class="analysis-view-masthead-main pilotage-overview-header pilotage-overview-header-refined">
@@ -16291,55 +16594,23 @@ function buildProfessionalAnalysisShell(flowSummary = null, holdingsSummary = nu
     : 0;
 
   return `
-    <nav class="professional-analysis-tabs analysis-view-tabs" aria-label="Analyse des professionnels et particuliers">
-      <button
-        type="button"
-        class="professional-analysis-tab-btn"
-        data-professional-analysis-tab="summary"
-      >
-        Synthèse
-      </button>
-
-      <button
-        type="button"
-        class="professional-analysis-tab-btn"
-        data-professional-analysis-tab="circulation"
-      >
-        Circulation &amp; multiplicateur
-      </button>
-
-      <button
-        type="button"
-        class="professional-analysis-tab-btn"
-        data-professional-analysis-tab="network"
-      >
-        Réseau
-      </button>
-
-      <button
-        type="button"
-        class="professional-analysis-tab-btn"
-        data-professional-analysis-tab="clusters"
-      >
-        Cartographie des clusters
-      </button>
-
-      <button
-        type="button"
-        class="professional-analysis-tab-btn"
-        data-professional-analysis-tab="structures"
-      >
-        Analyse sectorielle
-      </button>
-
-      <button
-        type="button"
-        class="professional-analysis-tab-btn"
-        data-professional-analysis-tab="directory"
-      >
-        Liste &amp; fiches
-      </button>
-    </nav>
+    ${renderAnalysisViewTabs({
+      className: "professional-analysis-tabs",
+      title: "Professionnels & particuliers",
+      ariaLabel: "Analyse des professionnels et particuliers",
+      dataAttribute: "data-professional-analysis-tab",
+      buttonClass: "professional-analysis-tab-btn",
+      activeClass: "professional-analysis-tab-btn-active",
+      activeKey: appState.professionalsViewTab || "summary",
+      tabs: [
+        { key: "summary", label: "Synthèse" },
+        { key: "circulation", label: "Circulation & multiplicateur" },
+        { key: "network", label: "Réseau interprofessionnel" },
+        { key: "clusters", label: "Cartographie des clusters" },
+        { key: "structures", label: "Analyse sectorielle" },
+        { key: "directory", label: "Liste & fiches" }
+      ]
+    })}
 
     <section class="card professional-analysis-hero analysis-view-masthead professional-analysis-masthead">
       <div class="professional-analysis-hero-main analysis-view-masthead-main">
@@ -17565,13 +17836,24 @@ function updateProfessionalAnalysisTabs() {
 
   document.querySelectorAll("[data-professional-analysis-tab]").forEach((button) => {
     const isActive = button.dataset.professionalAnalysisTab === activeTab;
+
+    // PROTABS001 — harmoniser avec renderAnalysisViewTabs / CSS consolidé :
+    // un seul onglet doit rester actif, que le style vienne d'une classe
+    // dédiée, d'une classe générique ou de aria-selected.
     button.classList.toggle("professional-analysis-tab-btn-active", isActive);
+    button.classList.toggle("tab-btn-active", isActive);
+    button.classList.toggle("is-active", isActive);
+    button.classList.remove("active");
+
+    button.setAttribute("aria-selected", isActive ? "true" : "false");
     button.setAttribute("aria-pressed", isActive ? "true" : "false");
+    button.setAttribute("tabindex", isActive ? "0" : "-1");
   });
 
   document.querySelectorAll("[data-professional-analysis-panel]").forEach((panel) => {
     const isActive = panel.dataset.professionalAnalysisPanel === activeTab;
     panel.classList.toggle("hidden", !isActive);
+    panel.toggleAttribute("hidden", !isActive);
   });
 }
 
@@ -24470,6 +24752,290 @@ async function renderProDetail(numProf, detailMode = "all") {
   drawProTabContent();
 }
 
+
+/* SIDEBARCOLLAPSE001A/B — rail compact quand la sidebar est repliée */
+const COLLAPSED_SIDEBAR_VIEW_META = {
+  stats: {
+    iconKey: "stats",
+    label: "Statistiques globales",
+  },
+  "monetary-pilotage": {
+    iconKey: "pilotage",
+    label: "Pilotage monétaire",
+  },
+  pros: {
+    iconKey: "users",
+    label: "Professionnels & particuliers",
+  },
+  tickets: {
+    iconKey: "tickets",
+    label: "Tickets & retours",
+  },
+  info: {
+    iconKey: "info",
+    label: "Info & méthodologie",
+  },
+  admin: {
+    iconKey: "settings",
+    label: "Administration & paramètres",
+  },
+};
+
+
+/* SIDEBARCOLLAPSE001C — icônes SVG explicites pour le rail replié */
+function getCollapsedSidebarPeriodIconSvg() {
+  return `
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <rect x="3.5" y="5" width="17" height="15.5" rx="3"></rect>
+      <path d="M7 3.8v3.4M17 3.8v3.4M3.5 9.2h17"></path>
+      <path d="M8 13h3M13 13h3M8 16.2h5"></path>
+    </svg>
+  `;
+}
+
+function getCollapsedSidebarIconSvg(iconKey) {
+  const icons = {
+    stats: `
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M4 19.5h16"></path>
+        <path d="M7 16.5v-4.2"></path>
+        <path d="M12 16.5V8.2"></path>
+        <path d="M17 16.5v-6.7"></path>
+      </svg>
+    `,
+    pilotage: `
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M5 14a7 7 0 1 1 14 0"></path>
+        <path d="M12 14l4.3-4.3"></path>
+        <circle cx="12" cy="14" r="1.1" fill="currentColor" stroke="none"></circle>
+      </svg>
+    `,
+    users: `
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <circle cx="9" cy="9" r="2.6"></circle>
+        <circle cx="16.5" cy="10.2" r="2.1"></circle>
+        <path d="M4.8 18.2c.6-2.5 2.8-4 5.4-4s4.8 1.5 5.4 4"></path>
+        <path d="M14.8 17.8c.4-1.8 1.8-3 3.7-3 1.1 0 2.1.4 2.8 1.1"></path>
+      </svg>
+    `,
+    tickets: `
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M7 5.5h10a2 2 0 0 1 2 2v2.1a2.2 2.2 0 0 0 0 4.4V16.5a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V14a2.2 2.2 0 0 0 0-4.4V7.5a2 2 0 0 1 2-2Z"></path>
+        <path d="M12 8.3v7.4"></path>
+      </svg>
+    `,
+    info: `
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <circle cx="12" cy="12" r="8.5"></circle>
+        <path d="M12 10.5v5"></path>
+        <circle cx="12" cy="7.6" r="0.9" fill="currentColor" stroke="none"></circle>
+      </svg>
+    `,
+    settings: `
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <circle cx="12" cy="12" r="2.5"></circle>
+        <path d="M12 4.5v2M12 17.5v2M4.5 12h2M17.5 12h2M6.7 6.7l1.4 1.4M15.9 15.9l1.4 1.4M17.3 6.7l-1.4 1.4M8.1 15.9l-1.4 1.4"></path>
+      </svg>
+    `,
+  };
+
+  return icons[iconKey] || icons.stats;
+}
+
+
+function getCollapsedSidebarPeriodLabel() {
+  const start = appState.analysisPeriod?.start;
+  const end = appState.analysisPeriod?.end;
+
+  if (!start || !end) return "—";
+
+  const startYear = start.slice(0, 4);
+  const endYear = end.slice(0, 4);
+
+  if (
+    startYear === endYear
+    && start.endsWith("-01-01")
+    && end.endsWith("-12-31")
+  ) {
+    return startYear;
+  }
+
+  const compactStart = typeof formatIsoDateForSidebar === "function"
+    ? formatIsoDateForSidebar(start).slice(0, 5)
+    : start.slice(5);
+
+  const compactEnd = typeof formatIsoDateForSidebar === "function"
+    ? formatIsoDateForSidebar(end).slice(0, 5)
+    : end.slice(5);
+
+  return `${compactStart}→${compactEnd}`;
+}
+
+function getCollapsedSidebarFullPeriodLabel() {
+  const start = appState.analysisPeriod?.start;
+  const end = appState.analysisPeriod?.end;
+
+  if (!start || !end) return "Période non définie";
+
+  const formattedStart = typeof formatIsoDateForSidebar === "function"
+    ? formatIsoDateForSidebar(start)
+    : start;
+
+  const formattedEnd = typeof formatIsoDateForSidebar === "function"
+    ? formatIsoDateForSidebar(end)
+    : end;
+
+  return `${formattedStart} → ${formattedEnd}`;
+}
+
+function ensureCollapsedSidebarRail() {
+  const sidebar = document.querySelector(".sidebar");
+  if (!sidebar) return null;
+
+  let rail = document.getElementById("collapsedSidebarRail");
+
+  if (!rail) {
+    rail = document.createElement("div");
+    rail.id = "collapsedSidebarRail";
+    rail.className = "sidebar-collapsed-rail";
+    rail.innerHTML = `
+      <button
+        type="button"
+        class="sidebar-collapsed-period"
+        id="collapsedSidebarPeriod"
+        title="Période active"
+        aria-label="Période active"
+      >
+        <span class="sidebar-collapsed-icon-wrap sidebar-collapsed-period-icon" aria-hidden="true">
+          ${getCollapsedSidebarPeriodIconSvg()}
+        </span>
+        <span class="sidebar-collapsed-period-label">Période</span>
+        <strong data-collapsed-period-label>—</strong>
+        <span class="sidebar-collapsed-period-mini">
+          <span data-collapsed-period-fill></span>
+        </span>
+      </button>
+
+      <nav class="sidebar-collapsed-nav" aria-label="Navigation compacte">
+        ${Object.entries(COLLAPSED_SIDEBAR_VIEW_META).map(([view, meta]) => `
+          <button
+            type="button"
+            class="sidebar-collapsed-nav-btn"
+            data-collapsed-view="${view}"
+            title="${escapeHtml(meta.label)}"
+            aria-label="${escapeHtml(meta.label)}"
+          >
+            <span class="sidebar-collapsed-icon-wrap" aria-hidden="true">
+              ${getCollapsedSidebarIconSvg(meta.iconKey)}
+            </span>
+          </button>
+        `).join("")}
+      </nav>
+    `;
+
+    const content = sidebar.querySelector(".sidebar-content");
+    if (content) {
+      content.insertAdjacentElement("afterend", rail);
+    } else {
+      sidebar.appendChild(rail);
+    }
+  }
+
+  rail.querySelectorAll("[data-collapsed-view]").forEach((button) => {
+    if (button.dataset.bound === "true") return;
+
+    button.addEventListener("click", () => {
+      const view = button.dataset.collapsedView;
+      if (view) {
+        void openViewProgressively(view);
+      }
+    });
+
+    button.dataset.bound = "true";
+  });
+
+  const periodButton = rail.querySelector("#collapsedSidebarPeriod");
+  if (periodButton && periodButton.dataset.bound !== "true") {
+    periodButton.addEventListener("click", () => {
+      document.body.classList.remove("sidebar-collapsed");
+
+      const collapseBtn = document.getElementById("sidebarCollapseBtn");
+      if (collapseBtn) {
+        collapseBtn.setAttribute("aria-expanded", "true");
+        collapseBtn.title = "Replier le panneau latéral";
+      }
+
+      localStorage.setItem("mlcflux_sidebar_collapsed", "0");
+
+      window.requestAnimationFrame(() => {
+        document.getElementById("periodActiveSummary")?.focus?.({ preventScroll: true });
+      });
+    });
+
+    periodButton.dataset.bound = "true";
+  }
+
+  syncCollapsedSidebarState();
+  return rail;
+}
+
+function syncCollapsedSidebarState(view = appState.currentView) {
+  const rail = document.getElementById("collapsedSidebarRail");
+  if (!rail) return;
+
+  const mappedView = view === "network" || view === "pro-detail"
+    ? "pros"
+    : view;
+
+  rail.querySelectorAll("[data-collapsed-view]").forEach((button) => {
+    const isActive = button.dataset.collapsedView === mappedView;
+    button.classList.toggle("sidebar-collapsed-nav-btn-active", isActive);
+    button.setAttribute("aria-current", isActive ? "page" : "false");
+  });
+
+  const periodLabel = rail.querySelector("[data-collapsed-period-label]");
+  const periodFill = rail.querySelector("[data-collapsed-period-fill]");
+  const periodButton = rail.querySelector("#collapsedSidebarPeriod");
+
+  if (periodLabel) {
+    periodLabel.textContent = getCollapsedSidebarPeriodLabel();
+  }
+
+  if (periodButton) {
+    periodButton.title = `Période active : ${getCollapsedSidebarFullPeriodLabel()}`;
+    periodButton.setAttribute("aria-label", `Période active : ${getCollapsedSidebarFullPeriodLabel()}`);
+  }
+
+  if (periodFill) {
+    const bounds = appState.periodBounds || {};
+    const start = appState.analysisPeriod?.start;
+    const end = appState.analysisPeriod?.end;
+    const min = bounds.min || bounds.start;
+    const max = bounds.max || bounds.end;
+
+    const toTime = (value) => {
+      const date = value ? new Date(`${value}T12:00:00`) : null;
+      return date && !Number.isNaN(date.getTime()) ? date.getTime() : null;
+    };
+
+    const minTime = toTime(min);
+    const maxTime = toTime(max);
+    const startTime = toTime(start);
+    const endTime = toTime(end);
+
+    if (minTime && maxTime && startTime && endTime && maxTime > minTime) {
+      const left = Math.max(0, Math.min(100, ((startTime - minTime) / (maxTime - minTime)) * 100));
+      const right = Math.max(0, Math.min(100, ((endTime - minTime) / (maxTime - minTime)) * 100));
+      periodFill.style.left = `${left}%`;
+      periodFill.style.width = `${Math.max(4, right - left)}%`;
+    } else {
+      periodFill.style.left = "0";
+      periodFill.style.width = "100%";
+    }
+  }
+}
+
+
 function syncSidebarView(view) {
   const map = {
     stats: "stats",
@@ -24489,6 +25055,9 @@ function syncSidebarView(view) {
   document.querySelectorAll('input[name="dataView"]').forEach(radio => {
     radio.checked = radio.value === targetValue;
   });
+
+  ensureCollapsedSidebarRail();
+  syncCollapsedSidebarState(targetValue);
 }
 
 function applyTheme(theme, persist = true) {
@@ -24573,6 +25142,7 @@ document.querySelectorAll('input[name="dataView"]').forEach(input => {
 bindNetworkSearchOutsideClick();
 initThemeToggle();
 initSidebarCollapse();
+ensureCollapsedSidebarRail();
 renderProgressiveViewShell("stats");
 
 waitForNextBrowserPaint()
@@ -25604,4 +26174,206 @@ function renderPilotageTrajectoryRadarZoomChart(payload) {
     options: getPilotageTechnicalRadarOptions(payload, { zoom: true })
   });
 }
+
+
+/* ==========================================================================
+   SIDEBAR_ICONS002A — icônes visibles en panneau ouvert + cohérence ouverte/repliée
+   ========================================================================== */
+(() => {
+  if (window.__MLCFluxSidebarIcons002A) return;
+  window.__MLCFluxSidebarIcons002A = true;
+
+  const ICONS = {
+    stats: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 19.5h16"></path>
+        <path d="M7 16V10"></path>
+        <path d="M12 16V6.5"></path>
+        <path d="M17 16v-3.5"></path>
+      </svg>
+    `,
+    pilotage: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M5 14a7 7 0 1 1 14 0"></path>
+        <path d="M12 14l4-4"></path>
+        <circle cx="12" cy="14" r="1.2"></circle>
+      </svg>
+    `,
+    pros: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="9" cy="10" r="2.5"></circle>
+        <circle cx="16.5" cy="11" r="2"></circle>
+        <path d="M4.5 17.5c.9-2.2 2.7-3.3 5.4-3.3s4.5 1.1 5.4 3.3"></path>
+        <path d="M14.3 17.2c.5-1.4 1.7-2.2 3.5-2.2 1.1 0 2.1.3 2.9.9"></path>
+      </svg>
+    `,
+    tickets: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M6 7.5h12a1 1 0 0 1 1 1V11a2 2 0 0 0 0 4v2.5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V15a2 2 0 0 0 0-4V8.5a1 1 0 0 1 1-1Z"></path>
+        <path d="M12 7.8v8.4"></path>
+      </svg>
+    `,
+    info: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="8"></circle>
+        <path d="M12 10.4v5"></path>
+        <circle cx="12" cy="7.8" r="0.8" fill="currentColor" stroke="none"></circle>
+      </svg>
+    `,
+    admin: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="2.4"></circle>
+        <path d="M12 4.8v1.7"></path>
+        <path d="M12 17.5v1.7"></path>
+        <path d="M19.2 12h-1.7"></path>
+        <path d="M6.5 12H4.8"></path>
+        <path d="M17.1 6.9 16 8"></path>
+        <path d="M8 16 6.9 17.1"></path>
+        <path d="M17.1 17.1 16 16"></path>
+        <path d="M8 8 6.9 6.9"></path>
+      </svg>
+    `
+  };
+
+  const LABEL_TO_KEY = [
+    ["Statistiques globales", "stats"],
+    ["Pilotage monétaire", "pilotage"],
+    ["Professionnels & particuliers", "pros"],
+    ["Tickets & retours", "tickets"],
+    ["Info & méthodologie", "info"],
+    ["Administration & paramètres", "admin"]
+  ];
+
+  function normalizeText(text) {
+    return String(text || "").replace(/\s+/g, " ").trim();
+  }
+
+  function getKeyFromLabelText(text) {
+    const normalized = normalizeText(text);
+    for (const [label, key] of LABEL_TO_KEY) {
+      if (normalized.includes(label)) return key;
+    }
+    return null;
+  }
+
+  function getKeyFromButton(button) {
+    const text = normalizeText(
+      button.getAttribute("title") ||
+      button.getAttribute("aria-label") ||
+      button.textContent
+    ).toLowerCase();
+
+    if (text.includes("stat")) return "stats";
+    if (text.includes("pilot")) return "pilotage";
+    if (text.includes("profession")) return "pros";
+    if (text.includes("ticket")) return "tickets";
+    if (text.includes("info")) return "info";
+    if (text.includes("admin") || text.includes("param")) return "admin";
+    return null;
+  }
+
+  function enhanceOpenSidebarViewLabels() {
+    const labels = Array.from(document.querySelectorAll(".sidebar label"))
+      .filter(label => label.querySelector('input[type="radio"]'));
+
+    labels.forEach(label => {
+      const radio = label.querySelector('input[type="radio"]');
+      if (!radio) return;
+
+      const key = getKeyFromLabelText(label.textContent);
+      if (!key) return;
+
+      label.classList.add("sidebar-view-option");
+      label.dataset.viewKey = key;
+      label.classList.toggle("is-active", !!radio.checked);
+
+      let icon = label.querySelector(".sidebar-view-icon");
+      if (!icon) {
+        icon = document.createElement("span");
+        icon.className = "sidebar-view-icon";
+        icon.setAttribute("aria-hidden", "true");
+        icon.innerHTML = ICONS[key] || "";
+        radio.insertAdjacentElement("afterend", icon);
+      }
+
+      let textWrap = label.querySelector(".sidebar-view-label");
+      if (!textWrap) {
+        textWrap = document.createElement("span");
+        textWrap.className = "sidebar-view-label";
+
+        const toMove = Array.from(label.childNodes).filter(node => {
+          return node !== radio && node !== icon;
+        });
+
+        toMove.forEach(node => textWrap.appendChild(node));
+        label.appendChild(textWrap);
+      }
+    });
+  }
+
+  function enhanceCollapsedSidebarButtons() {
+    const buttons = Array.from(document.querySelectorAll(".sidebar-collapsed-nav-btn"));
+    buttons.forEach(button => {
+      const key = getKeyFromButton(button);
+      if (key) button.dataset.viewKey = key;
+    });
+
+    const periodButton = document.querySelector(".sidebar-collapsed-period");
+    if (periodButton) {
+      periodButton.classList.add("sidebar-collapsed-period-aligned");
+    }
+  }
+
+  function applySidebarIcons002A() {
+    enhanceOpenSidebarViewLabels();
+    enhanceCollapsedSidebarButtons();
+  }
+
+  let rafId = null;
+  function scheduleApply() {
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(() => {
+      rafId = null;
+      applySidebarIcons002A();
+    });
+  }
+
+  document.addEventListener("change", scheduleApply, true);
+
+  const observer = new MutationObserver(scheduleApply);
+  observer.observe(document.body, { childList: true, subtree: true });
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", scheduleApply, { once: true });
+  } else {
+    scheduleApply();
+  }
+})();
+
+/* ==========================================================================
+   SIDEBAR_COLLAPSE003A — animation perceptible de repli/dépli
+   ========================================================================== */
+(() => {
+  if (window.__MLCFluxSidebarCollapse003A) return;
+  window.__MLCFluxSidebarCollapse003A = true;
+
+  function markSidebarTransition() {
+    const willCollapse = !document.body.classList.contains("sidebar-collapsed");
+
+    document.body.classList.remove("sidebar-expanding", "sidebar-collapsing", "sidebar-transitioning");
+    document.body.classList.add("sidebar-transitioning");
+    document.body.classList.add(willCollapse ? "sidebar-collapsing" : "sidebar-expanding");
+
+    window.clearTimeout(window.__MLCFluxSidebarTransitionTimer);
+    window.__MLCFluxSidebarTransitionTimer = window.setTimeout(() => {
+      document.body.classList.remove("sidebar-transitioning", "sidebar-collapsing", "sidebar-expanding");
+    }, 420);
+  }
+
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest?.("#sidebarCollapseBtn, .sidebar-collapse-btn");
+    if (!button) return;
+    markSidebarTransition();
+  }, true);
+})();
 

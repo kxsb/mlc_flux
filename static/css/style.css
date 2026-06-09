@@ -16081,3 +16081,1314 @@ body.dark-mode .pro-detail-payment-basin-tooltip {
   }
 }
 
+/* ==========================================================================
+   CLEANCSS001 — Couche consolidée UI Gonette / onglets / sidebar
+   Remplace l’empilement récent TABSCORE + SIDEPANEL + GONETTE_THEME
+   + SIDEBAR_* par une seule couche stable.
+   ========================================================================== */
+
+:root {
+  --gonette-orange: #df5430;
+  --gonette-orange-deep: #b93f22;
+  --gonette-orange-soft: #fff2ec;
+  --gonette-orange-pale: #fff8f4;
+  --gonette-black: #151515;
+  --gonette-ink: #172033;
+  --gonette-grey: #64676a;
+  --gonette-line: rgba(223, 84, 48, 0.26);
+
+  --sidebar-expanded-width: 21.8rem;
+  --sidebar-collapsed-width: 4.95rem;
+  --sidebar-collapse-duration: 260ms;
+  --sidebar-collapse-ease: cubic-bezier(.2, .72, .22, 1);
+
+  --analysis-tabs-radius: 1.28rem;
+  --analysis-tabs-bg: rgba(255, 255, 255, 0.96);
+  --analysis-tabs-border: rgba(98, 102, 106, 0.14);
+}
+
+/* ==========================================================================
+   CLEANCSS001-A — Thème Gonette stable
+   ========================================================================== */
+
+body {
+  background:
+    radial-gradient(circle at 0% 0%, rgba(223, 84, 48, 0.055), transparent 34rem),
+    linear-gradient(180deg, #fbfaf8 0%, #f3f1ee 100%);
+  color: var(--gonette-ink);
+}
+
+body.dark-mode {
+  --gonette-ink: #f8fafc;
+  --gonette-grey: #a8adb3;
+  --analysis-tabs-bg: rgba(15, 23, 42, 0.96);
+  --analysis-tabs-border: rgba(148, 163, 184, 0.22);
+
+  background:
+    radial-gradient(circle at 0% 0%, rgba(223, 84, 48, 0.12), transparent 32rem),
+    linear-gradient(180deg, #111827 0%, #0f172a 100%);
+}
+
+.card,
+.stat-card,
+.kpi-card,
+.metric-card,
+.ticket-card,
+.info-page-card,
+.pilotage-card,
+.professional-analysis-card,
+.professional-profile-card {
+  border-color: rgba(98, 102, 106, 0.14);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.985), rgba(255, 255, 255, 0.94));
+  box-shadow:
+    0 16px 34px rgba(21, 21, 21, 0.07),
+    0 2px 8px rgba(21, 21, 21, 0.035);
+}
+
+body.dark-mode .card,
+body.dark-mode .stat-card,
+body.dark-mode .kpi-card,
+body.dark-mode .metric-card,
+body.dark-mode .ticket-card,
+body.dark-mode .info-page-card,
+body.dark-mode .pilotage-card,
+body.dark-mode .professional-analysis-card,
+body.dark-mode .professional-profile-card {
+  border-color: rgba(148, 163, 184, 0.18);
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.90));
+  box-shadow:
+    0 18px 38px rgba(0, 0, 0, 0.30),
+    0 2px 8px rgba(0, 0, 0, 0.18);
+}
+
+.stat-value,
+.kpi-value,
+.metric-value,
+.ticket-stat-value,
+.card h2,
+.card h3,
+.analysis-view-tabs-title strong {
+  color: var(--gonette-black);
+}
+
+body.dark-mode .stat-value,
+body.dark-mode .kpi-value,
+body.dark-mode .metric-value,
+body.dark-mode .ticket-stat-value,
+body.dark-mode .card h2,
+body.dark-mode .card h3,
+body.dark-mode .analysis-view-tabs-title strong {
+  color: #f8fafc;
+}
+
+.stat-label,
+.card small,
+.card .muted,
+.analysis-view-tabs-title span {
+  color: var(--gonette-grey);
+}
+
+.stat-help-badge {
+  color: var(--gonette-orange);
+  border-color: rgba(223, 84, 48, 0.26);
+  background: rgba(223, 84, 48, 0.055);
+}
+
+.stat-help-badge:hover {
+  color: var(--gonette-orange-deep);
+  border-color: rgba(223, 84, 48, 0.48);
+  background: rgba(223, 84, 48, 0.10);
+}
+
+/* ==========================================================================
+   CLEANCSS001-B — Rail d’onglets centralisé
+   ========================================================================== */
+
+.analysis-view-tabs {
+  position: sticky;
+  top: 0.35rem;
+  z-index: 70;
+  isolation: isolate;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.52rem 0.68rem;
+  width: 100%;
+  max-width: 100%;
+  margin: 0 0 1.12rem;
+  padding: 0.62rem;
+  overflow: visible;
+  border: 1px solid var(--analysis-tabs-border);
+  border-radius: var(--analysis-tabs-radius);
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.985), rgba(250,248,245,0.94)),
+    var(--analysis-tabs-bg);
+  backdrop-filter: blur(22px) saturate(145%);
+  -webkit-backdrop-filter: blur(22px) saturate(145%);
+  box-shadow:
+    0 16px 34px rgba(21, 21, 21, 0.08),
+    0 6px 18px rgba(21, 21, 21, 0.035),
+    inset 0 1px 0 rgba(255,255,255,0.92);
+}
+
+.analysis-view-tabs::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.86), rgba(255,248,244,0.60));
+}
+
+.analysis-view-tabs::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,0.62),
+    inset 0 -1px 0 rgba(98, 102, 106, 0.10);
+}
+
+body.dark-mode .analysis-view-tabs {
+  background:
+    linear-gradient(135deg, rgba(15,23,42,0.97), rgba(30,41,59,0.92));
+  box-shadow:
+    0 18px 38px rgba(0,0,0,0.30),
+    0 6px 18px rgba(0,0,0,0.20),
+    inset 0 1px 0 rgba(255,255,255,0.07);
+}
+
+body.dark-mode .analysis-view-tabs::before {
+  background:
+    linear-gradient(180deg, rgba(15,23,42,0.82), rgba(15,23,42,0.62));
+}
+
+.analysis-view-tabs-title {
+  flex: 0 1 auto;
+  display: grid;
+  gap: 0.1rem;
+  min-width: clamp(8rem, 14vw, 14rem);
+  max-width: min(18rem, 100%);
+  padding: 0.24rem 0.82rem 0.24rem 0.34rem;
+  border-right: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+.analysis-view-tabs-title span {
+  font-size: 0.58rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+  opacity: 0.86;
+}
+
+.analysis-view-tabs-title strong {
+  font-size: clamp(0.9rem, 1vw, 1.08rem);
+  font-weight: 950;
+  letter-spacing: -0.035em;
+  line-height: 1.08;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.analysis-view-tabs-scroll {
+  flex: 1 1 34rem;
+  min-width: min(22rem, 100%);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.46rem;
+  overflow: visible;
+  padding: 0;
+  scrollbar-width: none;
+}
+
+.analysis-view-tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.analysis-view-tabs .tab-btn,
+.analysis-view-tabs .professional-analysis-tab-btn,
+.analysis-view-tabs button {
+  flex: 0 1 auto;
+  min-height: 2.35rem;
+  padding: 0.62rem 1.05rem;
+  border: 1px solid rgba(98, 102, 106, 0.18);
+  border-radius: 999px;
+  color: #282522;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.96), rgba(250,248,245,0.88));
+  box-shadow:
+    0 6px 14px rgba(21,21,21,0.035),
+    inset 0 1px 0 rgba(255,255,255,0.96);
+  font-weight: 850;
+  line-height: 1.12;
+  white-space: normal;
+  text-align: center;
+  transition:
+    color 150ms ease,
+    border-color 150ms ease,
+    background 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+
+.analysis-view-tabs .tab-btn:hover,
+.analysis-view-tabs .professional-analysis-tab-btn:hover,
+.analysis-view-tabs button:hover {
+  color: var(--gonette-orange-deep);
+  border-color: rgba(223, 84, 48, 0.38);
+  background:
+    linear-gradient(180deg, #ffffff, #fff3ed);
+  transform: translateY(-1px);
+}
+
+.analysis-view-tabs .tab-btn-active,
+.analysis-view-tabs .professional-analysis-tab-btn-active,
+.analysis-view-tabs button[aria-selected="true"],
+.analysis-view-tabs .active,
+.analysis-view-tabs .is-active {
+  color: var(--gonette-orange-deep);
+  border-color: rgba(223, 84, 48, 0.74);
+  background:
+    linear-gradient(180deg, #fff2ec, #ffffff);
+  box-shadow:
+    0 10px 22px rgba(223, 84, 48, 0.13),
+    inset 0 1px 0 rgba(255,255,255,0.98);
+}
+
+body:has(.analysis-view-tabs-title) #viewTitle,
+body:has(.analysis-view-tabs-title) #pageTitle,
+body:has(.analysis-view-tabs-title) .view-title,
+body:has(.analysis-view-tabs-title) .page-title,
+body:has(.analysis-view-tabs-title) .app-main > h1:first-child,
+body:has(.analysis-view-tabs-title) .main-content > h1:first-child,
+body:has(.analysis-view-tabs-title) main > h1:first-child {
+  display: none;
+}
+
+@media (max-width: 820px) {
+  .analysis-view-tabs {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.44rem;
+    border-radius: 1rem;
+  }
+
+  .analysis-view-tabs-title {
+    min-width: 0;
+    max-width: none;
+    padding: 0.16rem 0.28rem 0.38rem;
+    border-right: 0;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.20);
+  }
+
+  .analysis-view-tabs-scroll {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .analysis-view-tabs-scroll .tab-btn,
+  .analysis-view-tabs-scroll .professional-analysis-tab-btn {
+    flex: 1 1 auto;
+  }
+}
+
+/* ==========================================================================
+   CLEANCSS001-C — Sidebar ouverte et thème Gonette
+   ========================================================================== */
+
+.sidebar {
+  width: var(--sidebar-expanded-width);
+  min-width: var(--sidebar-expanded-width);
+  max-width: var(--sidebar-expanded-width);
+  box-sizing: border-box;
+  overflow-x: hidden;
+  background:
+    linear-gradient(90deg, rgba(223,84,48,0.06) 0%, rgba(223,84,48,0.018) 0.42rem, transparent 0.42rem),
+    radial-gradient(circle at 18% 0%, rgba(223,84,48,0.12), transparent 30%),
+    linear-gradient(180deg, #fffdfb 0%, #f4f2ef 100%);
+  color: var(--gonette-black);
+  border-right: 1px solid rgba(223, 84, 48, 0.18);
+  box-shadow:
+    12px 0 28px rgba(21,21,21,0.075),
+    inset -1px 0 0 rgba(255,255,255,0.82);
+  transition:
+    width var(--sidebar-collapse-duration) var(--sidebar-collapse-ease),
+    min-width var(--sidebar-collapse-duration) var(--sidebar-collapse-ease),
+    max-width var(--sidebar-collapse-duration) var(--sidebar-collapse-ease),
+    background 180ms ease,
+    box-shadow 180ms ease;
+  will-change: width;
+}
+
+body.dark-mode .sidebar {
+  background:
+    linear-gradient(90deg, rgba(223,84,48,0.12) 0%, rgba(223,84,48,0.035) 0.42rem, transparent 0.42rem),
+    radial-gradient(circle at 18% 0%, rgba(223,84,48,0.16), transparent 30%),
+    linear-gradient(180deg, #111827 0%, #0f172a 100%);
+  color: #f8fafc;
+  border-right-color: rgba(223,84,48,0.22);
+}
+
+.main-content {
+  margin-left: var(--sidebar-expanded-width);
+  box-sizing: border-box;
+  transition:
+    margin-left var(--sidebar-collapse-duration) var(--sidebar-collapse-ease);
+  will-change: margin-left;
+}
+
+.sidebar h2,
+.sidebar h3 {
+  color: var(--gonette-black);
+  letter-spacing: -0.04em;
+}
+
+body.dark-mode .sidebar h2,
+body.dark-mode .sidebar h3 {
+  color: #f8fafc;
+}
+
+.sidebar h2 {
+  font-weight: 950;
+}
+
+.sidebar h3 {
+  position: relative;
+  display: inline-block;
+  margin-bottom: 0.8rem;
+  padding-bottom: 0.28rem;
+  font-size: 1rem;
+  font-weight: 950;
+}
+
+.sidebar h3::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 3.1rem;
+  height: 2px;
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg, rgba(223,84,48,0.72), rgba(223,84,48,0));
+}
+
+.theme-toggle-btn,
+#themeToggleBtn {
+  width: 100%;
+  min-height: 2.72rem;
+  border: 0;
+  border-radius: 0.86rem;
+  color: #172033;
+  background:
+    linear-gradient(180deg, #eef1f5, #e2e6ec);
+  box-shadow:
+    0 8px 18px rgba(21,21,21,0.06),
+    inset 0 1px 0 rgba(255,255,255,0.94);
+  font-weight: 850;
+}
+
+.sidebar-collapse-btn,
+#sidebarCollapseBtn {
+  color: var(--gonette-orange-deep);
+  background:
+    linear-gradient(180deg, #ffffff 0%, #fff0ea 100%);
+  border: 1px solid rgba(223,84,48,0.42);
+  box-shadow:
+    0 8px 18px rgba(21,21,21,0.10),
+    0 2px 8px rgba(223,84,48,0.10),
+    inset 0 1px 0 rgba(255,255,255,0.98);
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  z-index: 20;
+  transform: none;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    color 150ms ease;
+}
+
+.sidebar-collapse-btn:hover,
+.sidebar-collapse-btn:focus-visible,
+#sidebarCollapseBtn:hover,
+#sidebarCollapseBtn:focus-visible {
+  color: var(--gonette-orange);
+  border-color: rgba(223,84,48,0.72);
+  background:
+    linear-gradient(180deg, #ffffff 0%, #ffe7dc 100%);
+}
+
+.sidebar-content {
+  gap: 1.08rem;
+}
+
+/* ==========================================================================
+   CLEANCSS001-D — Sélecteur de période
+   ========================================================================== */
+
+.period-filter-block {
+  position: relative;
+  display: grid;
+  gap: 0.54rem;
+}
+
+.period-filter-block .period-autorefresh-note,
+.period-filter-block .sidebar-hint {
+  display: none;
+}
+
+.period-active-summary {
+  position: relative;
+  display: grid;
+  align-content: center;
+  gap: 0.14rem;
+  width: 100%;
+  min-height: 3.45rem;
+  padding: 0.62rem 1.85rem 0.62rem 0.82rem;
+  border: 1px solid rgba(223,84,48,0.48);
+  border-radius: 0.9rem;
+  color: var(--gonette-black);
+  background:
+    linear-gradient(180deg, #ffffff, #fff4ef);
+  box-shadow:
+    0 10px 20px rgba(223,84,48,0.10),
+    0 4px 12px rgba(21,21,21,0.035),
+    inset 0 1px 0 rgba(255,255,255,0.98);
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.period-active-summary:hover,
+.period-active-summary[aria-expanded="true"],
+.period-active-summary:focus-visible {
+  outline: 0;
+  border-color: rgba(223,84,48,0.78);
+  background:
+    linear-gradient(180deg, #ffffff, #ffebe3);
+}
+
+.period-active-summary::after {
+  content: "⌄";
+  position: absolute;
+  top: 50%;
+  right: 0.72rem;
+  color: var(--gonette-orange);
+  font-size: 0.9rem;
+  line-height: 1;
+  transform: translateY(-50%);
+}
+
+.period-active-summary[aria-expanded="true"]::after {
+  transform: translateY(-50%) rotate(180deg);
+}
+
+.period-active-label {
+  color: var(--gonette-grey);
+  font-size: 0.66rem;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  line-height: 1;
+}
+
+.period-active-value {
+  display: block;
+  max-width: 100%;
+  margin-bottom: 0.02rem;
+  color: var(--gonette-black);
+  font-size: 0.78rem;
+  font-weight: 950;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.045em;
+  line-height: 1.12;
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.period-mini-timeline {
+  display: grid;
+  gap: 0.16rem;
+  margin-top: 0.34rem;
+  padding-right: 0.08rem;
+}
+
+.period-mini-timeline.hidden {
+  display: none;
+}
+
+.period-mini-timeline-track {
+  position: relative;
+  height: 0.28rem;
+  border-radius: 999px;
+  background: rgba(98,102,106,0.18);
+  overflow: visible;
+}
+
+.period-mini-timeline-selection {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  width: 0;
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg, rgba(223,84,48,0.46), rgba(223,84,48,0.92));
+}
+
+.period-mini-timeline-handle {
+  position: absolute;
+  top: 50%;
+  width: 0.14rem;
+  height: 0.62rem;
+  border-radius: 999px;
+  background: rgba(223,84,48,0.95);
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.75);
+}
+
+.period-mini-timeline-labels {
+  display: flex;
+  justify-content: space-between;
+  color: var(--gonette-grey);
+  font-size: 0.54rem;
+  font-weight: 750;
+  line-height: 1;
+}
+
+.period-mini-timeline-bound {
+  white-space: nowrap;
+}
+
+.period-picker-enabled > label[for="periodPreset"],
+.period-picker-enabled > .sidebar-field-label:has(#periodPreset),
+.period-picker-enabled > #periodPreset,
+.period-native-preset-store,
+.period-orphan-preset-label-hidden {
+  display: none !important;
+}
+
+.period-picker-panel {
+  display: grid;
+  gap: 0.54rem;
+  margin-top: 0.55rem;
+  padding: 0.62rem;
+  border: 1px solid rgba(223,84,48,0.24);
+  border-radius: 1rem;
+  background:
+    radial-gradient(circle at 15% 0%, rgba(223,84,48,0.12), transparent 36%),
+    linear-gradient(180deg, rgba(255,255,255,0.98), rgba(255,244,239,0.92));
+  box-shadow:
+    0 14px 28px rgba(21,21,21,0.075),
+    inset 0 1px 0 rgba(255,255,255,0.92);
+}
+
+.period-picker-panel.hidden,
+.period-picker-panel .period-date-grid.hidden {
+  display: none !important;
+}
+
+.period-picker-panel-header {
+  display: grid;
+  gap: 0.08rem;
+  padding: 0.05rem 0.12rem 0.08rem;
+}
+
+.period-picker-panel-header span {
+  color: var(--gonette-black);
+  font-size: 0.78rem;
+  font-weight: 950;
+  letter-spacing: -0.01em;
+}
+
+.period-picker-panel-header small {
+  color: var(--gonette-grey);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.period-quick-preset-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.34rem;
+}
+
+.period-quick-preset-btn {
+  width: 100%;
+  min-height: 2.16rem;
+  padding: 0.42rem 0.62rem;
+  border: 1px solid rgba(98,102,106,0.16);
+  border-radius: 0.68rem;
+  color: #252525;
+  background:
+    linear-gradient(180deg, #ffffff, #f7f6f4);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.95);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 850;
+  text-align: left;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+.period-quick-preset-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(223,84,48,0.42);
+  color: var(--gonette-orange-deep);
+  background:
+    linear-gradient(180deg, #ffffff, #fff2ec);
+}
+
+.period-quick-preset-btn-active {
+  border-color: rgba(223,84,48,0.74);
+  color: var(--gonette-orange-deep);
+  background:
+    linear-gradient(180deg, #fff2ec, #ffffff);
+  box-shadow:
+    0 8px 18px rgba(223,84,48,0.12),
+    inset 0 1px 0 rgba(255,255,255,0.96);
+}
+
+.period-picker-panel .period-date-grid:not(.hidden) {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.46rem;
+  margin-top: 0.3rem;
+  padding: 0.52rem;
+  border: 1px solid rgba(98,102,106,0.12);
+  border-radius: 0.86rem;
+  background: rgba(255,255,255,0.70);
+}
+
+.sidebar-field-label {
+  display: grid;
+  gap: 0.34rem;
+  color: var(--gonette-grey);
+  font-size: 0.76rem;
+  font-weight: 850;
+  letter-spacing: -0.01em;
+}
+
+.sidebar-select,
+.sidebar-date-input {
+  width: 100%;
+  min-height: 2.38rem;
+  border: 1px solid rgba(98,102,106,0.18);
+  border-radius: 0.72rem;
+  color: #171717;
+  background: #ffffff;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.sidebar-date-input {
+  padding: 0 0.72rem;
+}
+
+.sidebar-select:focus,
+.sidebar-date-input:focus {
+  outline: 0;
+  border-color: rgba(223,84,48,0.70);
+  box-shadow: 0 0 0 3px rgba(223,84,48,0.14);
+}
+
+/* ==========================================================================
+   CLEANCSS001-E — Navigation ouverte avec icônes
+   ========================================================================== */
+
+.sidebar label {
+  min-height: 3.35rem;
+  margin-bottom: 0.66rem;
+  border: 1px solid rgba(98,102,106,0.16);
+  border-radius: 0.92rem;
+  color: var(--gonette-black);
+  background:
+    linear-gradient(180deg, #ffffff, #f7f6f4);
+  box-shadow:
+    0 6px 14px rgba(21,21,21,0.035),
+    inset 0 1px 0 rgba(255,255,255,0.96);
+}
+
+.sidebar label:hover {
+  color: var(--gonette-orange-deep);
+  border-color: rgba(223,84,48,0.38);
+  background:
+    linear-gradient(180deg, #ffffff, #fff2ec);
+  transform: translateY(-1px);
+}
+
+.sidebar label:has(input[type="radio"]:checked),
+.sidebar-view-option.is-active {
+  color: var(--gonette-orange-deep);
+  border-color: rgba(223,84,48,0.84);
+  background:
+    linear-gradient(180deg, #fff2ec, #ffffff);
+  box-shadow:
+    0 10px 20px rgba(223,84,48,0.13),
+    inset 0 1px 0 rgba(255,255,255,0.98);
+}
+
+.sidebar label input[type="radio"] {
+  accent-color: var(--gonette-orange);
+}
+
+.sidebar-view-option {
+  display: grid !important;
+  grid-template-columns: 1rem 1rem minmax(0, 1fr);
+  align-items: center;
+  column-gap: 0.72rem;
+  min-height: 3.35rem;
+  padding: 0.72rem 1rem !important;
+  overflow: hidden;
+}
+
+.sidebar-view-option input[type="radio"] {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  justify-self: center;
+  align-self: center;
+}
+
+.sidebar-view-icon {
+  width: 1rem;
+  height: 1rem;
+  min-width: 1rem;
+  min-height: 1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #7a7d80;
+  overflow: hidden;
+}
+
+.sidebar-view-icon svg {
+  width: 1rem;
+  height: 1rem;
+  display: block;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.85;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sidebar-view-option:hover .sidebar-view-icon,
+.sidebar-view-option.is-active .sidebar-view-icon,
+.sidebar label:has(input[type="radio"]:checked) .sidebar-view-icon {
+  color: var(--gonette-orange-deep);
+}
+
+.sidebar-view-label {
+  min-width: 0;
+  display: block;
+  line-height: 1.08;
+  overflow-wrap: break-word;
+}
+
+/* ==========================================================================
+   CLEANCSS001-F — Sidebar repliée et rail compact
+   ========================================================================== */
+
+.sidebar-collapsed-rail {
+  display: none;
+  opacity: 0;
+  transform: none;
+  transition: opacity 140ms ease;
+}
+
+body.sidebar-collapsed .sidebar {
+  width: var(--sidebar-collapsed-width) !important;
+  min-width: var(--sidebar-collapsed-width) !important;
+  max-width: var(--sidebar-collapsed-width) !important;
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, rgba(223,84,48,0.09) 0%, rgba(223,84,48,0.026) 0.32rem, transparent 0.32rem),
+    linear-gradient(180deg, #fffdfb, #f2f0ed);
+  box-shadow:
+    10px 0 22px rgba(21,21,21,0.075),
+    inset -1px 0 0 rgba(223,84,48,0.12);
+}
+
+body.sidebar-collapsed .main-content {
+  margin-left: var(--sidebar-collapsed-width) !important;
+}
+
+body.sidebar-collapsed .sidebar-content,
+body.sidebar-collapsed .sidebar h2,
+body.sidebar-collapsed .theme-toggle-btn,
+body.sidebar-collapsed #themeToggleBtn {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+body:not(.sidebar-collapsed) .sidebar-collapsed-rail {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+body.sidebar-collapsed .sidebar-collapsed-rail {
+  display: grid !important;
+  justify-items: center;
+  width: 100%;
+  gap: 0;
+  padding: 3rem 0 0.8rem !important;
+  box-sizing: border-box;
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+  transform: none !important;
+}
+
+.sidebar-collapsed-period {
+  width: 3.05rem;
+  height: 3.05rem;
+  min-height: 3.05rem;
+  max-width: calc(var(--sidebar-collapsed-width) - 1rem);
+  margin: 0 0 2.85rem 0 !important;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(98,102,106,0.16);
+  border-radius: 0.82rem;
+  color: #64676a;
+  background:
+    linear-gradient(180deg, #ffffff, #f7f6f4);
+  box-shadow:
+    0 6px 12px rgba(21,21,21,0.055),
+    inset 0 1px 0 rgba(255,255,255,0.96);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.sidebar-collapsed-period:hover {
+  color: var(--gonette-orange-deep);
+  border-color: rgba(223,84,48,0.70);
+  background:
+    linear-gradient(180deg, #fff2ec, #ffffff);
+}
+
+.sidebar-collapsed-period-label,
+.sidebar-collapsed-period strong {
+  display: none;
+}
+
+.sidebar-collapsed-period-mini {
+  position: absolute;
+  bottom: 0.42rem;
+  left: 0.78rem;
+  right: 0.78rem;
+  height: 0.12rem;
+  border-radius: 999px;
+  background: rgba(98,102,106,0.18);
+  overflow: hidden;
+}
+
+.sidebar-collapsed-period-mini span {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  width: 100%;
+  border-radius: inherit;
+  background: var(--gonette-orange);
+}
+
+.sidebar-collapsed-nav {
+  display: grid;
+  justify-items: center;
+  gap: 0.72rem !important;
+  margin: 0;
+  padding: 0;
+}
+
+.sidebar-collapsed-nav-btn {
+  width: 3.05rem !important;
+  height: 3.05rem !important;
+  min-height: 3.05rem !important;
+  max-width: calc(var(--sidebar-collapsed-width) - 1rem);
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(98,102,106,0.16);
+  border-radius: 0.82rem;
+  color: #64676a;
+  background:
+    linear-gradient(180deg, #ffffff, #f7f6f4);
+  box-shadow:
+    0 6px 12px rgba(21,21,21,0.055),
+    inset 0 1px 0 rgba(255,255,255,0.96);
+  overflow: hidden;
+  cursor: pointer;
+  transform: none !important;
+  filter: none !important;
+  animation: none !important;
+}
+
+.sidebar-collapsed-nav-btn:hover,
+.sidebar-collapsed-nav-btn-active {
+  color: var(--gonette-orange-deep);
+  border-color: rgba(223,84,48,0.78);
+  background:
+    linear-gradient(180deg, #fff2ec, #ffffff);
+  box-shadow:
+    0 7px 14px rgba(223,84,48,0.10),
+    inset 0 1px 0 rgba(255,255,255,0.98);
+}
+
+.sidebar-collapsed-icon-wrap,
+.sidebar-collapsed-icon-wrap svg {
+  width: 1rem;
+  height: 1rem;
+  display: block;
+}
+
+.sidebar-collapsed-icon-wrap svg {
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.85;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ==========================================================================
+   CLEANCSS001-G — Animation stable du repli/dépli
+   ========================================================================== */
+
+.sidebar,
+.main-content {
+  will-change: width, margin-left;
+}
+
+.sidebar-content,
+.sidebar h2,
+.theme-toggle-btn,
+#themeToggleBtn {
+  transition: opacity 120ms ease;
+  transform: none !important;
+  filter: none !important;
+  animation: none !important;
+}
+
+body.sidebar-collapsing .sidebar-content,
+body.sidebar-collapsing .sidebar h2,
+body.sidebar-collapsing .theme-toggle-btn,
+body.sidebar-collapsing #themeToggleBtn,
+body.sidebar-collapsed .sidebar-content,
+body.sidebar-collapsed .sidebar h2,
+body.sidebar-collapsed .theme-toggle-btn,
+body.sidebar-collapsed #themeToggleBtn {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+body.sidebar-expanding .sidebar-content,
+body.sidebar-expanding .sidebar h2,
+body.sidebar-expanding .theme-toggle-btn,
+body.sidebar-expanding #themeToggleBtn,
+body:not(.sidebar-collapsed) .sidebar-content,
+body:not(.sidebar-collapsed) .sidebar h2,
+body:not(.sidebar-collapsed) .theme-toggle-btn,
+body:not(.sidebar-collapsed) #themeToggleBtn {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+body.sidebar-collapsed .sidebar-collapsed-rail {
+  transition-delay: 70ms;
+}
+
+body.sidebar-expanding .sidebar-collapsed-rail {
+  opacity: 0 !important;
+  transition-delay: 0ms !important;
+}
+
+.sidebar-collapse-btn,
+#sidebarCollapseBtn {
+  transform: none !important;
+}
+
+@media (max-width: 900px) {
+  :root {
+    --sidebar-expanded-width: 20rem;
+    --sidebar-collapsed-width: 4.65rem;
+  }
+
+  .sidebar-view-option {
+    column-gap: 0.65rem;
+    padding: 0.72rem 0.92rem !important;
+  }
+
+  .period-active-value {
+    font-size: 0.74rem;
+    letter-spacing: -0.055em;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar,
+  .main-content,
+  .sidebar-content,
+  .sidebar h2,
+  .theme-toggle-btn,
+  #themeToggleBtn,
+  .sidebar-collapsed-rail,
+  .sidebar-collapse-btn,
+  #sidebarCollapseBtn,
+  .sidebar-collapsed-period,
+  .sidebar-collapsed-nav-btn {
+    transition: none !important;
+    animation: none !important;
+    transform: none !important;
+    filter: none !important;
+  }
+}
+
+/* ==========================================================================
+   CLEANCSS001A — restaurer le rail compact en panneau replié
+   Le rail compact vit dans .sidebar-content : ne pas masquer son parent.
+   ========================================================================== */
+
+/* En mode replié, le conteneur doit rester visible pour laisser apparaître le rail. */
+body.sidebar-collapsed .sidebar-content {
+  display: block !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  transform: none !important;
+  filter: none !important;
+  animation: none !important;
+  pointer-events: auto !important;
+  overflow: visible !important;
+}
+
+/* On masque le contenu large, mais pas le rail compact. */
+body.sidebar-collapsed .sidebar-content > :not(.sidebar-collapsed-rail) {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* Rail compact explicitement visible et centré. */
+body.sidebar-collapsed .sidebar-collapsed-rail {
+  display: grid !important;
+  justify-items: center !important;
+  align-content: start !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  padding: 3rem 0 0.8rem !important;
+  box-sizing: border-box !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+  transform: none !important;
+  filter: none !important;
+  animation: none !important;
+}
+
+/* Les boutons du rail restent contenus. */
+body.sidebar-collapsed .sidebar-collapsed-period,
+body.sidebar-collapsed .sidebar-collapsed-nav-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 3.05rem !important;
+  height: 3.05rem !important;
+  min-height: 3.05rem !important;
+  max-width: calc(var(--sidebar-collapsed-width) - 1rem) !important;
+  padding: 0 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
+
+/* En mode ouvert, le rail compact reste absent. */
+body:not(.sidebar-collapsed) .sidebar-collapsed-rail {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+
+/* ==========================================================================
+   CLEANCSS001B — animation symétrique du repli sidebar
+   Objectif : conserver l'état stable de CLEANCSS001/A, mais rendre le repli
+   aussi lisible que le dépli, sans morphing ni surcouches destructrices.
+   ========================================================================== */
+
+/* Pendant le repli, le conteneur reste visible pour accueillir le rail compact. */
+body.sidebar-collapsing.sidebar-collapsed .sidebar-content {
+  display: block !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: none !important;
+  overflow: visible !important;
+}
+
+/* Le contenu large reste masqué pendant le repli : pas de texte coupé. */
+body.sidebar-collapsing.sidebar-collapsed .sidebar-content > :not(.sidebar-collapsed-rail) {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* Le rail compact arrive pendant le repli, au lieu d'apparaître brutalement à la fin. */
+body.sidebar-collapsing.sidebar-collapsed .sidebar-collapsed-rail {
+  display: grid !important;
+  justify-items: center !important;
+  align-content: start !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  padding: 3rem 0 0.8rem !important;
+  box-sizing: border-box !important;
+  opacity: 0;
+  visibility: visible !important;
+  pointer-events: none !important;
+  transform: translateX(-0.22rem);
+  animation: cleancss001bRailIn 220ms cubic-bezier(.2,.72,.22,1) 55ms both !important;
+}
+
+/* Les icônes compactes suivent légèrement, sans cascade lourde. */
+body.sidebar-collapsing.sidebar-collapsed .sidebar-collapsed-period,
+body.sidebar-collapsing.sidebar-collapsed .sidebar-collapsed-nav-btn {
+  display: inline-flex !important;
+  opacity: 0;
+  visibility: visible !important;
+  transform: translateX(-0.16rem);
+  animation: cleancss001bCompactItemIn 190ms cubic-bezier(.2,.72,.22,1) 80ms both !important;
+}
+
+/* En état replié stabilisé, rien ne bouge. */
+body.sidebar-collapsed:not(.sidebar-collapsing) .sidebar-collapsed-rail,
+body.sidebar-collapsed:not(.sidebar-collapsing) .sidebar-collapsed-period,
+body.sidebar-collapsed:not(.sidebar-collapsing) .sidebar-collapsed-nav-btn {
+  transform: none !important;
+  animation: none !important;
+}
+
+/* Pendant le dépli, on garde le comportement qui marche déjà : rail vite masqué. */
+body.sidebar-expanding .sidebar-collapsed-rail {
+  opacity: 0 !important;
+  transform: translateX(-0.12rem) !important;
+  transition:
+    opacity 90ms ease,
+    transform 120ms cubic-bezier(.2,.72,.22,1) !important;
+}
+
+@keyframes cleancss001bRailIn {
+  0% {
+    opacity: 0;
+    transform: translateX(-0.22rem);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes cleancss001bCompactItemIn {
+  0% {
+    opacity: 0;
+    transform: translateX(-0.16rem);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.sidebar-collapsing.sidebar-collapsed .sidebar-collapsed-rail,
+  body.sidebar-collapsing.sidebar-collapsed .sidebar-collapsed-period,
+  body.sidebar-collapsing.sidebar-collapsed .sidebar-collapsed-nav-btn {
+    animation: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
+}
+
+
+/* ==========================================================================
+   PERF_UI001A — découpler animation sidebar / contenu principal
+   Problème : animer margin-left du contenu central force un reflow coûteux,
+   surtout quand une grande plage de données charge beaucoup de DOM/canvas.
+   Solution : la page principale suit l’état, mais sans transition layout.
+   ========================================================================== */
+
+/* Le contenu principal ne doit pas être animé pendant le repli/dépli. */
+.main-content {
+  transition: none !important;
+  will-change: auto !important;
+  transform: none !important;
+}
+
+/* Les marges restent correctes selon l’état, mais basculent sans tween. */
+body:not(.sidebar-collapsed) .main-content {
+  margin-left: var(--sidebar-expanded-width) !important;
+}
+
+body.sidebar-collapsed .main-content {
+  margin-left: var(--sidebar-collapsed-width) !important;
+}
+
+/* La sidebar conserve une animation légère, mais limitée à sa propre largeur. */
+.sidebar {
+  transition:
+    width var(--sidebar-collapse-duration) var(--sidebar-collapse-ease),
+    min-width var(--sidebar-collapse-duration) var(--sidebar-collapse-ease),
+    max-width var(--sidebar-collapse-duration) var(--sidebar-collapse-ease),
+    background 150ms ease,
+    box-shadow 150ms ease !important;
+  will-change: width;
+  contain: layout paint;
+}
+
+/* Pendant la transition, on évite les effets coûteux sur le contenu central. */
+body.sidebar-transitioning .main-content,
+body.sidebar-collapsing .main-content,
+body.sidebar-expanding .main-content {
+  transition: none !important;
+  will-change: auto !important;
+  transform: none !important;
+}
+
+/* Les cartes/canvas du contenu central ne doivent pas être embarqués
+   dans une transition globale. */
+body.sidebar-transitioning .main-content canvas,
+body.sidebar-transitioning .main-content table,
+body.sidebar-transitioning .main-content .card,
+body.sidebar-transitioning .main-content .stat-card {
+  transition: none !important;
+}
+
+/* Garde-fou : pas d’animation layout si l’utilisateur ou le navigateur réduit les animations. */
+@media (prefers-reduced-motion: reduce) {
+  .sidebar,
+  .main-content {
+    transition: none !important;
+    will-change: auto !important;
+  }
+}
+

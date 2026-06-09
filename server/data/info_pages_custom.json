@@ -40,5 +40,12 @@
     "kicker": "Code",
     "title": "Synthèse et explication du code-source",
     "summary": "Synthèse des grandes fonctions du cod de MLCFlux"
+  },
+  {
+    "slug": "datas",
+    "filename": "custom_datas.md",
+    "kicker": "lexique",
+    "title": "datas",
+    "summary": "Types et sources des données"
   }
 ]
