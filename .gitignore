@@ -109,3 +109,19 @@ build/
 # MLCFlux multi — fichiers locaux/sensibles à ne pas versionner
 server/mlc_secrets.py
 server/data/prenoms.csv
+
+# MLCFlux runtime / local artifacts
+_tmp_*
+*.orig
+gunicorn.ctl
+
+# Runtime databases
+*.db-*
+*.sqlite-*
+server/data/security_events.db*
+server/data/instances/*/*.db
+server/data/instances/*/*.db-*
+server/data/instances/*/*.sqlite
+server/data/instances/*/*.sqlite-*
+
+# Local secrets
