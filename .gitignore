@@ -109,5 +109,3 @@ build/
 # MLCFlux multi — fichiers locaux/sensibles à ne pas versionner
 server/mlc_secrets.py
 server/data/prenoms.csv
-# MLCFlux multi — sécurité / runtime
-_tmp_*
