@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MLC Flux</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" />
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <div id="sidebar" class="sidebar">
+    <div class="sidebar-header">
+      <h2>MLC Flux</h2>
+
+      <button
+        id="sidebarCollapseBtn"
+        class="sidebar-collapse-btn"
+        type="button"
+        aria-controls="sidebarContent"
+        aria-expanded="true"
+        title="Replier le volet latéral"
+      >
+        ‹
+      </button>
+    </div>
+
+    <div id="sidebarContent" class="sidebar-content">
+      <button id="themeToggleBtn" class="secondary-btn theme-toggle-btn" type="button">
+        🌙 Mode sombre
+      </button>
+
+      <div class="filters period-filter-block">
+        <h3>Période d’analyse</h3>
+
+        <button
+          id="periodActiveSummary"
+          class="period-active-summary"
+          type="button"
+          aria-controls="customPeriodFields"
+          aria-expanded="false"
+          title="Définir une période personnalisée"
+        >
+          <span class="period-active-label">Période active</span>
+          <span id="periodFilterHint" class="period-active-value">Chargement…</span>
+        </button>
+
+        <div class="sidebar-field-label">Période rapide</div>
+        <select id="periodPreset" class="sidebar-select">
+          <option value="all">Toute la période disponible</option>
+          <option value="last30">30 derniers jours</option>
+          <option value="last90">90 derniers jours</option>
+          <option value="currentYear">Année en cours</option>
+          <option value="year2025">2025</option>
+          <option value="year2024">2024</option>
+          <option value="year2023">2023</option>
+          <option value="custom">Personnalisée</option>
+        </select>
+
+        <div id="customPeriodFields" class="period-date-grid hidden">
+          <div>
+            <input
+              id="periodStart"
+              class="sidebar-date-input"
+              type="date"
+              aria-label="Date de début"
+            />
+          </div>
+
+          <div>
+            <input
+              id="periodEnd"
+              class="sidebar-date-input"
+              type="date"
+              aria-label="Date de fin"
+            />
+          </div>
+        </div>
+
+        <p class="period-autorefresh-note">
+          Les données se mettent à jour automatiquement après chaque changement.
+        </p>
+      </div>
+
+      <div class="filters sidebar-views-block">
+        <h3>Vues</h3>
+        <label><input type="radio" name="dataView" value="stats" checked> Statistiques globales</label>
+        <label><input type="radio" name="dataView" value="monetary-pilotage"> Pilotage monétaire</label>
+        <label><input type="radio" name="dataView" value="pros"> Professionnels &amp; particuliers</label>
+        <label><input type="radio" name="dataView" value="tickets"> Tickets & retours</label>
+        <label><input type="radio" name="dataView" value="info"> Info & méthodologie</label>
+        <label><input type="radio" name="dataView" value="admin"> Administration &amp; paramètres</label>
+      </div>
+    </div>
+  </div>
+
+  <div id="mainContent" class="main-content">
+    <div id="pageTitle"></div>
+    <div id="content"></div>
+  </div>
+
+  <script src="https://unpkg.com/cytoscape@3.27.0/dist/cytoscape.min.js"></script>
+  <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+  <script src="https://unpkg.com/deck.gl@9.3.0/dist.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@18.0.3/lib/marked.umd.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.4.3/dist/purify.min.js"></script>
+  <script src="/static/js/chart.js"></script>
+  <script src="/static/js/professional_consumption_map.js"></script>
+  <script src="/static/js/app.js"></script>
+
+<a href="/static/defis-pros-test.html"
+   style="position:fixed;right:18px;bottom:18px;z-index:99999;padding:12px 15px;border-radius:999px;background:#c94a2c;color:#fff;text-decoration:none;font-weight:800;box-shadow:0 12px 28px rgba(0,0,0,.18);">
+  🏆 Test Défis des pros
+</a>
+
+</body>
+</html>

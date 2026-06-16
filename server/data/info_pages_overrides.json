@@ -1,0 +1,12 @@
+{
+  "cadre-general": {
+    "title": "Cadre général & sources",
+    "kicker": "Fondations",
+    "summary": "Ce que MLCFlux cherche à observer, les différences entre flux, stocks et opérations de gestion, les sources utilisées et les règles temporelles."
+  },
+  "pilotage-monetaire": {
+    "title": "Pilotage monétaire",
+    "kicker": "Analyse économique",
+    "summary": "Circulation, garanties, détention, dormance et rapprochements entre stocks et flux."
+  }
+}

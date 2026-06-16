@@ -1,0 +1,25 @@
+# Bases SQLite runtime — ne jamais versionner.
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+
+# Base de contrôle utilisateurs.
+control.db
+control.db-*
+
+# Locks runtime.
+locks/
+*.lock
+
+# Conserver les répertoires/fichiers déclaratifs versionnés.
+!mlc_profiles/
+!mlc_profiles/*.json
+!instances/
+!instances/.gitignore
+!instances/README.md
+!instances/*/
+!instances/*/.gitkeep
+!instances/*/README.md

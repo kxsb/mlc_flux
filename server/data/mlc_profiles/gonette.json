@@ -1,0 +1,311 @@
+{
+  "id": "gonette",
+  "name": "La Gonette",
+  "short_name": "Gonette",
+  "currency_name": "Gonette",
+  "currency_symbol": "G",
+  "status": "work_in_progress",
+  "description": "Instance de travail Gonette dans le socle multi-MLC.",
+  "data_strategy": "full_instance",
+  "sources": {
+    "cyclos": true,
+    "odoo": true
+  },
+  "features": {
+    "transactions": true,
+    "professional_directory": true,
+    "professional_details": true,
+    "network": true,
+    "territories": true,
+    "sector_analysis": true,
+    "monetary_indicators": true,
+    "individual_balances": true,
+    "tickets": false
+  },
+  "classification": {
+    "conversion_source_labels": [
+      "T_Émission"
+    ],
+    "reconversion_target_labels": [
+      "T_Conversion"
+    ],
+    "operator_accounts": [
+      "P0000",
+      "P9999"
+    ]
+  },
+  "notes": [],
+  "actor_classification": {
+    "strategy": "account_type_internal_name",
+    "families_by_actor_type_internal": {
+      "compteparticulier": "U",
+      "comptepro": "P",
+      "emission": "T",
+      "Conversion": "T"
+    },
+    "private_actor_type_internal_names": [
+      "compteparticulier"
+    ],
+    "professional_actor_type_internal_names": [
+      "comptepro"
+    ],
+    "technical_actor_type_internal_names": [
+      "emission",
+      "Conversion"
+    ],
+    "fallbacks": {
+      "display_prefix_p_regex": "^P\\d{4}\\b",
+      "display_prefix_u_regex": "^U[-_\\s]?\\d+"
+    },
+    "professional_ref_strategy": "preserve_prefixed_ref",
+    "professional_mapping": {
+      "prefix": "P",
+      "width": 4,
+      "preserve_regex": "\\b(P\\d{4,})\\b"
+    },
+    "private_actor_mapping": {
+      "strategy": "firstname_sequence_mapping",
+      "firstname_dictionary": "server/data/prenoms.csv"
+    },
+    "notes": [
+      "Les particuliers sont pseudonymisés par mapping stable à prénoms, sans exposer les identifiants Cyclos bruts."
+    ]
+  },
+  "professional_enrichment": {
+    "provider": "odoo_jsonrpc",
+    "status": "available",
+    "match_strategy": "odoo_res_partner_ref_from_professional_ref",
+    "transaction_professional_ref_regex": "^P\\d+\\b",
+    "odoo_model": "res.partner",
+    "odoo_match_fields": {
+      "is_company": true,
+      "is_main_profile": true,
+      "ref": "professional_ref"
+    },
+    "fields": [
+      "odoo_partner_id",
+      "odoo_name",
+      "industry_id",
+      "industry_name",
+      "secondary_industries",
+      "detailed_activity",
+      "website_description_html",
+      "keywords",
+      "naf",
+      "street",
+      "zip",
+      "city",
+      "latitude",
+      "longitude",
+      "date_localization",
+      "membership_state",
+      "is_former_member",
+      "cyclos_address_id",
+      "cyclos_address_line1",
+      "cyclos_zip",
+      "cyclos_city",
+      "cyclos_latitude",
+      "cyclos_longitude",
+      "geo_distance_meters",
+      "geo_match_status"
+    ],
+    "notes": [
+      "L’enrichissement Gonette repose sur Odoo et sur les références professionnelles Pxxxx.",
+      "Les secteurs d’activité viennent de res.partner.industry.",
+      "La géolocalisation peut être croisée entre Odoo et Cyclos."
+    ]
+  },
+  "transaction_semantics": {
+    "classifier_version": "transaction_semantics_v0.3_profile_rules_gonette",
+    "actor_family_rules": [
+      {
+        "name": "device_private",
+        "label_startswith": "UD_",
+        "actor_family": "individual_device"
+      },
+      {
+        "name": "individual",
+        "label_startswith": "U_",
+        "actor_family": "individual"
+      },
+      {
+        "name": "operator_accounts",
+        "label_in": [
+          "P0000",
+          "P9999"
+        ],
+        "actor_family": "operator"
+      },
+      {
+        "name": "professional_legacy_hyphenated_ref",
+        "label_regex": "^P[0-9]{4}-[0-9]{4}-[0-9]{4}$",
+        "actor_family": "professional"
+      },
+      {
+        "name": "professional_ref",
+        "label_regex": "^P[0-9]{4,}$",
+        "actor_family": "professional"
+      },
+      {
+        "name": "system",
+        "label_startswith": "T_",
+        "actor_family": "system"
+      }
+    ],
+    "account_medium_rules": [
+      {
+        "name": "guarantee",
+        "label_contains_any": [
+          "garantie",
+          "nantissement"
+        ],
+        "account_medium": "guarantee"
+      },
+      {
+        "name": "digital",
+        "label_contains_any": [
+          "émission",
+          "emission",
+          "conversion",
+          "reconversion"
+        ],
+        "account_medium": "digital"
+      }
+    ],
+    "operation_rules": [
+      {
+        "name": "membership_fee_to_operator",
+        "to_actor_family": "operator",
+        "type_label_contains_any": [
+          "prélèvement de la cotisation",
+          "prelevement de la cotisation",
+          "cotisation"
+        ],
+        "operation_kind": "membership_fee",
+        "monetary_circuit": "association_operations",
+        "confidence": "high"
+      },
+      {
+        "name": "operator_internal_transfer",
+        "from_actor_family": "operator",
+        "to_actor_family": "operator",
+        "operation_kind": "operator_internal_transfer",
+        "monetary_circuit": "association_operations",
+        "confidence": "high"
+      },
+      {
+        "name": "payment_to_operator",
+        "from_actor_family_in": [
+          "individual",
+          "individual_device",
+          "professional"
+        ],
+        "to_actor_family": "operator",
+        "operation_kind": "association_payment",
+        "monetary_circuit": "association_operations",
+        "confidence": "medium"
+      },
+      {
+        "name": "operator_to_actor_transfer",
+        "from_actor_family": "operator",
+        "to_actor_family_in": [
+          "individual",
+          "individual_device",
+          "professional"
+        ],
+        "operation_kind": "association_transfer",
+        "monetary_circuit": "association_operations",
+        "confidence": "medium"
+      },
+      {
+        "name": "euro_to_digital_from_emission",
+        "from_label_in": [
+          "T_Émission"
+        ],
+        "to_actor_family_in": [
+          "individual",
+          "individual_device",
+          "professional"
+        ],
+        "operation_kind": "euro_to_digital",
+        "monetary_circuit": "monetary_supply",
+        "confidence": "high"
+      },
+      {
+        "name": "digital_to_euro_to_conversion",
+        "from_actor_family_in": [
+          "individual",
+          "individual_device",
+          "professional"
+        ],
+        "to_label_in": [
+          "T_Conversion"
+        ],
+        "operation_kind": "digital_to_euro",
+        "monetary_circuit": "monetary_exit",
+        "confidence": "high"
+      },
+      {
+        "name": "economic_payment_to_professional",
+        "from_actor_family_in": [
+          "individual",
+          "individual_device",
+          "professional"
+        ],
+        "to_actor_family": "professional",
+        "operation_kind": "economic_payment",
+        "monetary_circuit": "economic",
+        "confidence": "high"
+      },
+      {
+        "name": "economic_payment_professional_to_individual",
+        "from_actor_family": "professional",
+        "to_actor_family_in": [
+          "individual",
+          "individual_device"
+        ],
+        "operation_kind": "economic_payment",
+        "monetary_circuit": "economic",
+        "confidence": "high"
+      },
+      {
+        "name": "individual_transfer",
+        "from_actor_family_in": [
+          "individual",
+          "individual_device"
+        ],
+        "to_actor_family_in": [
+          "individual",
+          "individual_device"
+        ],
+        "operation_kind": "individual_transfer",
+        "monetary_circuit": "peer_to_peer",
+        "confidence": "low"
+      },
+      {
+        "name": "regularization",
+        "type_label_contains_any": [
+          "raz",
+          "régularisation",
+          "regularisation",
+          "annulation",
+          "correction"
+        ],
+        "operation_kind": "regularization",
+        "monetary_circuit": "technical_adjustment",
+        "confidence": "high"
+      }
+    ]
+  },
+  "monetary_indicators": {
+    "source": "odoo_accounting",
+    "notes": [
+      "Source principale validée pour la Gonette : comptabilité Odoo.",
+      "Cyclos peut servir au contrôle des flux émission / conversion, mais pas comme source principale de garantie."
+    ],
+    "operator_professional_refs": [
+      "P0000",
+      "P9999"
+    ]
+  }
+}

@@ -1,0 +1,28 @@
+# Données runtime par instance MLC.
+# Les profils déclaratifs sont dans server/data/mlc_profiles/.
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.lock
+
+# Artefacts de pseudonymisation / synchronisation.
+user_mapping.json
+actor_user_links.json
+professional_actor_user_links.json
+device_private_actor_registry.json
+
+# Caches et fichiers runtime.
+runtime/
+locks/
+
+# Documentation de structure conservée.
+!.gitignore
+!README.md
+!*/README.md
+!*/.gitkeep
+
+# Mapping runtime des références professionnelles internes Pxxxx.
+professional_mapping.json
+professional_mapping.json.tmp

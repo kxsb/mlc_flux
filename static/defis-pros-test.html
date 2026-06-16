@@ -1,0 +1,799 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>MLCFlux — Défis des pros</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      --bg: #f6f3ee;
+      --panel: #fffaf3;
+      --panel2: #ffffff;
+      --ink: #241a12;
+      --muted: #75695f;
+      --line: #eadfce;
+      --accent: #c94a2c;
+      --accent2: #0f766e;
+      --soft: #f3e2d1;
+      --warn: #b45309;
+      --bad: #b91c1c;
+      --good: #15803d;
+      --shadow: 0 16px 40px rgba(51, 35, 20, .10);
+      --radius: 22px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(201, 74, 44, .12), transparent 34rem),
+        radial-gradient(circle at top right, rgba(15, 118, 110, .10), transparent 30rem),
+        var(--bg);
+      color: var(--ink);
+    }
+
+    .page {
+      width: min(1380px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 28px 0 48px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 24px;
+      align-items: end;
+      padding: 28px;
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      background: linear-gradient(135deg, rgba(255,250,243,.96), rgba(255,255,255,.90));
+      box-shadow: var(--shadow);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2rem, 4vw, 4.6rem);
+      line-height: .95;
+      letter-spacing: -.06em;
+    }
+
+    .subtitle {
+      margin: 14px 0 0;
+      max-width: 850px;
+      color: var(--muted);
+      font-size: 1.05rem;
+      line-height: 1.55;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      width: fit-content;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: #fff;
+      border: 1px solid var(--line);
+      color: var(--accent);
+      font-weight: 800;
+      font-size: .82rem;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      padding: 10px 13px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      text-decoration: none;
+      font-weight: 850;
+      box-shadow: 0 8px 18px rgba(51, 35, 20, .06);
+    }
+
+    .back-link:hover {
+      border-color: rgba(201, 74, 44, .38);
+      color: var(--accent);
+    }
+
+    button, input, select {
+      font: inherit;
+    }
+
+    button {
+      border: 0;
+      border-radius: 14px;
+      padding: 11px 14px;
+      cursor: pointer;
+      font-weight: 800;
+      color: white;
+      background: var(--accent);
+      box-shadow: 0 8px 20px rgba(201, 74, 44, .20);
+    }
+
+    button.secondary {
+      background: #fff;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      box-shadow: none;
+    }
+
+    button.ghost {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--line);
+      box-shadow: none;
+    }
+
+    .filters {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: repeat(7, minmax(130px, 1fr));
+      gap: 12px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: rgba(255, 250, 243, .82);
+      backdrop-filter: blur(8px);
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+    }
+
+    label {
+      font-size: .72rem;
+      font-weight: 900;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+
+    input, select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      color: var(--ink);
+      padding: 10px 11px;
+      min-height: 42px;
+    }
+
+    .kpis {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(160px, 1fr));
+      gap: 14px;
+    }
+
+    .kpi {
+      background: var(--panel2);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 18px;
+      box-shadow: 0 10px 22px rgba(51, 35, 20, .06);
+    }
+
+    .kpi .value {
+      margin-top: 8px;
+      font-size: 1.8rem;
+      font-weight: 950;
+      letter-spacing: -.04em;
+    }
+
+    .kpi .caption {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: .88rem;
+    }
+
+    .layout {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, .88);
+      box-shadow: 0 12px 30px rgba(51, 35, 20, .07);
+      overflow: hidden;
+    }
+
+    .panel-head {
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(90deg, rgba(243,226,209,.95), rgba(255,255,255,.82));
+    }
+
+    .panel-head h2 {
+      margin: 0;
+      font-size: 1.15rem;
+      letter-spacing: -.02em;
+    }
+
+    .panel-head p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: .9rem;
+      line-height: 1.4;
+    }
+
+    .sector-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      padding: 16px;
+    }
+
+    .sector-card {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: var(--panel);
+      overflow: hidden;
+    }
+
+    .sector-title {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .sector-title strong {
+      text-transform: capitalize;
+      font-size: 1rem;
+    }
+
+    .sector-title span {
+      color: var(--muted);
+      font-size: .8rem;
+      white-space: nowrap;
+    }
+
+    .ranking-block {
+      padding: 12px 14px 15px;
+    }
+
+    .ranking-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+      color: var(--accent);
+      font-size: .77rem;
+      font-weight: 950;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+
+    .rank-row {
+      display: grid;
+      grid-template-columns: 30px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 8px 0;
+      border-top: 1px dashed rgba(117,105,95,.25);
+    }
+
+    .rank-row:first-of-type {
+      border-top: 0;
+    }
+
+    .rank {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--soft);
+      color: var(--accent);
+      font-weight: 950;
+    }
+
+    .pro-name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 800;
+    }
+
+    .pro-meta {
+      color: var(--muted);
+      font-size: .78rem;
+      margin-top: 2px;
+    }
+
+    .amount {
+      font-variant-numeric: tabular-nums;
+      font-weight: 950;
+      white-space: nowrap;
+    }
+
+    .empty {
+      color: var(--muted);
+      padding: 8px 0;
+      font-size: .88rem;
+    }
+
+    .side {
+      display: grid;
+      gap: 18px;
+    }
+
+    .audit-list {
+      padding: 14px 16px 18px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .audit-item {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 10px;
+      align-items: start;
+      padding: 11px 12px;
+      border-radius: 14px;
+      background: #fff;
+      border: 1px solid var(--line);
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      margin-top: 5px;
+      border-radius: 50%;
+      background: var(--good);
+    }
+
+    .dot.warn { background: var(--warn); }
+    .dot.bad { background: var(--bad); }
+
+    .audit-item strong {
+      display: block;
+      font-size: .9rem;
+    }
+
+    .audit-item span {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: .82rem;
+      line-height: 1.35;
+    }
+
+    .publication-pack {
+      padding: 14px 16px 18px;
+      display: grid;
+      gap: 10px;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 260px;
+      resize: vertical;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px;
+      font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      color: var(--ink);
+      background: #fff;
+    }
+
+    #csvBtn, #jsonBtn, #svgBtn {
+      display: none;
+    }
+
+    .export-actions {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+
+    .export-actions button,
+    .export-actions .back-link {
+      width: 100%;
+    }
+
+    .export-hint {
+      color: var(--muted);
+      font-size: .82rem;
+      line-height: 1.35;
+    }
+
+    .status {
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: .9rem;
+    }
+
+    .error {
+      margin-top: 18px;
+      border: 1px solid rgba(185, 28, 28, .3);
+      background: rgba(254, 226, 226, .8);
+      color: #7f1d1d;
+      border-radius: 18px;
+      padding: 16px;
+      display: none;
+    }
+
+    .loading {
+      padding: 28px;
+      color: var(--muted);
+      font-weight: 800;
+    }
+
+    @media (max-width: 1120px) {
+      .hero, .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-actions {
+        justify-content: flex-start;
+      }
+
+      .filters {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .kpis {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .sector-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 680px) {
+      .page {
+        width: min(100vw - 20px, 1380px);
+      }
+
+      .filters, .kpis {
+        grid-template-columns: 1fr;
+      }
+
+      .hero {
+        padding: 20px;
+      }
+    }
+  
+    /* DEFISPROS018 — ergonomie workflow */
+    .hero {
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      padding: 22px;
+    }
+
+    .hero h1,
+    h1 {
+      max-width: 520px;
+      font-size: clamp(2rem, 3vw, 3.25rem);
+      letter-spacing: -.055em;
+    }
+
+    .hero-actions {
+      align-items: center;
+      max-width: 620px;
+    }
+
+    #csvBtn,
+    #jsonBtn,
+    #svgBtn,
+    #svgTemplateInput {
+      display: none !important;
+    }
+
+    .filters {
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      align-items: end;
+    }
+
+    .layout {
+      grid-template-columns: minmax(0, 1fr) 400px;
+      gap: 18px;
+    }
+
+    .side {
+      display: grid;
+      gap: 18px;
+      align-content: start;
+    }
+
+    #exportManagerPanel {
+      order: 1;
+      border-color: rgba(201, 74, 44, .28);
+    }
+
+    #auditPanel {
+      order: 2;
+    }
+
+    #publicationPackPanel {
+      order: 3;
+    }
+
+    #exportManagerPanel .panel-head {
+      background: linear-gradient(90deg, rgba(201, 74, 44, .13), rgba(255,255,255,.92));
+    }
+
+    #exportManagerPanel .publication-pack {
+      gap: 12px;
+    }
+
+    #exportManagerPanel .field {
+      margin-bottom: 2px;
+    }
+
+    #exportSelectedBtn {
+      padding: 13px 14px;
+      font-size: .95rem;
+    }
+
+    #exportAllVisibleBtn {
+      opacity: .9;
+    }
+
+    #deleteSvgTemplateBtn {
+      color: var(--bad);
+      background: #fff;
+      border: 1px solid rgba(185, 28, 28, .22);
+    }
+
+    .export-actions .back-link {
+      cursor: pointer;
+    }
+
+    .kpis {
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    }
+
+    .sector-grid {
+      grid-template-columns: repeat(auto-fit, minmax(390px, 1fr));
+    }
+
+    .sector-card {
+      background: rgba(255, 250, 243, .94);
+    }
+
+    .rank-row {
+      grid-template-columns: 30px minmax(0, 1fr) minmax(80px, auto);
+    }
+
+    .publication-pack textarea {
+      min-height: 220px;
+    }
+
+    @media (max-width: 1180px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .side {
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      }
+
+      #exportManagerPanel,
+      #auditPanel,
+      #publicationPackPanel {
+        order: initial;
+      }
+    }
+
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <div>
+        <div class="badge">Prototype MLCFlux · Défis des pros</div>
+        <h1>Atelier Défis des pros</h1>
+        <p class="subtitle">
+          Vue de test pour transformer les données professionnelles en résultats trimestriels :
+          top reçus, top réutilisation, taux de réutilisation, audit des anomalies et pack de publication.
+        </p>
+        <div id="status" class="status">Chargement initial…</div>
+        <div class="status" style="font-size:.82rem;">
+          Les exports utilisent les filtres affichés : période, secteur, top, seuil et mode.
+        </div>
+      </div>
+      <div class="hero-actions">
+        <a href="/" class="back-link">← Retour MLCFlux</a>
+        <a href="/static/defis-pros-test.html" class="back-link">Recharger la vue</a>
+        
+        <button id="refreshBtn">Recalculer</button>
+        <button id="csvBtn" class="secondary">Exporter CSV visible</button>
+        <button id="jsonBtn" class="secondary">Exporter JSON visible</button>
+        <input id="svgTemplateInput" type="file" accept=".svg,image/svg+xml" style="display:none">
+        <button id="svgBtn" class="secondary">Exporter SVG visible</button>
+
+      </div>
+    </section>
+
+    <section class="filters">
+      <div class="field">
+        <label for="startDate">Début période</label>
+        <input id="startDate" type="date" value="2026-01-01">
+      </div>
+      <div class="field">
+        <label for="endDate">Fin période</label>
+        <input id="endDate" type="date" value="2026-03-31">
+      </div>
+      <div class="field">
+        <label for="topN">Top</label>
+        <select id="topN">
+          <option value="3" selected>Top 3</option>
+          <option value="5">Top 5</option>
+          <option value="10">Top 10</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="mode">Mode</label>
+        <select id="mode">
+          <option value="public" selected>Public</option>
+          <option value="interne">Interne</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="minReceived">Seuil reçu ratio</label>
+        <input id="minReceived" type="number" min="0" step="50" value="500">
+      </div>
+      <div class="field">
+        <label for="minEmittedForRate">Seuil dépensé ratio</label>
+        <input id="minEmittedForRate" type="number" min="0" step="100" value="2000">
+      </div>
+      <div class="field">
+        <label for="sectorFilter">Secteur</label>
+        <select id="sectorFilter">
+          <option value="">Tous les secteurs</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="internalAccounts">Comptes Gonette</label>
+        <select id="internalAccounts">
+          <option value="exclude" selected>Exclure P0000/P9999</option>
+          <option value="include">Inclure</option>
+        </select>
+      </div>
+    </section>
+
+    <div id="error" class="error"></div>
+
+    <section class="kpis">
+      <article class="kpi">
+        <label>Pros analysés</label>
+        <div id="kpiPros" class="value">—</div>
+        <div class="caption">après filtres</div>
+      </article>
+      <article class="kpi">
+        <label>Total reçu</label>
+        <div id="kpiReceived" class="value">—</div>
+        <div class="caption">gonettes encaissées</div>
+      </article>
+      <article class="kpi">
+        <label>Total émis</label>
+        <div id="kpiEmitted" class="value">—</div>
+        <div class="caption">gonettes réutilisées</div>
+      </article>
+      <article class="kpi">
+        <label>Taux moyen</label>
+        <div id="kpiRate" class="value">—</div>
+        <div class="caption">émis / reçu</div>
+      </article>
+      <article class="kpi">
+        <label>Secteurs</label>
+        <div id="kpiSectors" class="value">—</div>
+        <div class="caption">secteurs simplifiés</div>
+      </article>
+    </section>
+
+    <section class="layout">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Classements par secteur</h2>
+          <p>Trois palmarès publics regroupés selon les 7 secteurs simplifiés des Défis des pros.</p>
+        </div>
+        <div id="rankings" class="sector-grid">
+          <div class="loading">Chargement des classements…</div>
+        </div>
+      </div>
+
+      <aside class="side">
+        <div id="auditPanel" class="panel">
+          <div class="panel-head">
+            <h2>Contrôle qualité</h2>
+            <p>Alertes avant publication des résultats.</p>
+          </div>
+          <div id="audit" class="audit-list"></div>
+        </div>
+
+        <div id="exportManagerPanel" class="panel">
+          <div class="panel-head">
+            <h2>Préparer un export</h2>
+            <p>Choisir un modèle, un format et un secteur avant de lancer l’export.</p>
+          </div>
+          <div class="publication-pack">
+            <div class="field">
+              <label for="exportFormat">Format</label>
+              <select id="exportFormat">
+                <option value="svg" selected>SVG affiche</option>
+                <option value="pdf">PDF via navigateur</option>
+                <option value="json">JSON données affiches</option>
+                <option value="csv">CSV classements</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="svgTemplateSelect">Modèle d’affiche</label>
+              <select id="svgTemplateSelect">
+                <option value="">Aucun modèle enregistré</option>
+              </select>
+            </div>
+
+            <div class="export-actions">
+              <label class="back-link" title="Ajouter ou remplacer un modèle SVG">
+                Ajouter / remplacer un modèle SVG
+                <input id="svgTemplateStoreInput" type="file" accept=".svg,image/svg+xml" style="display:none">
+              </label>
+              <button id="deleteSvgTemplateBtn" class="ghost">Supprimer le modèle sélectionné</button>
+            </div>
+
+            <div id="svgTemplateSummary" class="export-hint">
+              Les modèles SVG importés sont mémorisés dans ce navigateur.
+            </div>
+
+            <div class="field">
+              <label for="exportSector">Secteur cible</label>
+              <select id="exportSector"></select>
+            </div>
+
+            <div class="export-actions">
+              <button id="exportSelectedBtn">Exporter le secteur sélectionné</button>
+              <button id="exportAllVisibleBtn" class="secondary">Exporter tous les secteurs filtrés</button>
+            </div>
+
+            <div id="exportSummary" class="export-hint">
+              Les secteurs disponibles apparaîtront après le calcul des classements.
+            </div>
+          </div>
+        </div>
+
+        <div id="publicationPackPanel" class="panel">
+          <div class="panel-head">
+            <h2>Pack newsletter / site</h2>
+            <p>Sortie éditoriale générée depuis les classements.</p>
+          </div>
+          <div class="publication-pack">
+            <button id="copyBtn" class="secondary" style="width:100%;margin-bottom:10px;">Copier le texte newsletter / site</button>
+            <textarea id="pack" spellcheck="false"></textarea>
+          </div>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+<script src="/static/js/defis-pros-test.js?v=20260603_130423"></script>
+</body>
+</html>

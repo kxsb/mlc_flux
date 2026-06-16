@@ -1,0 +1,113 @@
+# Secrets / configuration locale
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+# Environnements virtuels
+venv/
+.venv/
+# SQLite / données locales
+server/data/*.db
+server/data/*.sqlite
+server/data/*.sqlite3
+# Logs
+*.log
+logs/
+server/logs/
+# Exports / artefacts temporaires
+_export_code/
+exports/
+tmp/
+*.tmp
+# Backups techniques créés pendant le développement
+*.bak_*
+*.before
+*.after
+backup/
+backups/
+# OS / éditeurs
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+# Données locales MLCFlux — jamais publier
+server/data/user_mapping.json
+server/data/device_private_actor_registry.json
+server/data/actor_user_links.json
+server/data/professional_actor_user_links.json
+server/data/consumption_postal_areas.json
+server/data/professional_chain_fate_summary.json
+server/data/locks/
+# Audits, diffs et sauvegardes de travail
+_audit_*/
+_audits/
+_audit_archive/
+_backups/
+_diffs/
+# États de patch et fichiers de travail divers
+*.failed
+*.broken_*
+*.before_*
+*.after_*
+*_pre_patch_hits.txt
+server/data/instances/*/private_actor_mapping.json
+server/data/instances/*/professional_mapping.json
+# ------------------------------------------------------------------
+# MLCFlux — secrets / runtime / données sensibles
+# Environnements / secrets
+*.key
+*.pem
+*.crt
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+secrets.*
+*secret*
+*token*
+credentials*
+service_account*.json
+# Bases locales / exports / données réelles
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.bak
+*.backup
+*.csv
+*.xlsx
+*.xls
+*.ods
+*.zip
+*.7z
+*.tar
+*.tar.gz
+# Données runtime MLCFlux potentiellement sensibles
+server/data/*.sqlite*
+server/data/*mapping*.json
+server/data/*registry*.json
+server/data/*cyclos*.json
+server/data/*odoo*.json
+server/data/*export*.json
+server/data/*raw*.json
+# Backups / audits / logs / caches
+_audit_exports/
+audit_exports/
+*.pyc
+.ruff_cache/
+# Environnements locaux
+node_modules/
+dist/
+build/
+# MLCFlux multi — fichiers locaux/sensibles à ne pas versionner
+server/mlc_secrets.py
+server/data/prenoms.csv
+# MLCFlux multi — sécurité / runtime
+_tmp_*

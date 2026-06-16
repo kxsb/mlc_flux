@@ -1,0 +1,484 @@
+{
+  "id": "graine",
+  "name": "La Graine",
+  "short_name": "Graine",
+  "currency_name": "Graine",
+  "currency_symbol": "G",
+  "status": "work_in_progress",
+  "description": "Instance de travail prioritaire pour adapter MLCFlux à une autre monnaie locale basée sur Cyclos.",
+  "data_strategy": "full_instance",
+  "sources": {
+    "cyclos": true,
+    "odoo": false
+  },
+  "features": {
+    "transactions": true,
+    "professional_directory": true,
+    "professional_details": true,
+    "network": true,
+    "territories": false,
+    "sector_analysis": false,
+    "monetary_indicators": false,
+    "individual_balances": false,
+    "tickets": false
+  },
+  "classification": {
+    "conversion_source_labels": [],
+    "reconversion_target_labels": [],
+    "operator_accounts": []
+  },
+  "known_differences": [
+    "Pas de source Odoo disponible.",
+    "Les secteurs d'activité Gonette/Odoo ne doivent pas être supposés.",
+    "Le SIREN pourrait devenir une clé d'enrichissement si disponible côté Cyclos.",
+    "Les comptes techniques de conversion/reconversion doivent être audités avant classification."
+  ],
+  "actor_classification": {
+    "strategy": "account_type_internal_name",
+    "families_by_actor_type_internal": {
+      "monCompte": "U",
+      "MonComptePro": "P",
+      "emissionNum": "T",
+      "stockBch": "T",
+      "compteBillets": "T",
+      "conversionNumerique": "T",
+      "stockCoffreCentral": "T",
+      "histoDepotPrestataire": "T",
+      "compteurBonus": "T",
+      "emissionBonusAsso": "T",
+      "compteProBillets": "T",
+      "technique": "T",
+      "comptaCollecteBCH": "T",
+      "numeriqueCompteDedie": "T",
+      "billetCompteNantissement": "T",
+      "vueStockBCH": "T",
+      "histoLivraison": "T"
+    },
+    "private_actor_type_internal_names": [
+      "monCompte"
+    ],
+    "professional_actor_type_internal_names": [
+      "MonComptePro"
+    ],
+    "technical_actor_type_internal_names": [
+      "emissionNum",
+      "stockBch",
+      "compteBillets",
+      "conversionNumerique",
+      "stockCoffreCentral",
+      "histoDepotPrestataire",
+      "compteurBonus",
+      "emissionBonusAsso",
+      "compteProBillets",
+      "technique",
+      "comptaCollecteBCH",
+      "numeriqueCompteDedie",
+      "billetCompteNantissement",
+      "vueStockBCH",
+      "histoLivraison"
+    ],
+    "notes": [
+      "La Graine n’expose pas de préfixes U/P fiables dans user.display.",
+      "La classification doit s’appuyer prioritairement sur actor.type.internalName.",
+      "emissionNum.payzenCredits semble correspondre aux alimentations numériques.",
+      "stockBch / compteBillets doivent rester classés techniques tant que leur sémantique métier n’est pas stabilisée.",
+      "Types techniques La Graine ajoutés après dry-run 365 jours : conversionNumerique, stockCoffreCentral, histoDepotPrestataire.",
+      "Types techniques La Graine ajoutés après dry-run 365 jours étendu : conversionNumerique, stockCoffreCentral, histoDepotPrestataire, compteurBonus, emissionBonusAsso, compteProBillets, technique, comptaCollecteBCH. Les acteurs absents/null sont provisoirement classés T_ActeurIndéterminé.",
+      "Les acteurs sans actor.type.internalName sont provisoirement classés T_ActeurIndéterminé pour les flux techniques de collecte BCH.",
+      "Type technique La Graine ajouté après full build dry-run : numeriqueCompteDedie.",
+      "Types techniques La Graine ajoutés après full dry-run historique : billetCompteNantissement, vueStockBCH.",
+      "Type technique La Graine ajouté après full build écrit aborté : histoLivraison.",
+      "Les particuliers sont pseudonymisés par mapping stable à prénoms, sans exposer les identifiants Cyclos bruts."
+    ],
+    "professional_ref_strategy": "stable_sequence_mapping",
+    "professional_mapping": {
+      "mapping_file": "professional_mapping.json",
+      "prefix": "P",
+      "width": 4,
+      "key_priority": [
+        "actor.number",
+        "actor.id",
+        "actor.user.id"
+      ]
+    },
+    "missing_actor_family": "T",
+    "missing_actor_label": "T_ActeurIndéterminé",
+    "private_actor_mapping": {
+      "strategy": "firstname_sequence_mapping",
+      "firstname_dictionary": "server/data/prenoms.csv"
+    }
+  },
+  "professional_enrichment": {
+    "provider": "cyclos_user_profile",
+    "status": "available_to_implement",
+    "match_strategy": "cyclos_actor_user_id_from_transactions",
+    "professional_actor_type_internal_names": [
+      "MonComptePro"
+    ],
+    "stable_identifiers": {
+      "primary": "actor.user.id",
+      "secondary": "actor.id",
+      "account_number": "actor.number"
+    },
+    "source_endpoints": {
+      "user_profile": "/users/{user_id}",
+      "primary_address": "/{user_id}/addresses/primary",
+      "images": "/{user_id}/images"
+    },
+    "field_mapping": {
+      "professional_ref": {
+        "source": "actor.number",
+        "storage": "external_professional_ref"
+      },
+      "cyclos_user_id": {
+        "source": "actor.user.id",
+        "storage": "cyclos_user_id"
+      },
+      "cyclos_actor_id": {
+        "source": "actor.id",
+        "storage": "cyclos_actor_id"
+      },
+      "display_name": {
+        "source": "customValues.nomEnseigne.stringValue",
+        "fallback": "user.display"
+      },
+      "legal_name": {
+        "source": "customValues.raisonSociale.stringValue"
+      },
+      "industry_name": {
+        "source": "customValues.categoriePro.enumeratedValues[0].value"
+      },
+      "industry_internal_name": {
+        "source": "customValues.categoriePro.enumeratedValues[0].internalName"
+      },
+      "secondary_industries": {
+        "source": "customValues.catPro.enumeratedValues[].value"
+      },
+      "secondary_industry_internal_names": {
+        "source": "customValues.catPro.enumeratedValues[].internalName"
+      },
+      "payment_methods_accepted": {
+        "source": "customValues.typePaiementAccepte.enumeratedValues[].value"
+      },
+      "detailed_activity": {
+        "source": "customValues.descriptionDetail.stringValue"
+      },
+      "short_description": {
+        "source": "customValues.about.stringValue"
+      },
+      "keywords": {
+        "source": "customValues.keywords.stringValue"
+      },
+      "website": {
+        "source": "customValues.siteinternet.stringValue"
+      },
+      "siret": {
+        "source": "customValues.sirene.stringValue",
+        "normalization": "digits_only_if_14"
+      },
+      "siren": {
+        "source": "customValues.sirene.stringValue",
+        "normalization": "first_9_digits_if_siret"
+      },
+      "street": {
+        "source": "primary_address.addressLine1",
+        "fallback": "user.addresses[].defaultAddress.addressLine1"
+      },
+      "zip": {
+        "source": "primary_address.zip",
+        "fallback": "user.addresses[].defaultAddress.zip"
+      },
+      "city": {
+        "source": "primary_address.city",
+        "fallback": "user.addresses[].defaultAddress.city"
+      },
+      "latitude": {
+        "source": "primary_address.location.latitude",
+        "fallback": "user.addresses[].defaultAddress.location.latitude"
+      },
+      "longitude": {
+        "source": "primary_address.location.longitude",
+        "fallback": "user.addresses[].defaultAddress.location.longitude"
+      },
+      "cyclos_group": {
+        "source": "user.group.internalName"
+      },
+      "cyclos_group_name": {
+        "source": "user.group.name"
+      },
+      "cyclos_group_set": {
+        "source": "user.groupSet.name"
+      }
+    },
+    "excluded_sensitive_fields": [
+      "lastnameContact",
+      "firstnameContact",
+      "courrielAdministratif",
+      "telAdministratif",
+      "compteParticulierId",
+      "telechargezRib",
+      "numIban",
+      "numBic",
+      "infoCommentaire"
+    ],
+    "custom_value_extraction_rules": {
+      "string": "customValues.<internalName>.stringValue",
+      "richText": "customValues.<internalName>.stringValue",
+      "text": "customValues.<internalName>.stringValue",
+      "url": "customValues.<internalName>.stringValue",
+      "singleSelection": "customValues.<internalName>.enumeratedValues[0].value",
+      "multiSelection": "customValues.<internalName>.enumeratedValues[].value",
+      "checkbox": "customValues.<internalName>.enumeratedValues[].value",
+      "decimal": "customValues.<internalName>.decimalValue",
+      "date": "customValues.<internalName>.dateValue"
+    },
+    "notes": [
+      "La Graine ne dispose pas d’Odoo ; l’enrichissement professionnel passe par les fiches utilisateurs Cyclos.",
+      "Les catégories sont disponibles dans customValues.categoriePro / customValues.catPro via enumeratedValues.",
+      "Le champ sirene contient apparemment des SIRET à 14 chiffres ; conserver le SIRET brut normalisé et dériver le SIREN.",
+      "Les champs de contact, RIB, IBAN, BIC et commentaires internes sont exclus par défaut."
+    ]
+  },
+  "transaction_semantics": {
+    "classifier_version": "transaction_semantics_v0.3_profile_rules_graine_c2",
+    "actor_family_rules": [
+      {
+        "name": "device_private",
+        "label_startswith": "UD_",
+        "actor_family": "individual_device"
+      },
+      {
+        "name": "individual",
+        "label_startswith": "U_",
+        "actor_family": "individual"
+      },
+      {
+        "name": "operator_accounts",
+        "label_in": [
+          "P0000",
+          "P9999"
+        ],
+        "actor_family": "operator"
+      },
+      {
+        "name": "professional_ref",
+        "label_regex": "^P[0-9]{4,}$",
+        "actor_family": "professional"
+      },
+      {
+        "name": "paper_stock_or_exchange",
+        "label_startswith": "T_",
+        "label_contains_any": [
+          "stock",
+          "bch"
+        ],
+        "actor_family": "exchange_office_or_stock"
+      },
+      {
+        "name": "system",
+        "label_startswith": "T_",
+        "actor_family": "system"
+      }
+    ],
+    "account_medium_rules": [
+      {
+        "name": "bonus",
+        "label_contains_any": [
+          "bonus",
+          "compteurbonus"
+        ],
+        "account_medium": "bonus"
+      },
+      {
+        "name": "guarantee",
+        "label_contains_any": [
+          "nantissement",
+          "garantie"
+        ],
+        "account_medium": "guarantee"
+      },
+      {
+        "name": "paper_stock",
+        "label_contains_any": [
+          "stockbillets",
+          "stockcoffrecentral",
+          "coffrecentral"
+        ],
+        "account_medium": "paper_stock"
+      },
+      {
+        "name": "paper",
+        "label_contains_any": [
+          "billets",
+          "billet",
+          "compteprobillets"
+        ],
+        "account_medium": "paper"
+      }
+    ],
+    "operation_rules": [
+      {
+        "name": "paper_exchange_to_individual",
+        "type_label_contains_all": [
+          "bch2c",
+          "change"
+        ],
+        "operation_kind": "paper_exchange_to_individual",
+        "monetary_circuit": "monetary_supply",
+        "confidence": "high"
+      },
+      {
+        "name": "paper_exchange_to_professional",
+        "type_label_contains_all": [
+          "bch2b",
+          "change"
+        ],
+        "operation_kind": "paper_exchange_to_professional",
+        "monetary_circuit": "monetary_supply",
+        "confidence": "high"
+      },
+      {
+        "name": "paper_stock_delivery",
+        "type_label_contains_any": [
+          "livraison coffre central vers bch",
+          "s2bch"
+        ],
+        "operation_kind": "paper_stock_delivery",
+        "monetary_circuit": "paper_logistics",
+        "confidence": "high"
+      },
+      {
+        "name": "paper_stock_return",
+        "type_label_contains_any": [
+          "ré intégration billets",
+          "re intégration billets",
+          "bch2s",
+          "entrée en stock",
+          "entree en stock"
+        ],
+        "operation_kind": "paper_stock_return",
+        "monetary_circuit": "paper_logistics",
+        "confidence": "high"
+      },
+      {
+        "name": "paper_stock_initial_receipt",
+        "type_label_contains_any": [
+          "réception livraison billet vers stock",
+          "reception livraison billet vers stock"
+        ],
+        "operation_kind": "paper_stock_initial_receipt",
+        "monetary_circuit": "paper_logistics",
+        "confidence": "high"
+      },
+      {
+        "name": "paper_deposit_to_professional_account",
+        "type_label_contains_any": [
+          "bch2bdepotbilletscreditcpte",
+          "depot billets credit cpte",
+          "dépôtbilletscreditcpte"
+        ],
+        "operation_kind": "paper_deposit_to_professional_account",
+        "monetary_circuit": "paper_to_digital",
+        "confidence": "high"
+      },
+      {
+        "name": "paper_cash_collection_recovery",
+        "type_label_contains_any": [
+          "recouvrement des encaissements billets"
+        ],
+        "operation_kind": "paper_cash_collection_recovery",
+        "monetary_circuit": "paper_accounting",
+        "confidence": "high"
+      },
+      {
+        "name": "bonus_issuance",
+        "type_label_contains_any": [
+          "bonus 2%"
+        ],
+        "operation_kind": "bonus_issuance",
+        "monetary_circuit": "bonus",
+        "confidence": "high"
+      },
+      {
+        "name": "historical_digital_credit_replay",
+        "type_label_contains_any": [
+          "t2scopiecreditparticulier",
+          "t2scopiecreditprestataire"
+        ],
+        "operation_kind": "historical_digital_credit_replay",
+        "monetary_circuit": "technical_migration",
+        "confidence": "medium"
+      },
+      {
+        "name": "historical_professional_reconversion_replay",
+        "type_label_contains_any": [
+          "t2scopieconversionpro"
+        ],
+        "operation_kind": "historical_professional_reconversion_replay",
+        "monetary_circuit": "technical_migration",
+        "confidence": "medium"
+      },
+      {
+        "name": "paper_deposit_to_digital_dedicated_account",
+        "type_label_contains_any": [
+          "s2semissiondédiénumériquesuitedépôt",
+          "s2semissiondedienumeriquesuitedepot"
+        ],
+        "operation_kind": "paper_deposit_to_digital_dedicated_account",
+        "monetary_circuit": "paper_to_digital",
+        "confidence": "high"
+      },
+      {
+        "name": "historical_paper_stock_replay",
+        "type_label_contains_any": [
+          "t2scopiecreditcoffreversstockbch",
+          "s2tcopiestockbchdistribution"
+        ],
+        "operation_kind": "paper_stock_historical_replay",
+        "monetary_circuit": "technical_migration",
+        "confidence": "medium"
+      },
+      {
+        "name": "regularization",
+        "type_label_contains_any": [
+          "raz",
+          "régularisation",
+          "regularisation",
+          "annulation"
+        ],
+        "operation_kind": "regularization",
+        "monetary_circuit": "technical_adjustment",
+        "confidence": "high"
+      }
+    ]
+  },
+  "monetary_indicators": {
+    "source": "cyclos_technical_balances",
+    "technical_accounts": {
+      "paper_guarantee": {
+        "label": "T_billetCompteNantissement",
+        "actor_id": "7636759574749530710",
+        "actor_number": "728747",
+        "account_type": "billetCompteNantissement",
+        "name": "Billets 6 Compte de Nantissement"
+      },
+      "digital_dedicated": {
+        "label": "T_numeriqueCompteDedie",
+        "actor_id": "7636759574750114390",
+        "actor_number": "001765",
+        "account_type": "numeriqueCompteDedie",
+        "name": "Numérique 3 Compte dédié"
+      }
+    },
+    "notes": [
+      "Source cible : soldes des comptes techniques Cyclos.",
+      "En attendant validation de balances-history technique, le service peut exposer un proxy par flux."
+    ],
+    "operator_professional_refs": [
+      "P0053"
+    ]
+  },
+  "operator_accounts": [
+    "P0053"
+  ]
+}

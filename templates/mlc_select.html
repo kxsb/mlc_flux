@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>MLCFlux — sélection de la monnaie locale</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <style>
+    :root {
+      --bg: #fbf6ee;
+      --panel: #ffffff;
+      --ink: #221f1c;
+      --muted: #6f625b;
+      --border: rgba(154, 119, 92, 0.24);
+      --accent: #e85b2a;
+      --accent-dark: #bd3f20;
+      --shadow: rgba(91, 57, 31, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 20% 10%, rgba(232, 91, 42, 0.12), transparent 28rem),
+        radial-gradient(circle at 80% 85%, rgba(47, 127, 159, 0.10), transparent 26rem),
+        var(--bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    main {
+      width: min(1080px, 100%);
+    }
+
+    .hero {
+      margin-bottom: 2rem;
+    }
+
+    .eyebrow {
+      color: var(--accent-dark);
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-size: 0.78rem;
+      margin-bottom: 0.75rem;
+    }
+
+    h1 {
+      font-size: clamp(2.1rem, 5vw, 4.5rem);
+      line-height: 0.95;
+      margin: 0 0 1rem;
+      letter-spacing: -0.05em;
+    }
+
+    .intro {
+      max-width: 720px;
+      color: var(--muted);
+      font-size: 1.08rem;
+      line-height: 1.55;
+      margin: 0;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1rem;
+    }
+
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 1.25rem;
+      background: rgba(255, 255, 255, 0.82);
+      box-shadow: 0 20px 50px var(--shadow);
+      padding: 1.35rem;
+      cursor: pointer;
+      text-align: left;
+      transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+    }
+
+    .card:hover,
+    .card:focus-visible {
+      transform: translateY(-3px);
+      border-color: rgba(232, 91, 42, 0.58);
+      box-shadow: 0 26px 70px rgba(91, 57, 31, 0.18);
+      outline: none;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .card-title {
+      font-size: 1.35rem;
+      font-weight: 800;
+      margin: 0;
+    }
+
+    .badge {
+      border-radius: 999px;
+      padding: 0.25rem 0.65rem;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--accent-dark);
+      background: rgba(232, 91, 42, 0.10);
+      white-space: nowrap;
+    }
+
+    .desc {
+      color: var(--muted);
+      line-height: 1.45;
+      margin: 0 0 1rem;
+    }
+
+    .features {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-bottom: 1rem;
+    }
+
+    .feature {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.22rem 0.55rem;
+      color: var(--muted);
+      font-size: 0.78rem;
+      background: rgba(255, 255, 255, 0.70);
+    }
+
+    .action {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      color: var(--accent-dark);
+      font-weight: 800;
+    }
+
+    .loading,
+    .error {
+      border: 1px dashed var(--border);
+      border-radius: 1rem;
+      padding: 1rem;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.65);
+    }
+
+    .error {
+      color: #8a2d20;
+      border-color: rgba(138, 45, 32, 0.35);
+    }
+  </style>
+</head>
+
+<body>
+  <main>
+    <section class="hero">
+      <div class="eyebrow">MLCFlux multi-MLC</div>
+      <h1>Choisir une monnaie locale</h1>
+      <p class="intro">
+        Cette instance sert à préparer une version multi-monnaies de MLCFlux.
+        Sélectionne le cadre de travail avant d’entrer dans l’interface.
+      </p>
+    </section>
+
+    <section id="mlc-grid" class="grid">
+      <div class="loading">Chargement des monnaies locales disponibles…</div>
+    </section>
+  </main>
+
+  <script>
+    const STORAGE_KEY = "mlcflux.activeMlcId";
+    const STORAGE_LABEL_KEY = "mlcflux.activeMlcName";
+
+    function enabledFeatureLabels(features) {
+      const labels = {
+        transactions: "Transactions",
+        professional_directory: "Annuaire pros",
+        professional_details: "Fiches pros",
+        network: "Réseau",
+        territories: "Territoires",
+        sector_analysis: "Secteurs",
+        monetary_indicators: "Pilotage monétaire",
+        individual_balances: "Soldes particuliers"
+      };
+
+      return Object.entries(labels)
+        .filter(([key]) => features && features[key])
+        .map(([, label]) => label);
+    }
+
+    async function selectInstance(instance) {
+      const response = await fetch("/api/select-mlc", {
+        method: "POST",
+        headers: {
+          "Accept": "application/json",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ mlc_id: instance.id })
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || `HTTP ${response.status}`);
+      }
+
+      const payload = await response.json();
+      const activeMlc = payload.active_mlc || instance;
+
+      localStorage.setItem(STORAGE_KEY, activeMlc.id);
+      localStorage.setItem(STORAGE_LABEL_KEY, activeMlc.name);
+      window.location.href = "/app";
+    }
+
+    function renderInstances(instances) {
+      const grid = document.getElementById("mlc-grid");
+
+      if (!instances.length) {
+        grid.innerHTML = '<div class="error">Aucune monnaie locale configurée.</div>';
+        return;
+      }
+
+      grid.innerHTML = "";
+
+      instances.forEach((instance) => {
+        const card = document.createElement("button");
+        card.type = "button";
+        card.className = "card";
+        card.addEventListener("click", async () => {
+          card.disabled = true;
+
+          try {
+            await selectInstance(instance);
+          } catch (error) {
+            card.disabled = false;
+            alert(`Impossible de sélectionner cette monnaie locale : ${error.message}`);
+          }
+        });
+
+        const featureLabels = enabledFeatureLabels(instance.features).slice(0, 6);
+        const featuresHtml = featureLabels.length
+          ? featureLabels.map(label => `<span class="feature">${label}</span>`).join("")
+          : '<span class="feature">Configuration en cours</span>';
+
+        card.innerHTML = `
+          <div class="card-header">
+            <h2 class="card-title">${instance.name}</h2>
+            <span class="badge">${instance.status}</span>
+          </div>
+          <p class="desc">${instance.description || "Instance MLCFlux."}</p>
+          <div class="features">${featuresHtml}</div>
+          <span class="action">Entrer dans l’interface →</span>
+        `;
+
+        grid.appendChild(card);
+      });
+    }
+
+    async function init() {
+      const grid = document.getElementById("mlc-grid");
+
+      try {
+        const response = await fetch("/api/mlc-instances", {
+          headers: { "Accept": "application/json" }
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const payload = await response.json();
+        renderInstances(payload.instances || []);
+      } catch (error) {
+        grid.innerHTML = `
+          <div class="error">
+            Impossible de charger les monnaies locales disponibles.
+            <br>
+            ${error.message}
+          </div>
+        `;
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
