@@ -1,5 +1,24 @@
 from server import create_app
 from flask import render_template, request, jsonify
+
+# AUTH_FLOW001_PUBLIC_SELECTOR
+PUBLIC_AUTH_PATH_PREFIXES = (
+    "/",
+    "/login",
+    "/logout",
+    "/static/",
+    "/favicon.ico",
+    "/api/mlc-instances",
+    "/api/current-mlc",
+    "/api/mlc/current",
+)
+
+def is_public_auth_path(path):
+    """Return True for routes visible before authentication."""
+    if path == "/":
+        return True
+    return any(path == prefix or path.startswith(prefix) for prefix in PUBLIC_AUTH_PATH_PREFIXES if prefix != "/")
+
 from server.services.monetary_indicators_adaptive import get_adaptive_monetary_indicators
 import os
 

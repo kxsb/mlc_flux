@@ -6,16 +6,35 @@ from server.routes.auth import current_user
 
 
 PUBLIC_PATHS = {
+    "/",
     "/login",
     "/logout",
     "/api/health",
     "/api/me",
+    "/api/mlc-instances",
+    "/api/current-mlc",
+    "/api/mlc/current",
+    "/api/select-mlc",
+    "/api/account-requests",
     "/favicon.ico",
+    "/robots.txt",
 }
 
 PUBLIC_PREFIXES = (
     "/static/",
 )
+
+PUBLIC_ENDPOINTS = {
+    "static",
+    "mlc_select",
+    "auth.login",
+    "auth.logout",
+    "auth.api_me",
+    "mlc_instances.mlc_instances",
+    "mlc_instances.current_mlc",
+    "mlc_instances.select_mlc",
+    "account_requests.create_account_request",
+}
 
 
 def _is_public_request_path(path: str) -> bool:
@@ -26,6 +45,11 @@ def _is_public_request_path(path: str) -> bool:
         return True
 
     return any(path.startswith(prefix) for prefix in PUBLIC_PREFIXES)
+
+
+def _is_public_endpoint() -> bool:
+    endpoint = request.endpoint
+    return bool(endpoint and endpoint in PUBLIC_ENDPOINTS)
 
 
 def _wants_json_response(path: str) -> bool:
@@ -41,7 +65,10 @@ def install_auth_guard(app):
     def require_authenticated_user():
         path = request.path or "/"
 
-        if _is_public_request_path(path):
+        # AUTH_FLOW005_PUBLIC_SELECTOR
+        # Le sélecteur de MLC et les routes nécessaires à son affichage
+        # sont visibles avant connexion. Les données métier restent protégées.
+        if _is_public_request_path(path) or _is_public_endpoint():
             return None
 
         user = current_user()

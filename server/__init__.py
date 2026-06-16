@@ -1,8 +1,9 @@
 from server.auth_guards import install_auth_guard
+from server.security_middleware import install_security_middleware
 from datetime import timedelta
 from server.control_db import init_control_db
 from server.routes.auth import auth_bp
-from flask import Flask
+from flask import Flask, request
 from server.config import Config
 from server.routes.health import health_bp
 from server.routes.transactions import transactions_bp
@@ -11,6 +12,8 @@ from server.routes.legacy_api import legacy_api_bp
 from server.routes.status import status_bp
 from server.routes.info_content import info_content_bp
 from server.routes.admin_integrity import admin_integrity_bp
+from server.routes.admin_accounts import admin_accounts_bp
+from server.routes.account_requests import account_requests_bp
 from server.routes.tickets import tickets_bp
 from server.routes.monetary_indicators import monetary_indicators_bp
 from server.routes.individual_balances import individual_balances_bp
@@ -48,6 +51,8 @@ def create_app():
     app.register_blueprint(status_bp)
     app.register_blueprint(info_content_bp)
     app.register_blueprint(admin_integrity_bp)
+    app.register_blueprint(admin_accounts_bp)
+    app.register_blueprint(account_requests_bp)
     app.register_blueprint(tickets_bp)
     app.register_blueprint(monetary_indicators_bp)
     app.register_blueprint(individual_balances_bp)
@@ -59,6 +64,7 @@ def create_app():
     app.register_blueprint(professional_activity_bp)
     app.register_blueprint(mlc_instances_bp)
 
+    install_security_middleware(app)
     install_auth_guard(app)
 
     return app
