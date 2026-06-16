@@ -28925,3 +28925,112 @@ function getProfessionalConsumptionMapLeanInitialQuery(baseQuery) {
     install();
   }
 })();
+
+
+/* INFO_UNLOCK001_PUBLIC_INFO_METHODOLOGY_VIEW */
+(function () {
+  "use strict";
+
+  const INFO_LABEL_PATTERNS = [
+    "info",
+    "méthodologie",
+    "methodologie",
+    "methodology"
+  ];
+
+  function textMatchesInfoMethodology(value) {
+    const normalized = String(value || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+    return normalized.includes("info") && (
+      normalized.includes("methodologie") ||
+      normalized.includes("methodology") ||
+      normalized.includes("method")
+    );
+  }
+
+  function elementLooksLikeInfoMethodology(element) {
+    if (!element) {
+      return false;
+    }
+
+    const candidates = [
+      element.textContent,
+      element.getAttribute("aria-label"),
+      element.getAttribute("title"),
+      element.getAttribute("data-view"),
+      element.getAttribute("data-section"),
+      element.getAttribute("data-target"),
+      element.getAttribute("href"),
+      element.id,
+      element.className
+    ];
+
+    return candidates.some(textMatchesInfoMethodology);
+  }
+
+  function unlockInfoMethodologyViewEntry() {
+    document
+      .querySelectorAll("a, button, [role='button'], [data-view], [data-section], [data-target], .nav-item, .sidebar-item, .menu-item")
+      .forEach((element) => {
+        if (!elementLooksLikeInfoMethodology(element)) {
+          return;
+        }
+
+        element.hidden = false;
+        element.disabled = false;
+
+        element.removeAttribute("disabled");
+        element.removeAttribute("aria-disabled");
+        element.removeAttribute("data-admin-only");
+        element.removeAttribute("data-requires-admin");
+        element.removeAttribute("data-locked");
+
+        element.classList.remove(
+          "admin-only",
+          "requires-admin",
+          "require-admin",
+          "admin-required",
+          "is-locked",
+          "locked",
+          "disabled",
+          "d-none",
+          "hidden"
+        );
+
+        if (element.style && element.style.display === "none") {
+          element.style.display = "";
+        }
+
+        if (element.style && element.style.pointerEvents === "none") {
+          element.style.pointerEvents = "";
+        }
+      });
+  }
+
+  window.mlcfluxInfoMethodologyViewIsPublic = true;
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", unlockInfoMethodologyViewEntry);
+  } else {
+    unlockInfoMethodologyViewEntry();
+  }
+
+  window.addEventListener("load", unlockInfoMethodologyViewEntry);
+  window.addEventListener("hashchange", unlockInfoMethodologyViewEntry);
+  window.addEventListener("mlcflux:auth-updated", unlockInfoMethodologyViewEntry);
+  window.addEventListener("mlcflux:mlc-changed", unlockInfoMethodologyViewEntry);
+
+  const observer = new MutationObserver(() => {
+    window.requestAnimationFrame(unlockInfoMethodologyViewEntry);
+  });
+
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["class", "hidden", "disabled", "aria-disabled", "data-admin-only", "data-requires-admin", "data-locked"]
+  });
+})();
+
