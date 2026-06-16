@@ -4,48 +4,79 @@
     "filename": "custom_fonctions-cles.md",
     "kicker": "Code",
     "title": "FAQ - Dev",
-    "summary": "foire aux questions principales relatives au code source"
+    "summary": "foire aux questions principales relatives au code source",
+    "section": "archive"
   },
   {
     "slug": "api-extraction-des-donnees",
     "filename": "custom_api-extraction-des-donnees.md",
     "kicker": "Code",
     "title": "API - extraction des données",
-    "summary": "Mode et méthodes de récupérations des données via les API et affichage front end"
+    "summary": "Mode et méthodes de récupérations des données via les API et affichage front end",
+    "section": "archive"
   },
   {
     "slug": "fonction-frontend-interface-ux",
     "filename": "custom_fonction-frontend-interface-ux.md",
     "kicker": "Code",
     "title": "Fonction Frontend, interface & UX",
-    "summary": "Liste des fonctions relatives au front end et à l'affichage de l'interface"
+    "summary": "Liste des fonctions relatives au front end et à l'affichage de l'interface",
+    "section": "archive"
   },
   {
     "slug": "architecture-front-ux",
     "filename": "custom_architecture-front-ux.md",
     "kicker": "Code",
     "title": "Architecture Front-UX",
-    "summary": "constructeur et rôle des différentes composantes de l'interface"
+    "summary": "constructeur et rôle des différentes composantes de l'interface",
+    "section": "archive"
   },
   {
     "slug": "fonctions-critiques",
     "filename": "custom_fonctions-critiques.md",
     "kicker": "Code",
     "title": "Fonctions critiques",
-    "summary": "Fonctions principales du code source (connexion api, classification des données, rendu…,)"
+    "summary": "Fonctions principales du code source (connexion api, classification des données, rendu…,)",
+    "section": "archive"
   },
   {
     "slug": "synthese-et-explication-du-code-source",
     "filename": "custom_synthese-et-explication-du-code-source.md",
     "kicker": "Code",
     "title": "Synthèse et explication du code-source",
-    "summary": "Synthèse des grandes fonctions du cod de MLCFlux"
+    "summary": "Synthèse des grandes fonctions du cod de MLCFlux",
+    "section": "archive"
   },
   {
     "slug": "datas",
     "filename": "custom_datas.md",
     "kicker": "lexique",
     "title": "datas",
-    "summary": "Types et sources des données"
+    "summary": "Types et sources des données",
+    "section": "archive"
+  },
+  {
+    "slug": "0-contexte-de-mlcflux",
+    "filename": "custom_0-contexte-de-mlcflux.md",
+    "kicker": "Documentation",
+    "title": "0 - Contexte de MLCFlux",
+    "summary": "Nouvelle fiche méthodologique à compléter.",
+    "section": "archive"
+  },
+  {
+    "slug": "0-contexte-et-doctrine-de-mlc-flux",
+    "filename": "custom_0-contexte-et-doctrine-de-mlc-flux.md",
+    "kicker": "Documentation",
+    "title": "0 - Contexte et doctrine de MLC Flux",
+    "summary": "Nouvelle fiche méthodologique à compléter.",
+    "section": "guide"
+  },
+  {
+    "slug": "1-fonctionnalites",
+    "filename": "custom_1-fonctionnalites.md",
+    "kicker": "Documentation",
+    "title": "1 - Fonctionnalités",
+    "summary": "Cette fiche présente les grandes fonctionnalités de MLCFlux.",
+    "section": "guide"
   }
 ]

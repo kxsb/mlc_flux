@@ -18480,3 +18480,226 @@ body.dark-mode .info-methodology-lock-dialog {
 .network-graph-library-error p {
   margin: 0;
 }
+
+/* METHODO002A4_INFO_TABS_CSS */
+.info-methodology-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.info-methodology-tab {
+  appearance: none;
+  border: 1px solid var(--border-color, rgba(148, 163, 184, 0.35));
+  border-radius: 16px;
+  padding: 0.9rem 1rem;
+  background: var(--card-bg, rgba(255, 255, 255, 0.92));
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
+  transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.info-methodology-tab:hover,
+.info-methodology-tab:focus-visible {
+  transform: translateY(-1px);
+  border-color: rgba(37, 99, 235, 0.45);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.10);
+  outline: none;
+}
+
+.info-methodology-tab.active {
+  border-color: rgba(37, 99, 235, 0.72);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12), 0 12px 28px rgba(15, 23, 42, 0.10);
+}
+
+.info-methodology-tab-kicker,
+.info-methodology-section-kicker {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.68;
+}
+
+.info-methodology-tab-label {
+  display: block;
+  font-weight: 800;
+  font-size: 1rem;
+}
+
+.info-methodology-section-intro,
+.info-methodology-empty-state {
+  border: 1px solid var(--border-color, rgba(148, 163, 184, 0.35));
+  border-radius: 18px;
+  padding: 1rem 1.15rem;
+  margin: 0 0 1rem;
+  background: var(--card-bg, rgba(255, 255, 255, 0.86));
+}
+
+.info-methodology-section-intro h3,
+.info-methodology-empty-state h3 {
+  margin: 0 0 0.35rem;
+}
+
+.info-methodology-section-intro p,
+.info-methodology-empty-state p {
+  margin: 0;
+  max-width: 70rem;
+}
+
+.info-methodology-empty-state {
+  border-style: dashed;
+  opacity: 0.88;
+}
+
+body.dark-mode .info-methodology-tab,
+body.dark-mode .info-methodology-section-intro,
+body.dark-mode .info-methodology-empty-state {
+  background: rgba(15, 23, 42, 0.72);
+}
+
+@media (max-width: 900px) {
+  .info-methodology-tabs {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* METHODO002B_INFO_QUICKLOOK_CSS */
+.info-methodology-quicklook {
+  border: 1px solid rgba(37, 99, 235, 0.20);
+  border-radius: 18px;
+  padding: 1rem 1.15rem;
+  margin: 1rem 0;
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(20, 184, 166, 0.08));
+}
+
+.info-methodology-quicklook h3 {
+  margin: 0 0 0.35rem;
+}
+
+.info-methodology-quicklook p {
+  margin: 0;
+  max-width: 74rem;
+}
+
+.info-methodology-tab::after {
+  content: "▾";
+  float: right;
+  opacity: 0.55;
+  font-size: 0.85rem;
+  transform: translateY(0.15rem);
+}
+
+.info-methodology-tab.active::after {
+  content: "▴";
+}
+
+.info-methodology-tab.is-collapsed::after {
+  content: "▸";
+}
+
+body.dark-mode .info-methodology-quicklook {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.14), rgba(20, 184, 166, 0.12));
+}
+
+/* METHODO002C_SMOOTH_SCROLL_ACTIVE_MD_CSS */
+.info-active-page-card {
+  scroll-margin-top: 1.25rem;
+}
+
+.info-active-page-card-focus {
+  animation: infoActivePageCardFocusPulse 1.05s ease-out;
+}
+
+@keyframes infoActivePageCardFocusPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.22), 0 18px 42px rgba(15, 23, 42, 0.10);
+  }
+
+  100% {
+    box-shadow: inherit;
+  }
+}
+
+
+/* METHODO002C2_SCROLL_TOP_RESIZE_CSS */
+.info-active-page-card {
+  scroll-margin-top: 1.25rem;
+}
+
+/* METHODO002D_DARK_MD_CARDS */
+body.dark-mode .info-page-card,
+body.dark-mode .info-active-page-card,
+body.dark-mode .info-markdown-reader,
+body.dark-mode .info-markdown-preview,
+body.dark-mode .info-toc-card,
+body.dark-mode .info-card-metadata-editor {
+  color: rgba(255, 255, 255, 0.94);
+}
+
+body.dark-mode .info-page-card-title,
+body.dark-mode .info-page-card strong,
+body.dark-mode .info-active-page-card h1,
+body.dark-mode .info-active-page-card h2,
+body.dark-mode .info-active-page-card h3,
+body.dark-mode .info-active-page-card h4,
+body.dark-mode .info-active-page-card strong,
+body.dark-mode .info-markdown-reader h1,
+body.dark-mode .info-markdown-reader h2,
+body.dark-mode .info-markdown-reader h3,
+body.dark-mode .info-markdown-reader h4,
+body.dark-mode .info-markdown-reader strong,
+body.dark-mode .markdown-body h1,
+body.dark-mode .markdown-body h2,
+body.dark-mode .markdown-body h3,
+body.dark-mode .markdown-body h4,
+body.dark-mode .markdown-body strong {
+  color: rgba(255, 255, 255, 0.98);
+}
+
+body.dark-mode .info-page-card-kicker,
+body.dark-mode .info-page-card-summary,
+body.dark-mode .info-active-page-copy,
+body.dark-mode .info-active-page-copy p,
+body.dark-mode .info-toc-empty,
+body.dark-mode .info-toc-nav,
+body.dark-mode .markdown-body,
+body.dark-mode .markdown-body p,
+body.dark-mode .markdown-body li,
+body.dark-mode .markdown-body td,
+body.dark-mode .markdown-body th,
+body.dark-mode .markdown-body blockquote {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+body.dark-mode .markdown-body code,
+body.dark-mode .markdown-body pre,
+body.dark-mode .info-markdown-reader code,
+body.dark-mode .info-markdown-reader pre {
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(15, 23, 42, 0.82);
+}
+
+body.dark-mode .info-page-card {
+  background: rgba(15, 23, 42, 0.74);
+  border-color: rgba(148, 163, 184, 0.24);
+}
+
+body.dark-mode .info-page-card.is-active {
+  border-color: rgba(45, 212, 191, 0.68);
+  box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.13), 0 16px 34px rgba(0, 0, 0, 0.22);
+}
+
+body.dark-mode .info-active-page-card,
+body.dark-mode .info-markdown-reader,
+body.dark-mode .info-toc-card {
+  background: rgba(15, 23, 42, 0.68);
+  border-color: rgba(148, 163, 184, 0.26);
+}
+
+

@@ -12,6 +12,9 @@ CUSTOM_INFO_PAGES_FILE = DATA_DIR / "info_pages_custom.json"
 INFO_PAGE_OVERRIDES_FILE = DATA_DIR / "info_pages_overrides.json"
 LEGACY_INFO_MARKDOWN_FILE = DATA_DIR / "info.md"
 
+INFO_PAGE_SECTION_IDS = {"guide", "data", "archive"}
+DEFAULT_INFO_PAGE_SECTION = "archive"
+
 INFO_PAGES = (
     {
         "slug": "cadre-general",
@@ -137,6 +140,7 @@ def _public_page(page):
         "kicker": page["kicker"],
         "title": page["title"],
         "summary": page["summary"],
+        "section": page.get("section") or DEFAULT_INFO_PAGE_SECTION,
         "custom": bool(page.get("custom", False)),
     }
 
@@ -195,6 +199,7 @@ def _clean_required_text(value, field_name, max_length):
     return cleaned
 
 
+
 def _clean_optional_text(value, fallback, max_length, field_name):
     cleaned = str(value or "").strip()
 
@@ -209,6 +214,15 @@ def _clean_optional_text(value, fallback, max_length, field_name):
     return cleaned
 
 
+def _clean_info_page_section(value, fallback=DEFAULT_INFO_PAGE_SECTION):
+    cleaned = str(value or fallback or DEFAULT_INFO_PAGE_SECTION).strip().lower()
+
+    if cleaned not in INFO_PAGE_SECTION_IDS:
+        return fallback
+
+    return cleaned
+
+
 def _normalize_custom_page(item):
     if not isinstance(item, dict):
         return None
@@ -218,6 +232,7 @@ def _normalize_custom_page(item):
     title = str(item.get("title") or "").strip()
     kicker = str(item.get("kicker") or "Documentation").strip()
     summary = str(item.get("summary") or "").strip()
+    section = _clean_info_page_section(item.get("section"), fallback=DEFAULT_INFO_PAGE_SECTION)
 
     if not slug or not filename or not title:
         return None
@@ -231,6 +246,7 @@ def _normalize_custom_page(item):
         "kicker": kicker or "Documentation",
         "title": title,
         "summary": summary,
+        "section": section,
         "custom": True,
     }
 
@@ -264,6 +280,7 @@ def _write_custom_info_pages(pages):
             "kicker": page["kicker"],
             "title": page["title"],
             "summary": page["summary"],
+            "section": page.get("section", DEFAULT_INFO_PAGE_SECTION),
         })
 
     _atomic_write_json(
@@ -478,7 +495,7 @@ def update_info_page_metadata(page_slug, title, kicker=None, summary=None):
     return _public_page(updated_page)
 
 
-def create_info_page(title, kicker=None, summary=None):
+def create_info_page(title, kicker=None, summary=None, section=None):
     ensure_info_pages()
 
     cleaned_title = _clean_required_text(title, "titre", 140)
@@ -494,6 +511,7 @@ def create_info_page(title, kicker=None, summary=None):
         max_length=600,
         field_name="résumé",
     )
+    cleaned_section = _clean_info_page_section(section, fallback=DEFAULT_INFO_PAGE_SECTION)
 
     base_slug = _slugify(cleaned_title) or "nouvelle-fiche"
     existing_slugs = {page["slug"] for page in _all_info_pages()}
@@ -513,6 +531,7 @@ def create_info_page(title, kicker=None, summary=None):
         "kicker": cleaned_kicker,
         "title": cleaned_title,
         "summary": cleaned_summary,
+        "section": cleaned_section,
         "custom": True,
     }
 

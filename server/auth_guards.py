@@ -34,6 +34,13 @@ PUBLIC_ENDPOINTS = {
     "mlc_instances.current_mlc",
     "mlc_instances.select_mlc",
     "account_requests.create_account_request",
+
+    # METHODO001D_PUBLIC_INFO_GET_ENDPOINTS
+    # Lecture publique de la documentation méthodologique.
+    # Attention : on autorise les endpoints GET, pas les paths,
+    # pour ne pas rendre publics les POST d'édition Markdown.
+    "info_content.get_info_content",
+    "info_content.get_info_search_index",
 }
 
 

@@ -6584,6 +6584,36 @@ function bindInfoSearch() {
   });
 }
 
+
+/* METHODO002C2_SCROLL_TOP_RESIZE */
+function scrollInfoActiveMarkdownCardIntoView() {
+  const activeCard = document.querySelector(".info-active-page-card:not(.hidden)");
+
+  if (!activeCard) {
+    return;
+  }
+
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      // Recalcule les dimensions après changement de fiche / repli-dépli.
+      window.dispatchEvent(new Event("resize"));
+
+      activeCard.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+        inline: "nearest"
+      });
+
+      activeCard.classList.add("info-active-page-card-focus");
+
+      window.setTimeout(() => {
+        activeCard.classList.remove("info-active-page-card-focus");
+        window.dispatchEvent(new Event("resize"));
+      }, 900);
+    });
+  });
+}
+
 function bindInfoPageCards() {
   document.querySelectorAll("[data-info-page-slug]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -6596,6 +6626,7 @@ function bindInfoPageCards() {
       appState.info.activePage = slug;
       appState.info.markdown = null;
       await renderInfoView(true, slug);
+      scrollInfoActiveMarkdownCardIntoView();
     });
   });
 }
@@ -6661,14 +6692,18 @@ function bindInfoPageCreator() {
       cancelButton.disabled = true;
       submitButton.textContent = "Création...";
 
+      const createTargetSection = getInfoMethodologyCreateTargetSection();
+
       const result = await apiPostJson("/api/info-pages", {
         title,
         kicker,
-        summary
+        summary,
+        section: createTargetSection
       });
 
       appState.info.pages = Array.isArray(result.pages) ? result.pages : null;
       appState.info.activePage = result.page?.slug || null;
+      appState.info.activeSection = result.page?.section || createTargetSection;
       appState.info.markdown = result.markdown || null;
 
       await renderInfoView(true, appState.info.activePage);
@@ -6808,6 +6843,186 @@ function bindInfoEditor() {
   });
 }
 
+
+/* METHODO002A4_INFO_TABS */
+const INFO_METHODOLOGY_SECTIONS = [
+  {
+    id: "guide",
+    label: "Guide d’usage",
+    kicker: "À reconstruire",
+    title: "Guide d’usage simplifié",
+    description: "Futures fiches courtes pour guider la lecture de MLCFlux : quoi regarder, dans quel ordre, et comment interpréter les indicateurs.",
+    emptyTitle: "Guide d’usage à construire",
+    emptyDescription: "Les anciennes cartes ont été déplacées en Archives. Cet espace accueillera les nouvelles fiches de lecture utilisateur."
+  },
+  {
+    id: "data",
+    label: "Tables de données",
+    kicker: "Audit à venir",
+    title: "Tables de données, calculs & agrégats",
+    description: "Futur espace de documentation des tables SQLite, sources, routes API, formules de calcul, agrégats et contrôles de cohérence.",
+    emptyTitle: "Documentation des données à auditer",
+    emptyDescription: "Cet onglet sera rempli après l’audit fin des tables, des calculs backend, des payloads API et des représentations."
+  },
+  {
+    id: "archive",
+    label: "Archives",
+    kicker: "Ancien contenu",
+    title: "Archives méthodologiques",
+    description: "Toutes les cartes existantes sont conservées ici comme mémoire de travail. Elles sont considérées comme obsolètes avant refonte.",
+    emptyTitle: "Aucune archive",
+    emptyDescription: "Aucune fiche archivée n’est disponible."
+  }
+];
+
+function getInfoMethodologyActiveSection() {
+  const active = String(appState?.info?.activeSection || "guide");
+
+  if (active === "none") {
+    return "none";
+  }
+
+  return INFO_METHODOLOGY_SECTIONS.some((section) => section.id === active)
+    ? active
+    : "guide";
+}
+
+function setInfoMethodologyActiveSection(sectionId) {
+  const normalized = String(sectionId || "guide");
+  const current = getInfoMethodologyActiveSection();
+
+  if (normalized === current) {
+    appState.info.activeSection = "none";
+    return;
+  }
+
+  appState.info.activeSection = INFO_METHODOLOGY_SECTIONS.some((section) => section.id === normalized)
+    ? normalized
+    : "guide";
+}
+
+function getInfoMethodologySectionMeta(sectionId) {
+  return INFO_METHODOLOGY_SECTIONS.find((section) => section.id === sectionId) || null;
+}
+
+function getInfoMethodologySectionPages(pages, sectionId) {
+  if (sectionId === "none") {
+    return [];
+  }
+
+  const normalizedSection = INFO_METHODOLOGY_SECTIONS.some((section) => section.id === sectionId)
+    ? sectionId
+    : "archive";
+
+  return (Array.isArray(pages) ? pages : []).filter((page) => (
+    String(page?.section || "archive") === normalizedSection
+  ));
+}
+
+
+function getInfoMethodologyCreateTargetSection() {
+  const activeSection = getInfoMethodologyActiveSection();
+
+  return activeSection === "none" ? "guide" : activeSection;
+}
+
+function renderInfoMethodologyQuickLook() {
+  return `
+    <section class="info-methodology-quicklook">
+      <p class="info-methodology-section-kicker">Avant de lire les fiches</p>
+      <h3>Commencer par le bon dossier</h3>
+      <p>
+        Le guide d’usage servira à lire MLCFlux simplement. Les tables de données documenteront
+        les sources, calculs et agrégats après audit. Les anciennes fiches sont conservées en archives,
+        mais elles ne doivent plus être prises comme documentation de référence.
+      </p>
+    </section>
+  `;
+}
+
+function renderInfoMethodologyTabs(activeSection) {
+  return `
+    <div class="info-methodology-tabs" role="tablist" aria-label="Dossiers méthodologiques">
+      ${INFO_METHODOLOGY_SECTIONS.map((section) => `
+        <button
+          type="button"
+          class="info-methodology-tab ${section.id === activeSection ? "active" : ""} ${activeSection === "none" ? "is-collapsed" : ""}"
+          data-info-section="${escapeHtml(section.id)}"
+          role="tab"
+          aria-selected="${section.id === activeSection ? "true" : "false"}"\n          aria-expanded="${section.id === activeSection ? "true" : "false"}"
+        >
+          <span class="info-methodology-tab-kicker">${escapeHtml(section.kicker)}</span>
+          <span class="info-methodology-tab-label">${escapeHtml(section.label)}</span>
+        </button>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderInfoMethodologySectionIntro(sectionId) {
+  const section = getInfoMethodologySectionMeta(sectionId);
+
+  if (!section) {
+    return "";
+  }
+
+  return `
+    <section class="info-methodology-section-intro">
+      <p class="info-methodology-section-kicker">${escapeHtml(section.kicker)}</p>
+      <h3>${escapeHtml(section.title)}</h3>
+      <p>${escapeHtml(section.description)}</p>
+    </section>
+  `;
+}
+
+function renderInfoMethodologyEmptyState(sectionId) {
+  const section = getInfoMethodologySectionMeta(sectionId);
+
+  if (!section) {
+    return `
+      <article class="info-methodology-empty-state">
+        <p class="info-methodology-section-kicker">Dossiers repliés</p>
+        <h3>Aucun dossier ouvert</h3>
+        <p>Ouvre un dossier pour afficher son contenu.</p>
+      </article>
+    `;
+  }
+
+  return `
+    <article class="info-methodology-empty-state">
+      <p class="info-methodology-section-kicker">${escapeHtml(section.kicker)}</p>
+      <h3>${escapeHtml(section.emptyTitle)}</h3>
+      <p>${escapeHtml(section.emptyDescription)}</p>
+    </article>
+  `;
+}
+
+
+/* METHODO002E_RESIZE_INFO_FOLDERS */
+function requestInfoMethodologyLayoutResize() {
+  window.requestAnimationFrame(() => {
+    // Force un recalcul layout après changement de hauteur.
+    void document.body.offsetHeight;
+
+    window.dispatchEvent(new Event("resize"));
+
+    window.requestAnimationFrame(() => {
+      void document.body.offsetHeight;
+      window.dispatchEvent(new Event("resize"));
+    });
+  });
+}
+
+function bindInfoMethodologyTabs() {
+  document.querySelectorAll("[data-info-section]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      setInfoMethodologyActiveSection(button.dataset.infoSection || "archive");
+      await renderInfoView(false);
+      requestInfoMethodologyLayoutResize();
+    });
+  });
+}
+
 async function renderInfoView(forceReload = false, requestedPageSlug = null) {
   // INFO_METHODO_FREEZE001_RENDER_GUARD
   if (
@@ -6862,6 +7077,22 @@ async function renderInfoView(forceReload = false, requestedPageSlug = null) {
         || appState.info.pages[0]?.slug
         || null;
       appState.info.markdown = data.markdown || "";
+    }
+
+    const activeInfoSection = getInfoMethodologyActiveSection();
+    const activeInfoSectionPages = getInfoMethodologySectionPages(
+      appState.info.pages || [],
+      activeInfoSection
+    );
+
+    if (activeInfoSection !== "none") {
+      const activePageIsInSection = activeInfoSectionPages.some((page) => (
+        page?.slug && page.slug === appState.info.activePage
+      ));
+
+      if (!activePageIsInSection) {
+        appState.info.activePage = activeInfoSectionPages[0]?.slug || null;
+      }
     }
 
     const activePage = getActiveInfoPage();
@@ -6926,6 +7157,10 @@ async function renderInfoView(forceReload = false, requestedPageSlug = null) {
             aria-live="polite"
           ></div>
         </section>
+          ${renderInfoMethodologyQuickLook()}
+          ${renderInfoMethodologyTabs(activeInfoSection)}
+          ${renderInfoMethodologySectionIntro(activeInfoSection)}
+
 
         <div id="infoFeedback" class="info-feedback hidden"></div>
 
@@ -6980,12 +7215,14 @@ async function renderInfoView(forceReload = false, requestedPageSlug = null) {
             </div>
           </form>
         </section>
+          ${activeInfoSection !== "none" && activeInfoSectionPages.length ? "" : renderInfoMethodologyEmptyState(activeInfoSection)}
+          <!-- METHODO002A4_EMPTY_STATE -->
 
-        <div class="info-page-grid" id="infoPageCards">
-          ${renderInfoPageCards(appState.info.pages, appState.info.activePage)}
+        <div class="info-page-grid ${activeInfoSection === "none" || !activeInfoSectionPages.length ? "hidden" : ""}" id="infoPageCards">
+          ${renderInfoPageCards(activeInfoSectionPages, appState.info.activePage)}
         </div>
 
-        <section class="card info-active-page-card">
+        <section class="card info-active-page-card ${activeInfoSection === "none" || !activePage ? "hidden" : ""}">
           <div class="info-active-page-header">
             ${renderInfoActivePageMeta(activePage)}
             <button id="infoEditButton" class="primary-btn" type="button">
@@ -7082,9 +7319,13 @@ async function renderInfoView(forceReload = false, requestedPageSlug = null) {
     }
 
     bindInfoSearch();
+      bindInfoMethodologyTabs();
     bindInfoPageCards();
     bindInfoPageCreator();
     bindInfoEditor();
+
+    // METHODO002E_RENDER_RESIZE_CALL
+    requestInfoMethodologyLayoutResize();
   } catch (err) {
     content.innerHTML = `
       <section class="card">
@@ -28514,4 +28755,165 @@ function getProfessionalConsumptionMapLeanInitialQuery(baseQuery) {
   }
 
   window.addEventListener("load", initializeInfoMethodologyViewDevelopmentLockUi);
+})();
+
+
+
+/* UI004_DEFIS_PROS_GONETTE_ONLY */
+(function installDefisProsGonetteOnlyButton() {
+  const BUTTON_ID = "mlcfluxDefisProsTestButton";
+
+  function normalizeMlcId(value) {
+    return String(value || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim()
+      .toLowerCase();
+  }
+
+  function extractMlcId(payload) {
+    if (!payload) {
+      return "";
+    }
+
+    if (typeof payload === "string") {
+      return normalizeMlcId(payload);
+    }
+
+    const candidates = [
+      payload.id,
+      payload.mlc_id,
+      payload.slug,
+      payload.current_mlc,
+      payload.currentMlc,
+      payload.instance,
+      payload.instance_id,
+      payload.selected_mlc,
+      payload.selectedMlc,
+      payload.mlc?.id,
+      payload.mlc?.slug,
+      payload.current?.id,
+      payload.current?.slug
+    ];
+
+    return normalizeMlcId(candidates.find(Boolean) || "");
+  }
+
+  function readKnownMlcId() {
+    const candidates = [
+      document.documentElement?.getAttribute("data-mlc-instance"),
+      document.documentElement?.getAttribute("data-current-mlc"),
+      document.body?.getAttribute("data-mlc-instance"),
+      document.body?.getAttribute("data-current-mlc"),
+      window.appState?.currentMlc?.id,
+      window.appState?.currentMlc?.slug,
+      window.appState?.currentMlcId,
+      window.appState?.selectedMlc?.id,
+      window.appState?.selectedMlc?.slug,
+      window.appState?.selectedMlcId,
+      window.appState?.mlc?.current?.id,
+      window.appState?.mlc?.current?.slug
+    ];
+
+    return normalizeMlcId(candidates.find(Boolean) || "");
+  }
+
+  function isGonetteInstance(mlcId) {
+    const normalized = normalizeMlcId(mlcId);
+
+    return normalized === "gonette"
+      || normalized === "gonette_sample"
+      || normalized === "la_gonette"
+      || normalized.includes("gonette");
+  }
+
+  function removeButton() {
+    const existing = document.getElementById(BUTTON_ID);
+
+    if (existing) {
+      existing.remove();
+    }
+  }
+
+  function ensureButton() {
+    if (document.getElementById(BUTTON_ID)) {
+      return;
+    }
+
+    const link = document.createElement("a");
+    link.id = BUTTON_ID;
+    link.href = "/static/defis-pros-test.html";
+    link.textContent = "🏆 Test Défis des pros";
+    link.setAttribute("aria-label", "Ouvrir le test Défis des pros");
+    link.style.cssText = [
+      "position:fixed",
+      "right:18px",
+      "bottom:18px",
+      "z-index:99999",
+      "padding:12px 15px",
+      "border-radius:999px",
+      "background:#c94a2c",
+      "color:#fff",
+      "text-decoration:none",
+      "font-weight:800",
+      "box-shadow:0 12px 28px rgba(0,0,0,.18)"
+    ].join(";");
+
+    document.body.appendChild(link);
+  }
+
+  function applyForMlc(mlcId) {
+    if (isGonetteInstance(mlcId)) {
+      ensureButton();
+      return;
+    }
+
+    removeButton();
+  }
+
+  async function refresh() {
+    let mlcId = readKnownMlcId();
+    applyForMlc(mlcId);
+
+    try {
+      const response = await fetch("/api/current-mlc", {
+        credentials: "same-origin",
+        cache: "no-store"
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      const payload = await response.json();
+      const apiMlcId = extractMlcId(payload);
+
+      if (apiMlcId) {
+        mlcId = apiMlcId;
+        document.documentElement.setAttribute("data-mlc-instance", mlcId);
+        document.documentElement.setAttribute("data-current-mlc", mlcId);
+        document.body?.setAttribute("data-mlc-instance", mlcId);
+        document.body?.setAttribute("data-current-mlc", mlcId);
+      }
+    } catch (_) {
+      return;
+    }
+
+    applyForMlc(mlcId);
+  }
+
+  function install() {
+    removeButton();
+    refresh();
+
+    window.addEventListener("focus", refresh);
+    window.addEventListener("mlcflux:mlc-changed", refresh);
+    window.setInterval(refresh, 5000);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", install, { once: true });
+  } else {
+    install();
+  }
 })();

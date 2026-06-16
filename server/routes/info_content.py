@@ -141,6 +141,7 @@ def create_info_page_route():
             title=payload.get("title"),
             kicker=payload.get("kicker"),
             summary=payload.get("summary"),
+            section=payload.get("section"),
         )
     except ValueError as exc:
         return jsonify({
