@@ -98,7 +98,7 @@
     <div id="content"></div>
   </div>
 
-  <script src="https://unpkg.com/cytoscape@3.27.0/dist/cytoscape.min.js"></script>
+  <script src="/static/vendor/cytoscape.min.js"></script>
   <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
   <script src="https://unpkg.com/deck.gl@9.3.0/dist.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked@18.0.3/lib/marked.umd.js"></script>
@@ -111,6 +111,86 @@
    style="position:fixed;right:18px;bottom:18px;z-index:99999;padding:12px 15px;border-radius:999px;background:#c94a2c;color:#fff;text-decoration:none;font-weight:800;box-shadow:0 12px 28px rgba(0,0,0,.18);">
   🏆 Test Défis des pros
 </a>
+
+
+<script>
+/* MULTI_HOME_LINK002_BRAND_CLICK_SCRIPT */
+(function initializeMlcFluxBrandHomeLink() {
+  function normalizeText(value) {
+    return String(value || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+  }
+
+  function findMlcFluxBrandElement() {
+    const candidates = Array.from(document.querySelectorAll(`
+      h1,
+      h2,
+      .app-title,
+      .sidebar-title,
+      .sidebar-brand,
+      .brand,
+      .logo,
+      [class*="brand"],
+      [class*="logo"],
+      [class*="title"]
+    `));
+
+    return candidates.find(element => {
+      const text = normalizeText(element.textContent || "");
+      return text === "mlc flux" || text === "mlcflux";
+    }) || null;
+  }
+
+  function makeMlcFluxBrandClickable() {
+    const element = findMlcFluxBrandElement();
+    if (!element || element.dataset.multiHomeLink002Bound === "true") {
+      return;
+    }
+
+    element.dataset.multiHomeLink002Bound = "true";
+    element.classList.add("app-brand-home-link");
+    element.setAttribute("role", "link");
+    element.setAttribute("tabindex", "0");
+    element.setAttribute("title", "Revenir à la page principale multi-instance");
+    element.setAttribute("aria-label", "Revenir à la page principale multi-instance");
+
+    const goHome = event => {
+      event.preventDefault();
+      window.location.href = "/";
+    };
+
+    element.addEventListener("click", goHome);
+
+    element.addEventListener("keydown", event => {
+      if (event.key === "Enter" || event.key === " ") {
+        goHome(event);
+      }
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", makeMlcFluxBrandClickable);
+  } else {
+    makeMlcFluxBrandClickable();
+  }
+
+  window.addEventListener("load", makeMlcFluxBrandClickable);
+
+  if (typeof MutationObserver !== "undefined") {
+    const observer = new MutationObserver(makeMlcFluxBrandClickable);
+
+    if (document.body) {
+      observer.observe(document.body, { childList: true, subtree: true });
+    } else {
+      document.addEventListener("DOMContentLoaded", () => {
+        observer.observe(document.body, { childList: true, subtree: true });
+      });
+    }
+  }
+})();
+</script>
 
 </body>
 </html>

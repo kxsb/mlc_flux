@@ -18056,3 +18056,427 @@ body.sidebar-transitioning .main-content .stat-card {
     justify-content: flex-start;
   }
 }
+
+/* CLUSTER_FREEZE001_LOCKED_TAB */
+.professional-clusters-tab-locked {
+  position: relative;
+  cursor: not-allowed;
+  opacity: 0.78;
+}
+
+.professional-clusters-tab-locked:hover {
+  opacity: 0.92;
+}
+
+.professional-clusters-tab-lock {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 0.45rem;
+  font-size: 0.86em;
+  line-height: 1;
+  transform: translateY(-0.02em);
+}
+
+.professional-clusters-locked-card {
+  display: flex;
+  gap: 1.1rem;
+  align-items: flex-start;
+  padding: 1.35rem;
+  border-style: dashed;
+}
+
+.professional-clusters-locked-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 999px;
+  background: rgba(120, 120, 120, 0.12);
+  font-size: 1.25rem;
+}
+
+.professional-clusters-locked-content h2 {
+  margin: 0.25rem 0 0.55rem;
+}
+
+.professional-clusters-locked-content p {
+  margin: 0;
+  max-width: 62rem;
+}
+
+.professional-clusters-lock-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+}
+
+.professional-clusters-lock-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+.professional-clusters-lock-dialog {
+  position: relative;
+  width: min(32rem, 100%);
+  padding: 1.5rem;
+  border-radius: 1rem;
+  background: var(--surface, #fff);
+  color: var(--text-primary, #1f2933);
+  box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, 0.28);
+  text-align: center;
+}
+
+body.dark-mode .professional-clusters-lock-dialog {
+  background: var(--surface, #172033);
+  color: var(--text-primary, #f6f7fb);
+}
+
+.professional-clusters-lock-close {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.75rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.professional-clusters-lock-dialog-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  margin-bottom: 0.7rem;
+  border-radius: 999px;
+  background: rgba(120, 120, 120, 0.12);
+  font-size: 1.45rem;
+}
+
+.professional-clusters-lock-dialog h2 {
+  margin: 0 0 0.6rem;
+}
+
+.professional-clusters-lock-dialog p {
+  margin: 0 0 1.2rem;
+}
+
+.professional-clusters-lock-ok {
+  min-width: 7rem;
+}
+
+/* PRO_SUBTABS_FREEZE001_LOCKED_DEV_TABS */
+.professional-list-subtab-locked {
+  position: relative;
+  cursor: not-allowed;
+  opacity: 0.74;
+}
+
+.professional-list-subtab-locked:hover {
+  opacity: 0.9;
+}
+
+.professional-list-subtab-lock {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 0.45rem;
+  font-size: 0.86em;
+  line-height: 1;
+  transform: translateY(-0.02em);
+}
+
+.professional-list-subtab-lock-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+}
+
+.professional-list-subtab-lock-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+.professional-list-subtab-lock-dialog {
+  position: relative;
+  width: min(32rem, 100%);
+  padding: 1.5rem;
+  border-radius: 1rem;
+  background: var(--surface, #fff);
+  color: var(--text-primary, #1f2933);
+  box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, 0.28);
+  text-align: center;
+}
+
+body.dark-mode .professional-list-subtab-lock-dialog {
+  background: var(--surface, #172033);
+  color: var(--text-primary, #f6f7fb);
+}
+
+.professional-list-subtab-lock-close {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.75rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.professional-list-subtab-lock-dialog-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  margin-bottom: 0.7rem;
+  border-radius: 999px;
+  background: rgba(120, 120, 120, 0.12);
+  font-size: 1.45rem;
+}
+
+.professional-list-subtab-lock-dialog h2 {
+  margin: 0 0 0.6rem;
+}
+
+.professional-list-subtab-lock-dialog p {
+  margin: 0 0 1.2rem;
+}
+
+.professional-list-subtab-lock-ok {
+  min-width: 7rem;
+}
+
+/* STATS_ASSOC_TECH_FREEZE001_LOCKED_TAB */
+.assoc-tech-tab-locked {
+  position: relative;
+  cursor: not-allowed;
+  opacity: 0.74;
+}
+
+.assoc-tech-tab-locked:hover {
+  opacity: 0.9;
+}
+
+.assoc-tech-tab-lock {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 0.45rem;
+  font-size: 0.86em;
+  line-height: 1;
+  transform: translateY(-0.02em);
+}
+
+.assoc-tech-tab-lock-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+}
+
+.assoc-tech-tab-lock-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+.assoc-tech-tab-lock-dialog {
+  position: relative;
+  width: min(32rem, 100%);
+  padding: 1.5rem;
+  border-radius: 1rem;
+  background: var(--surface, #fff);
+  color: var(--text-primary, #1f2933);
+  box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, 0.28);
+  text-align: center;
+}
+
+body.dark-mode .assoc-tech-tab-lock-dialog {
+  background: var(--surface, #172033);
+  color: var(--text-primary, #f6f7fb);
+}
+
+.assoc-tech-tab-lock-close {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.75rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.assoc-tech-tab-lock-dialog-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  margin-bottom: 0.7rem;
+  border-radius: 999px;
+  background: rgba(120, 120, 120, 0.12);
+  font-size: 1.45rem;
+}
+
+.assoc-tech-tab-lock-dialog h2 {
+  margin: 0 0 0.6rem;
+}
+
+.assoc-tech-tab-lock-dialog p {
+  margin: 0 0 1.2rem;
+}
+
+.assoc-tech-tab-lock-ok {
+  min-width: 7rem;
+}
+
+/* INFO_METHODO_FREEZE001_LOCKED_VIEW */
+.info-methodology-view-locked {
+  position: relative;
+  cursor: not-allowed;
+  opacity: 0.74;
+}
+
+.info-methodology-view-locked:hover {
+  opacity: 0.9;
+}
+
+.info-methodology-view-lock {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 0.45rem;
+  font-size: 0.86em;
+  line-height: 1;
+  transform: translateY(-0.02em);
+}
+
+.info-methodology-lock-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+}
+
+.info-methodology-lock-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+.info-methodology-lock-dialog {
+  position: relative;
+  width: min(32rem, 100%);
+  padding: 1.5rem;
+  border-radius: 1rem;
+  background: var(--surface, #fff);
+  color: var(--text-primary, #1f2933);
+  box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, 0.28);
+  text-align: center;
+}
+
+body.dark-mode .info-methodology-lock-dialog {
+  background: var(--surface, #172033);
+  color: var(--text-primary, #f6f7fb);
+}
+
+.info-methodology-lock-close {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.75rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.info-methodology-lock-dialog-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  margin-bottom: 0.7rem;
+  border-radius: 999px;
+  background: rgba(120, 120, 120, 0.12);
+  font-size: 1.45rem;
+}
+
+.info-methodology-lock-dialog h2 {
+  margin: 0 0 0.6rem;
+}
+
+.info-methodology-lock-dialog p {
+  margin: 0 0 1.2rem;
+}
+
+.info-methodology-lock-ok {
+  min-width: 7rem;
+}
+
+/* MULTI_HOME_LINK002_BRAND_CLICK_SCRIPT */
+.app-brand-home-link {
+  cursor: pointer;
+  color: inherit;
+  text-decoration: none;
+  user-select: none;
+}
+
+.app-brand-home-link:hover {
+  opacity: 0.82;
+}
+
+.app-brand-home-link:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 4px;
+  border-radius: 0.35rem;
+}
+
+/* PRO_NETWORK_GRAPH_FIX001_CYTOSCAPE_GUARD */
+.network-graph-library-error {
+  min-height: 18rem;
+  display: grid;
+  place-items: center;
+  gap: 0.5rem;
+  padding: 2rem;
+  border: 1px dashed var(--border-color, rgba(148, 163, 184, 0.45));
+  border-radius: 1rem;
+  text-align: center;
+  color: var(--text-muted, #64748b);
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.network-graph-library-error strong {
+  color: var(--text-primary, #0f172a);
+}
+
+.network-graph-library-error p {
+  margin: 0;
+}

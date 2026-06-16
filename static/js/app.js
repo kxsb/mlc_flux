@@ -2174,6 +2174,21 @@ function bindNetworkFloatingLabel(cy) {
 }
 
 function renderNetworkGraph(data) {
+  // PRO_NETWORK_GRAPH_FIX001_CYTOSCAPE_GUARD
+  if (typeof window.cytoscape !== "function") {
+    const container = document.getElementById("networkGraph");
+    if (container) {
+      container.innerHTML = `
+        <div class="network-graph-library-error">
+          <strong>Graphe relationnel indisponible</strong>
+          <p>La bibliothèque Cytoscape n’est pas chargée. Vérifiez le fichier local <code>/static/vendor/cytoscape.min.js</code>.</p>
+        </div>
+      `;
+    }
+    console.error("Cytoscape is not loaded: /static/vendor/cytoscape.min.js");
+    return;
+  }
+
   const container = document.getElementById("networkGraph");
   if (!container) return;
 
@@ -6794,6 +6809,22 @@ function bindInfoEditor() {
 }
 
 async function renderInfoView(forceReload = false, requestedPageSlug = null) {
+  // INFO_METHODO_FREEZE001_RENDER_GUARD
+  if (
+    typeof isInfoMethodologyViewLockedAsync === "function"
+    && await isInfoMethodologyViewLockedAsync()
+  ) {
+    if (typeof syncInfoMethodologyViewDevelopmentLocks === "function") {
+      syncInfoMethodologyViewDevelopmentLocks();
+    }
+
+    if (typeof showInfoMethodologyDevelopmentPopup === "function") {
+      showInfoMethodologyDevelopmentPopup();
+    }
+
+    return;
+  }
+
   cleanupPilotageTrajectoryConnectorsIfLeaving("info");
   appState.currentView = "info";
   syncSidebarView("info");
@@ -17309,7 +17340,7 @@ function buildProfessionalAnalysisShell(flowSummary = null, holdingsSummary = nu
         { key: "summary", label: "Synthèse" },
         { key: "circulation", label: "Circulation & multiplicateur" },
         { key: "network", label: "Réseau interprofessionnel" },
-        { key: "clusters", label: "Cartographie des clusters" },
+        { key: "clusters", label: "Circulation des clusters" },
         { key: "structures", label: "Analyse sectorielle" },
         { key: "directory", label: "Liste & fiches" }
       ]
@@ -17489,6 +17520,314 @@ function buildProfessionalAnalysisShell(flowSummary = null, holdingsSummary = nu
   `;
 }
 
+
+
+
+/* CLUSTER_FREEZE001_LOCKED_TAB */
+const PROFESSIONAL_CLUSTERS_VIEW_LOCKED = true;
+
+/* CLUSTER_FREEZE001B_ADMIN_BYPASS */
+const professionalClustersAdminBypassState = {
+  checked: false,
+  checking: false,
+  allowed: false
+};
+
+function hasProfessionalClustersAdminBypass() {
+  return professionalClustersAdminBypassState.allowed === true;
+}
+
+function extractProfessionalClustersUserFromMePayload(payload) {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  return payload.user
+    || payload.current_user
+    || payload.account
+    || payload.me
+    || null;
+}
+
+function isProfessionalClustersMainAdminPayload(payload) {
+  const user = extractProfessionalClustersUserFromMePayload(payload);
+  const globalRole = String(
+    user?.global_role
+    || user?.role
+    || payload?.global_role
+    || payload?.role
+    || ""
+  ).toLowerCase();
+
+  return Boolean(
+    payload?.authenticated !== false
+    && (
+      globalRole === "admin"
+      || globalRole === "superadmin"
+      || user?.is_admin === true
+      || payload?.is_admin === true
+    )
+  );
+}
+
+async function refreshProfessionalClustersAdminBypass() {
+  if (professionalClustersAdminBypassState.checking) {
+    return professionalClustersAdminBypassState.allowed;
+  }
+
+  professionalClustersAdminBypassState.checking = true;
+
+  try {
+    const response = await fetch("/api/me", {
+      method: "GET",
+      credentials: "same-origin",
+      headers: {
+        "Accept": "application/json"
+      }
+    });
+
+    if (!response.ok) {
+      professionalClustersAdminBypassState.allowed = false;
+      professionalClustersAdminBypassState.checked = true;
+      return false;
+    }
+
+    const payload = await response.json();
+    professionalClustersAdminBypassState.allowed = isProfessionalClustersMainAdminPayload(payload);
+    professionalClustersAdminBypassState.checked = true;
+    return professionalClustersAdminBypassState.allowed;
+  } catch (_err) {
+    professionalClustersAdminBypassState.allowed = false;
+    professionalClustersAdminBypassState.checked = true;
+    return false;
+  } finally {
+    professionalClustersAdminBypassState.checking = false;
+    syncProfessionalClustersLockedTab();
+  }
+}
+
+function isProfessionalClustersViewLocked() {
+  return PROFESSIONAL_CLUSTERS_VIEW_LOCKED === true
+    && !hasProfessionalClustersAdminBypass();
+}
+
+function buildProfessionalClustersLockedPanelHtml() {
+  return `
+    <section class="card professional-clusters-locked-card">
+      <div class="professional-clusters-locked-icon" aria-hidden="true">🔒</div>
+      <div class="professional-clusters-locked-content">
+        <div class="stat-label">Circulation des clusters</div>
+        <h2>Vue en cours de développement</h2>
+        <p>
+          Cette vue est en cours de développement. Elle sera réactivée lorsque
+          la modélisation des clusters, les performances cartographiques et la
+          lecture métier seront stabilisées.
+        </p>
+      </div>
+    </section>
+  `;
+}
+
+function getProfessionalClustersLockedTabElements() {
+  const candidates = Array.from(document.querySelectorAll(`
+    button,
+    a,
+    [role="tab"],
+    [data-tab],
+    [data-professional-analysis-tab],
+    [data-professionals-view-tab],
+    [data-professional-tab]
+  `));
+
+  return candidates.filter(element => {
+    if (!element) return false;
+
+    const datasetValues = Object.values(element.dataset || {})
+      .join(" ")
+      .toLowerCase();
+
+    const text = (element.textContent || "").toLowerCase();
+    const markerText = `${datasetValues} ${text}`;
+
+    return markerText.includes("clusters")
+      && !markerText.includes("zoom")
+      && !markerText.includes("agrandir");
+  });
+}
+
+function syncProfessionalClustersLockedTab() {
+  const elements = getProfessionalClustersLockedTabElements();
+
+  if (!isProfessionalClustersViewLocked()) {
+    elements.forEach(element => {
+      element.classList.remove("professional-clusters-tab-locked");
+      delete element.dataset.professionalClustersLocked;
+      element.removeAttribute("aria-disabled");
+
+      if (element.getAttribute("title") === "Cette vue est en cours de développement.") {
+        element.removeAttribute("title");
+      }
+
+      element.querySelectorAll(".professional-clusters-tab-lock").forEach(lock => {
+        lock.remove();
+      });
+    });
+    return;
+  }
+
+  elements.forEach(element => {
+    element.classList.add("professional-clusters-tab-locked");
+    element.dataset.professionalClustersLocked = "true";
+    element.setAttribute("aria-disabled", "true");
+    element.setAttribute("title", "Cette vue est en cours de développement.");
+
+    if (!element.querySelector(".professional-clusters-tab-lock")) {
+      const lock = document.createElement("span");
+      lock.className = "professional-clusters-tab-lock";
+      lock.setAttribute("aria-hidden", "true");
+      lock.textContent = "🔒";
+      element.appendChild(lock);
+    }
+  });
+}
+
+function closeProfessionalClustersDevelopmentPopup() {
+  const modal = document.getElementById("professionalClustersLockedModal");
+  if (modal) {
+    modal.remove();
+  }
+}
+
+function showProfessionalClustersDevelopmentPopup() {
+  if (document.getElementById("professionalClustersLockedModal")) {
+    return;
+  }
+
+  const modal = document.createElement("div");
+  modal.id = "professionalClustersLockedModal";
+  modal.className = "professional-clusters-lock-modal";
+  modal.innerHTML = `
+    <div class="professional-clusters-lock-backdrop" data-professional-clusters-modal-close></div>
+    <section
+      class="professional-clusters-lock-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="professionalClustersLockTitle"
+    >
+      <button
+        class="professional-clusters-lock-close"
+        type="button"
+        aria-label="Fermer"
+        data-professional-clusters-modal-close
+      >×</button>
+
+      <div class="professional-clusters-lock-dialog-icon" aria-hidden="true">🔒</div>
+
+      <h2 id="professionalClustersLockTitle">Vue en cours de développement</h2>
+
+      <p>Cette vue est en cours de développement.</p>
+
+      <button
+        class="primary-btn professional-clusters-lock-ok"
+        type="button"
+        data-professional-clusters-modal-close
+      >
+        OK
+      </button>
+    </section>
+  `;
+
+  document.body.appendChild(modal);
+
+  const close = () => closeProfessionalClustersDevelopmentPopup();
+
+  modal.querySelectorAll("[data-professional-clusters-modal-close]").forEach(button => {
+    button.addEventListener("click", close);
+  });
+
+  const onKeydown = event => {
+    if (event.key === "Escape") {
+      close();
+      document.removeEventListener("keydown", onKeydown, true);
+    }
+  };
+
+  document.addEventListener("keydown", onKeydown, true);
+
+  const okButton = modal.querySelector(".professional-clusters-lock-ok");
+  if (okButton) {
+    okButton.focus();
+  }
+}
+
+function bindProfessionalClustersLockedTabGuard() {
+  if (document.documentElement.dataset.professionalClustersLockGuardBound === "true") {
+    return;
+  }
+
+  document.documentElement.dataset.professionalClustersLockGuardBound = "true";
+
+  document.addEventListener("click", event => {
+    if (!isProfessionalClustersViewLocked()) return;
+
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target) return;
+
+    const lockedTab = target.closest("[data-professional-clusters-locked='true']");
+    if (!lockedTab) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (typeof event.stopImmediatePropagation === "function") {
+      event.stopImmediatePropagation();
+    }
+
+    // CLUSTER_FREEZE001B_CLICK_ADMIN_RECHECK
+    void refreshProfessionalClustersAdminBypass().then(isAdmin => {
+      if (isAdmin) {
+        syncProfessionalClustersLockedTab();
+        lockedTab.click();
+        return;
+      }
+
+      showProfessionalClustersDevelopmentPopup();
+    });
+  }, true);
+}
+
+function initializeProfessionalClustersLockUi() {
+  if (!document.body) return;
+
+  void refreshProfessionalClustersAdminBypass();
+
+  bindProfessionalClustersLockedTabGuard();
+  syncProfessionalClustersLockedTab();
+
+  if (
+    typeof MutationObserver !== "undefined"
+    && document.documentElement.dataset.professionalClustersLockObserverBound !== "true"
+  ) {
+    document.documentElement.dataset.professionalClustersLockObserverBound = "true";
+
+    const observer = new MutationObserver(() => {
+      syncProfessionalClustersLockedTab();
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+  }
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initializeProfessionalClustersLockUi);
+} else {
+  initializeProfessionalClustersLockUi();
+}
+
+window.addEventListener("load", initializeProfessionalClustersLockUi);
 
 
 function buildProfessionalClustersLoadingHtml() {
@@ -18257,6 +18596,26 @@ function buildProfessionalClustersPanelHtml(cartographyData = null, territoriesD
 }
 
 async function renderProfessionalClustersPanel(forceReload = false) {
+  // CLUSTER_FREEZE001_RENDER_GUARD
+  if (isProfessionalClustersViewLocked()) {
+    const panel = document.getElementById("professionalClustersPanel");
+
+    if (typeof destroyUserPostalClustersMap === "function") {
+      destroyUserPostalClustersMap();
+      destroyUserPostalClustersMap("userPostalClustersZoomMap");
+    }
+
+    appState.userPostalClustersData = null;
+
+    if (panel) {
+      panel.dataset.professionalClustersHydrated = "locked";
+      panel.innerHTML = buildProfessionalClustersLockedPanelHtml();
+    }
+
+    syncProfessionalClustersLockedTab();
+    return;
+  }
+
   const panel = document.getElementById("professionalClustersPanel");
   if (!panel) {
     return;
@@ -27146,3 +27505,1013 @@ function getProfessionalConsumptionMapLeanInitialQuery(baseQuery) {
   return `${query}${separator}${additions.join("&")}`;
 }
 
+
+
+/* PRO_SUBTABS_FREEZE001_LOCKED_DEV_TABS */
+(function initializeProfessionalListSubtabsDevelopmentLocks() {
+  const LOCKED_PROFESSIONAL_LIST_SUBTAB_LABELS = [
+    "Fond de commerce",
+    "Dynamiques & réseau",
+    "Perspectives & débouchés"
+  ];
+
+  const professionalListSubtabAdminBypassState = {
+    checked: false,
+    checking: false,
+    allowed: false
+  };
+
+  function normalizeProfessionalListSubtabText(value) {
+    return String(value || "")
+      .replace(/🔒/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+  }
+
+  function isProfessionalListSubtabAdminBypassAllowed() {
+    if (professionalListSubtabAdminBypassState.allowed === true) {
+      return true;
+    }
+
+    if (
+      typeof window.hasProfessionalClustersAdminBypass === "function"
+      && window.hasProfessionalClustersAdminBypass() === true
+    ) {
+      return true;
+    }
+
+    return false;
+  }
+
+  function extractProfessionalListSubtabUserFromMePayload(payload) {
+    if (!payload || typeof payload !== "object") {
+      return null;
+    }
+
+    return payload.user
+      || payload.current_user
+      || payload.account
+      || payload.me
+      || null;
+  }
+
+  function isProfessionalListSubtabMainAdminPayload(payload) {
+    const user = extractProfessionalListSubtabUserFromMePayload(payload);
+    const globalRole = String(
+      user?.global_role
+      || user?.role
+      || payload?.global_role
+      || payload?.role
+      || ""
+    ).toLowerCase();
+
+    return Boolean(
+      payload?.authenticated !== false
+      && (
+        globalRole === "admin"
+        || globalRole === "superadmin"
+        || user?.is_admin === true
+        || payload?.is_admin === true
+      )
+    );
+  }
+
+  async function refreshProfessionalListSubtabAdminBypass() {
+    if (professionalListSubtabAdminBypassState.checking) {
+      return professionalListSubtabAdminBypassState.allowed;
+    }
+
+    professionalListSubtabAdminBypassState.checking = true;
+
+    try {
+      const response = await fetch("/api/me", {
+        method: "GET",
+        credentials: "same-origin",
+        headers: {
+          "Accept": "application/json"
+        }
+      });
+
+      if (!response.ok) {
+        professionalListSubtabAdminBypassState.allowed = false;
+        professionalListSubtabAdminBypassState.checked = true;
+        return false;
+      }
+
+      const payload = await response.json();
+      professionalListSubtabAdminBypassState.allowed = isProfessionalListSubtabMainAdminPayload(payload);
+      professionalListSubtabAdminBypassState.checked = true;
+      return professionalListSubtabAdminBypassState.allowed;
+    } catch (_err) {
+      professionalListSubtabAdminBypassState.allowed = false;
+      professionalListSubtabAdminBypassState.checked = true;
+      return false;
+    } finally {
+      professionalListSubtabAdminBypassState.checking = false;
+      syncProfessionalListSubtabDevelopmentLocks();
+    }
+  }
+
+  function getProfessionalListSubtabCandidates() {
+    return Array.from(document.querySelectorAll(`
+      button,
+      a,
+      [role="tab"],
+      [data-tab],
+      [data-pro-tab],
+      [data-professional-tab],
+      [data-professional-analysis-tab],
+      [data-professional-detail-tab],
+      [data-professionals-view-tab]
+    `));
+  }
+
+  function isLockedProfessionalListSubtabElement(element) {
+    if (!element) return false;
+
+    const normalizedText = normalizeProfessionalListSubtabText(element.textContent || "");
+    const normalizedLabels = LOCKED_PROFESSIONAL_LIST_SUBTAB_LABELS
+      .map(normalizeProfessionalListSubtabText);
+
+    return normalizedLabels.includes(normalizedText);
+  }
+
+  function getLockedProfessionalListSubtabElements() {
+    return getProfessionalListSubtabCandidates()
+      .filter(isLockedProfessionalListSubtabElement);
+  }
+
+  function unlockProfessionalListSubtabElement(element) {
+    element.classList.remove("professional-list-subtab-locked");
+    delete element.dataset.professionalListSubtabLocked;
+    element.removeAttribute("aria-disabled");
+
+    if (element.getAttribute("title") === "Cette vue est en cours de développement.") {
+      element.removeAttribute("title");
+    }
+
+    element.querySelectorAll(".professional-list-subtab-lock").forEach(lock => {
+      lock.remove();
+    });
+  }
+
+  function lockProfessionalListSubtabElement(element) {
+    element.classList.add("professional-list-subtab-locked");
+    element.dataset.professionalListSubtabLocked = "true";
+    element.setAttribute("aria-disabled", "true");
+    element.setAttribute("title", "Cette vue est en cours de développement.");
+
+    if (!element.querySelector(".professional-list-subtab-lock")) {
+      const lock = document.createElement("span");
+      lock.className = "professional-list-subtab-lock";
+      lock.setAttribute("aria-hidden", "true");
+      lock.textContent = "🔒";
+      element.appendChild(lock);
+    }
+  }
+
+  function syncProfessionalListSubtabDevelopmentLocks() {
+    const alreadyLocked = Array.from(
+      document.querySelectorAll("[data-professional-list-subtab-locked='true']")
+    );
+
+    if (isProfessionalListSubtabAdminBypassAllowed()) {
+      alreadyLocked.forEach(unlockProfessionalListSubtabElement);
+      return;
+    }
+
+    getLockedProfessionalListSubtabElements().forEach(lockProfessionalListSubtabElement);
+  }
+
+  function closeProfessionalListSubtabDevelopmentPopup() {
+    const modal = document.getElementById("professionalListSubtabLockedModal");
+    if (modal) {
+      modal.remove();
+    }
+  }
+
+  function showProfessionalListSubtabDevelopmentPopup() {
+    if (document.getElementById("professionalListSubtabLockedModal")) {
+      return;
+    }
+
+    const modal = document.createElement("div");
+    modal.id = "professionalListSubtabLockedModal";
+    modal.className = "professional-list-subtab-lock-modal";
+    modal.innerHTML = `
+      <div class="professional-list-subtab-lock-backdrop" data-professional-list-subtab-modal-close></div>
+      <section
+        class="professional-list-subtab-lock-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="professionalListSubtabLockTitle"
+      >
+        <button
+          class="professional-list-subtab-lock-close"
+          type="button"
+          aria-label="Fermer"
+          data-professional-list-subtab-modal-close
+        >×</button>
+
+        <div class="professional-list-subtab-lock-dialog-icon" aria-hidden="true">🔒</div>
+
+        <h2 id="professionalListSubtabLockTitle">Vue en cours de développement</h2>
+
+        <p>Cette vue est en cours de développement.</p>
+
+        <button
+          class="primary-btn professional-list-subtab-lock-ok"
+          type="button"
+          data-professional-list-subtab-modal-close
+        >
+          OK
+        </button>
+      </section>
+    `;
+
+    document.body.appendChild(modal);
+
+    const close = () => closeProfessionalListSubtabDevelopmentPopup();
+
+    modal.querySelectorAll("[data-professional-list-subtab-modal-close]").forEach(button => {
+      button.addEventListener("click", close);
+    });
+
+    const onKeydown = event => {
+      if (event.key === "Escape") {
+        close();
+        document.removeEventListener("keydown", onKeydown, true);
+      }
+    };
+
+    document.addEventListener("keydown", onKeydown, true);
+
+    const okButton = modal.querySelector(".professional-list-subtab-lock-ok");
+    if (okButton) {
+      okButton.focus();
+    }
+  }
+
+  function bindProfessionalListSubtabDevelopmentLockGuard() {
+    if (document.documentElement.dataset.professionalListSubtabLockGuardBound === "true") {
+      return;
+    }
+
+    document.documentElement.dataset.professionalListSubtabLockGuardBound = "true";
+
+    document.addEventListener("click", event => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) return;
+
+      const lockedTab = target.closest("[data-professional-list-subtab-locked='true']");
+      if (!lockedTab) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (typeof event.stopImmediatePropagation === "function") {
+        event.stopImmediatePropagation();
+      }
+
+      void refreshProfessionalListSubtabAdminBypass().then(isAdmin => {
+        if (isAdmin) {
+          syncProfessionalListSubtabDevelopmentLocks();
+          lockedTab.click();
+          return;
+        }
+
+        showProfessionalListSubtabDevelopmentPopup();
+      });
+    }, true);
+  }
+
+  function initializeProfessionalListSubtabDevelopmentLockUi() {
+    if (!document.body) return;
+
+    bindProfessionalListSubtabDevelopmentLockGuard();
+
+    void refreshProfessionalListSubtabAdminBypass();
+
+    syncProfessionalListSubtabDevelopmentLocks();
+
+    if (
+      typeof MutationObserver !== "undefined"
+      && document.documentElement.dataset.professionalListSubtabLockObserverBound !== "true"
+    ) {
+      document.documentElement.dataset.professionalListSubtabLockObserverBound = "true";
+
+      const observer = new MutationObserver(() => {
+        syncProfessionalListSubtabDevelopmentLocks();
+      });
+
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initializeProfessionalListSubtabDevelopmentLockUi);
+  } else {
+    initializeProfessionalListSubtabDevelopmentLockUi();
+  }
+
+  window.addEventListener("load", initializeProfessionalListSubtabDevelopmentLockUi);
+})();
+
+
+/* STATS_ASSOC_TECH_FREEZE001_LOCKED_TAB */
+(function initializeAssociativeTechnicalOperationsTabDevelopmentLock() {
+  const LOCKED_ASSOC_TECH_TAB_PATTERNS = [
+    "opération associative",
+    "opérations associatives",
+    "operation associative",
+    "operations associatives",
+    "associative",
+    "technique"
+  ];
+
+  const assocTechTabAdminBypassState = {
+    checked: false,
+    checking: false,
+    allowed: false
+  };
+
+  function normalizeAssocTechTabText(value) {
+    return String(value || "")
+      .replace(/🔒/g, "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+  }
+
+  function isAssocTechTabAdminBypassAllowed() {
+    if (assocTechTabAdminBypassState.allowed === true) {
+      return true;
+    }
+
+    if (
+      typeof window.hasProfessionalClustersAdminBypass === "function"
+      && window.hasProfessionalClustersAdminBypass() === true
+    ) {
+      return true;
+    }
+
+    return false;
+  }
+
+  function extractAssocTechTabUserFromMePayload(payload) {
+    if (!payload || typeof payload !== "object") {
+      return null;
+    }
+
+    return payload.user
+      || payload.current_user
+      || payload.account
+      || payload.me
+      || null;
+  }
+
+  function isAssocTechTabMainAdminPayload(payload) {
+    const user = extractAssocTechTabUserFromMePayload(payload);
+    const globalRole = String(
+      user?.global_role
+      || user?.role
+      || payload?.global_role
+      || payload?.role
+      || ""
+    ).toLowerCase();
+
+    return Boolean(
+      payload?.authenticated !== false
+      && (
+        globalRole === "admin"
+        || globalRole === "superadmin"
+        || user?.is_admin === true
+        || payload?.is_admin === true
+      )
+    );
+  }
+
+  async function refreshAssocTechTabAdminBypass() {
+    if (assocTechTabAdminBypassState.checking) {
+      return assocTechTabAdminBypassState.allowed;
+    }
+
+    assocTechTabAdminBypassState.checking = true;
+
+    try {
+      const response = await fetch("/api/me", {
+        method: "GET",
+        credentials: "same-origin",
+        headers: {
+          "Accept": "application/json"
+        }
+      });
+
+      if (!response.ok) {
+        assocTechTabAdminBypassState.allowed = false;
+        assocTechTabAdminBypassState.checked = true;
+        return false;
+      }
+
+      const payload = await response.json();
+      assocTechTabAdminBypassState.allowed = isAssocTechTabMainAdminPayload(payload);
+      assocTechTabAdminBypassState.checked = true;
+      return assocTechTabAdminBypassState.allowed;
+    } catch (_err) {
+      assocTechTabAdminBypassState.allowed = false;
+      assocTechTabAdminBypassState.checked = true;
+      return false;
+    } finally {
+      assocTechTabAdminBypassState.checking = false;
+      syncAssocTechTabDevelopmentLocks();
+    }
+  }
+
+  function getAssocTechTabCandidates() {
+    return Array.from(document.querySelectorAll(`
+      button,
+      a,
+      [role="tab"],
+      [data-tab],
+      [data-stats-tab],
+      [data-analysis-tab],
+      [data-view-tab]
+    `));
+  }
+
+  function isLockedAssocTechTabElement(element) {
+    if (!element) return false;
+
+    const text = normalizeAssocTechTabText(element.textContent || "");
+    const dataset = normalizeAssocTechTabText(
+      Object.values(element.dataset || {}).join(" ")
+    );
+
+    const combined = `${text} ${dataset}`;
+
+    const hasOperation = combined.includes("operation") || combined.includes("operations");
+    const hasAssociative = combined.includes("associative") || combined.includes("associatives");
+    const hasTechnical = combined.includes("technique") || combined.includes("techniques");
+
+    return (
+      (hasOperation && hasAssociative)
+      || (hasAssociative && hasTechnical)
+      || combined.includes("operations associatives")
+      || combined.includes("operation associative")
+    );
+  }
+
+  function getLockedAssocTechTabElements() {
+    return getAssocTechTabCandidates().filter(isLockedAssocTechTabElement);
+  }
+
+  function unlockAssocTechTabElement(element) {
+    element.classList.remove("assoc-tech-tab-locked");
+    delete element.dataset.assocTechTabLocked;
+    element.removeAttribute("aria-disabled");
+
+    if (element.getAttribute("title") === "Cette vue est en cours de développement.") {
+      element.removeAttribute("title");
+    }
+
+    element.querySelectorAll(".assoc-tech-tab-lock").forEach(lock => {
+      lock.remove();
+    });
+  }
+
+  function lockAssocTechTabElement(element) {
+    element.classList.add("assoc-tech-tab-locked");
+    element.dataset.assocTechTabLocked = "true";
+    element.setAttribute("aria-disabled", "true");
+    element.setAttribute("title", "Cette vue est en cours de développement.");
+
+    if (!element.querySelector(".assoc-tech-tab-lock")) {
+      const lock = document.createElement("span");
+      lock.className = "assoc-tech-tab-lock";
+      lock.setAttribute("aria-hidden", "true");
+      lock.textContent = "🔒";
+      element.appendChild(lock);
+    }
+  }
+
+  function syncAssocTechTabDevelopmentLocks() {
+    const alreadyLocked = Array.from(
+      document.querySelectorAll("[data-assoc-tech-tab-locked='true']")
+    );
+
+    if (isAssocTechTabAdminBypassAllowed()) {
+      alreadyLocked.forEach(unlockAssocTechTabElement);
+      return;
+    }
+
+    getLockedAssocTechTabElements().forEach(lockAssocTechTabElement);
+  }
+
+  function closeAssocTechTabDevelopmentPopup() {
+    const modal = document.getElementById("assocTechTabLockedModal");
+    if (modal) {
+      modal.remove();
+    }
+  }
+
+  function showAssocTechTabDevelopmentPopup() {
+    if (document.getElementById("assocTechTabLockedModal")) {
+      return;
+    }
+
+    const modal = document.createElement("div");
+    modal.id = "assocTechTabLockedModal";
+    modal.className = "assoc-tech-tab-lock-modal";
+    modal.innerHTML = `
+      <div class="assoc-tech-tab-lock-backdrop" data-assoc-tech-tab-modal-close></div>
+      <section
+        class="assoc-tech-tab-lock-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="assocTechTabLockTitle"
+      >
+        <button
+          class="assoc-tech-tab-lock-close"
+          type="button"
+          aria-label="Fermer"
+          data-assoc-tech-tab-modal-close
+        >×</button>
+
+        <div class="assoc-tech-tab-lock-dialog-icon" aria-hidden="true">🔒</div>
+
+        <h2 id="assocTechTabLockTitle">Vue en cours de développement</h2>
+
+        <p>Cette vue est en cours de développement.</p>
+
+        <button
+          class="primary-btn assoc-tech-tab-lock-ok"
+          type="button"
+          data-assoc-tech-tab-modal-close
+        >
+          OK
+        </button>
+      </section>
+    `;
+
+    document.body.appendChild(modal);
+
+    const close = () => closeAssocTechTabDevelopmentPopup();
+
+    modal.querySelectorAll("[data-assoc-tech-tab-modal-close]").forEach(button => {
+      button.addEventListener("click", close);
+    });
+
+    const onKeydown = event => {
+      if (event.key === "Escape") {
+        close();
+        document.removeEventListener("keydown", onKeydown, true);
+      }
+    };
+
+    document.addEventListener("keydown", onKeydown, true);
+
+    const okButton = modal.querySelector(".assoc-tech-tab-lock-ok");
+    if (okButton) {
+      okButton.focus();
+    }
+  }
+
+  function bindAssocTechTabDevelopmentLockGuard() {
+    if (document.documentElement.dataset.assocTechTabLockGuardBound === "true") {
+      return;
+    }
+
+    document.documentElement.dataset.assocTechTabLockGuardBound = "true";
+
+    document.addEventListener("click", event => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) return;
+
+      const lockedTab = target.closest("[data-assoc-tech-tab-locked='true']");
+      if (!lockedTab) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (typeof event.stopImmediatePropagation === "function") {
+        event.stopImmediatePropagation();
+      }
+
+      void refreshAssocTechTabAdminBypass().then(isAdmin => {
+        if (isAdmin) {
+          syncAssocTechTabDevelopmentLocks();
+          lockedTab.click();
+          return;
+        }
+
+        showAssocTechTabDevelopmentPopup();
+      });
+    }, true);
+  }
+
+  function initializeAssocTechTabDevelopmentLockUi() {
+    if (!document.body) return;
+
+    bindAssocTechTabDevelopmentLockGuard();
+
+    void refreshAssocTechTabAdminBypass();
+
+    syncAssocTechTabDevelopmentLocks();
+
+    if (
+      typeof MutationObserver !== "undefined"
+      && document.documentElement.dataset.assocTechTabLockObserverBound !== "true"
+    ) {
+      document.documentElement.dataset.assocTechTabLockObserverBound = "true";
+
+      const observer = new MutationObserver(() => {
+        syncAssocTechTabDevelopmentLocks();
+      });
+
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initializeAssocTechTabDevelopmentLockUi);
+  } else {
+    initializeAssocTechTabDevelopmentLockUi();
+  }
+
+  window.addEventListener("load", initializeAssocTechTabDevelopmentLockUi);
+})();
+
+
+/* INFO_METHODO_FREEZE001_LOCKED_VIEW */
+(function initializeInfoMethodologyViewDevelopmentLock() {
+  const INFO_METHODO_VIEW_LOCKED = true;
+
+  const infoMethodologyAdminBypassState = {
+    checked: false,
+    checking: false,
+    allowed: false
+  };
+
+  function normalizeInfoMethodologyText(value) {
+    return String(value || "")
+      .replace(/🔒/g, "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+  }
+
+  function extractInfoMethodologyUserFromMePayload(payload) {
+    if (!payload || typeof payload !== "object") {
+      return null;
+    }
+
+    return payload.user
+      || payload.current_user
+      || payload.account
+      || payload.me
+      || null;
+  }
+
+  function isInfoMethodologyMainAdminPayload(payload) {
+    const user = extractInfoMethodologyUserFromMePayload(payload);
+    const globalRole = String(
+      user?.global_role
+      || user?.role
+      || payload?.global_role
+      || payload?.role
+      || ""
+    ).toLowerCase();
+
+    return Boolean(
+      payload?.authenticated !== false
+      && (
+        globalRole === "admin"
+        || globalRole === "superadmin"
+        || user?.is_admin === true
+        || payload?.is_admin === true
+      )
+    );
+  }
+
+  function isInfoMethodologyAdminBypassAllowed() {
+    if (infoMethodologyAdminBypassState.allowed === true) {
+      return true;
+    }
+
+    if (
+      typeof window.hasProfessionalClustersAdminBypass === "function"
+      && window.hasProfessionalClustersAdminBypass() === true
+    ) {
+      return true;
+    }
+
+    return false;
+  }
+
+  async function refreshInfoMethodologyAdminBypass() {
+    if (infoMethodologyAdminBypassState.checking) {
+      return infoMethodologyAdminBypassState.allowed;
+    }
+
+    infoMethodologyAdminBypassState.checking = true;
+
+    try {
+      const response = await fetch("/api/me", {
+        method: "GET",
+        credentials: "same-origin",
+        headers: {
+          "Accept": "application/json"
+        }
+      });
+
+      if (!response.ok) {
+        infoMethodologyAdminBypassState.allowed = false;
+        infoMethodologyAdminBypassState.checked = true;
+        return false;
+      }
+
+      const payload = await response.json();
+      infoMethodologyAdminBypassState.allowed = isInfoMethodologyMainAdminPayload(payload);
+      infoMethodologyAdminBypassState.checked = true;
+      return infoMethodologyAdminBypassState.allowed;
+    } catch (_err) {
+      infoMethodologyAdminBypassState.allowed = false;
+      infoMethodologyAdminBypassState.checked = true;
+      return false;
+    } finally {
+      infoMethodologyAdminBypassState.checking = false;
+      syncInfoMethodologyViewDevelopmentLocks();
+    }
+  }
+
+  async function isInfoMethodologyViewLockedAsync() {
+    if (!INFO_METHODO_VIEW_LOCKED) {
+      return false;
+    }
+
+    if (isInfoMethodologyAdminBypassAllowed()) {
+      return false;
+    }
+
+    const isAdmin = await refreshInfoMethodologyAdminBypass();
+    return !isAdmin;
+  }
+
+  function getInfoMethodologyViewCandidates() {
+    return Array.from(document.querySelectorAll(`
+      button,
+      a,
+      [role="button"],
+      [role="tab"],
+      [data-view],
+      [data-nav-view],
+      [data-sidebar-view],
+      [data-main-view],
+      [data-route],
+      [data-target],
+      [onclick]
+    `));
+  }
+
+  function isInfoMethodologyViewElement(element) {
+    if (!element) return false;
+
+    const text = normalizeInfoMethodologyText(element.textContent || "");
+    const dataset = normalizeInfoMethodologyText(
+      Object.values(element.dataset || {}).join(" ")
+    );
+    const href = normalizeInfoMethodologyText(element.getAttribute("href") || "");
+    const onclick = normalizeInfoMethodologyText(element.getAttribute("onclick") || "");
+
+    const combined = `${text} ${dataset} ${href} ${onclick}`;
+
+    const isInfoByDataset = [
+      element.dataset?.view,
+      element.dataset?.navView,
+      element.dataset?.sidebarView,
+      element.dataset?.mainView,
+      element.dataset?.route,
+      element.dataset?.target
+    ].some(value => normalizeInfoMethodologyText(value) === "info");
+
+    const hasInfo = combined.includes("info");
+    const hasMethodology =
+      combined.includes("methodologie")
+      || combined.includes("methodo")
+      || combined.includes("méthodologie");
+
+    const hasDocumentation =
+      combined.includes("documentation")
+      || combined.includes("doc");
+
+    return Boolean(
+      isInfoByDataset
+      || combined.includes("openviewprogressively(\"info\")")
+      || combined.includes("openviewprogressively('info')")
+      || combined.includes("renderview(\"info\")")
+      || combined.includes("info et methodologie")
+      || combined.includes("info & methodologie")
+      || combined.includes("infos & methodologie")
+      || combined.includes("infos et methodologie")
+      || (hasInfo && hasMethodology)
+      || (hasInfo && hasDocumentation)
+    );
+  }
+
+  function getInfoMethodologyViewElements() {
+    return getInfoMethodologyViewCandidates().filter(isInfoMethodologyViewElement);
+  }
+
+  function unlockInfoMethodologyViewElement(element) {
+    element.classList.remove("info-methodology-view-locked");
+    delete element.dataset.infoMethodologyViewLocked;
+    element.removeAttribute("aria-disabled");
+
+    if (element.getAttribute("title") === "Cette vue est en cours de développement.") {
+      element.removeAttribute("title");
+    }
+
+    element.querySelectorAll(".info-methodology-view-lock").forEach(lock => {
+      lock.remove();
+    });
+  }
+
+  function lockInfoMethodologyViewElement(element) {
+    element.classList.add("info-methodology-view-locked");
+    element.dataset.infoMethodologyViewLocked = "true";
+    element.setAttribute("aria-disabled", "true");
+    element.setAttribute("title", "Cette vue est en cours de développement.");
+
+    if (!element.querySelector(".info-methodology-view-lock")) {
+      const lock = document.createElement("span");
+      lock.className = "info-methodology-view-lock";
+      lock.setAttribute("aria-hidden", "true");
+      lock.textContent = "🔒";
+      element.appendChild(lock);
+    }
+  }
+
+  function syncInfoMethodologyViewDevelopmentLocks() {
+    const alreadyLocked = Array.from(
+      document.querySelectorAll("[data-info-methodology-view-locked='true']")
+    );
+
+    if (isInfoMethodologyAdminBypassAllowed()) {
+      alreadyLocked.forEach(unlockInfoMethodologyViewElement);
+      return;
+    }
+
+    getInfoMethodologyViewElements().forEach(lockInfoMethodologyViewElement);
+  }
+
+  function closeInfoMethodologyDevelopmentPopup() {
+    const modal = document.getElementById("infoMethodologyLockedModal");
+    if (modal) {
+      modal.remove();
+    }
+  }
+
+  function showInfoMethodologyDevelopmentPopup() {
+    if (document.getElementById("infoMethodologyLockedModal")) {
+      return;
+    }
+
+    const modal = document.createElement("div");
+    modal.id = "infoMethodologyLockedModal";
+    modal.className = "info-methodology-lock-modal";
+    modal.innerHTML = `
+      <div class="info-methodology-lock-backdrop" data-info-methodology-modal-close></div>
+      <section
+        class="info-methodology-lock-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="infoMethodologyLockTitle"
+      >
+        <button
+          class="info-methodology-lock-close"
+          type="button"
+          aria-label="Fermer"
+          data-info-methodology-modal-close
+        >×</button>
+
+        <div class="info-methodology-lock-dialog-icon" aria-hidden="true">🔒</div>
+
+        <h2 id="infoMethodologyLockTitle">Vue en cours de développement</h2>
+
+        <p>Cette vue est en cours de développement.</p>
+
+        <button
+          class="primary-btn info-methodology-lock-ok"
+          type="button"
+          data-info-methodology-modal-close
+        >
+          OK
+        </button>
+      </section>
+    `;
+
+    document.body.appendChild(modal);
+
+    const close = () => closeInfoMethodologyDevelopmentPopup();
+
+    modal.querySelectorAll("[data-info-methodology-modal-close]").forEach(button => {
+      button.addEventListener("click", close);
+    });
+
+    const onKeydown = event => {
+      if (event.key === "Escape") {
+        close();
+        document.removeEventListener("keydown", onKeydown, true);
+      }
+    };
+
+    document.addEventListener("keydown", onKeydown, true);
+
+    const okButton = modal.querySelector(".info-methodology-lock-ok");
+    if (okButton) {
+      okButton.focus();
+    }
+  }
+
+  function bindInfoMethodologyViewDevelopmentLockGuard() {
+    if (document.documentElement.dataset.infoMethodologyViewLockGuardBound === "true") {
+      return;
+    }
+
+    document.documentElement.dataset.infoMethodologyViewLockGuardBound = "true";
+
+    document.addEventListener("click", event => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) return;
+
+      const lockedView = target.closest("[data-info-methodology-view-locked='true']");
+      if (!lockedView) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (typeof event.stopImmediatePropagation === "function") {
+        event.stopImmediatePropagation();
+      }
+
+      void refreshInfoMethodologyAdminBypass().then(isAdmin => {
+        if (isAdmin) {
+          syncInfoMethodologyViewDevelopmentLocks();
+          lockedView.click();
+          return;
+        }
+
+        showInfoMethodologyDevelopmentPopup();
+      });
+    }, true);
+  }
+
+  function initializeInfoMethodologyViewDevelopmentLockUi() {
+    if (!document.body) return;
+
+    bindInfoMethodologyViewDevelopmentLockGuard();
+
+    void refreshInfoMethodologyAdminBypass();
+
+    syncInfoMethodologyViewDevelopmentLocks();
+
+    if (
+      typeof MutationObserver !== "undefined"
+      && document.documentElement.dataset.infoMethodologyViewLockObserverBound !== "true"
+    ) {
+      document.documentElement.dataset.infoMethodologyViewLockObserverBound = "true";
+
+      const observer = new MutationObserver(() => {
+        syncInfoMethodologyViewDevelopmentLocks();
+      });
+
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+    }
+  }
+
+  window.isInfoMethodologyViewLockedAsync = isInfoMethodologyViewLockedAsync;
+  window.showInfoMethodologyDevelopmentPopup = showInfoMethodologyDevelopmentPopup;
+  window.syncInfoMethodologyViewDevelopmentLocks = syncInfoMethodologyViewDevelopmentLocks;
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initializeInfoMethodologyViewDevelopmentLockUi);
+  } else {
+    initializeInfoMethodologyViewDevelopmentLockUi();
+  }
+
+  window.addEventListener("load", initializeInfoMethodologyViewDevelopmentLockUi);
+})();
