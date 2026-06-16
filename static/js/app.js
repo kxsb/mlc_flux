@@ -5890,6 +5890,7 @@ async function openViewProgressively(viewKey) {
 
   if (viewKey === "admin") {
     await renderAdministrationView();
+    return;
   }
 }
 
@@ -28402,7 +28403,7 @@ function getProfessionalConsumptionMapLeanInitialQuery(baseQuery) {
 
 /* INFO_METHODO_FREEZE001_LOCKED_VIEW */
 (function initializeInfoMethodologyViewDevelopmentLock() {
-  const INFO_METHODO_VIEW_LOCKED = true;
+  const INFO_METHODO_VIEW_LOCKED = false;
 
   const infoMethodologyAdminBypassState = {
     checked: false,
@@ -28505,17 +28506,8 @@ function getProfessionalConsumptionMapLeanInitialQuery(baseQuery) {
   }
 
   async function isInfoMethodologyViewLockedAsync() {
-    if (!INFO_METHODO_VIEW_LOCKED) {
-      return false;
-    }
-
-    if (isInfoMethodologyAdminBypassAllowed()) {
-      return false;
-    }
-
-    const isAdmin = await refreshInfoMethodologyAdminBypass();
-    return !isAdmin;
-  }
+    return false;
+}
 
   function getInfoMethodologyViewCandidates() {
     return Array.from(document.querySelectorAll(`
@@ -28597,32 +28589,12 @@ function getProfessionalConsumptionMapLeanInitialQuery(baseQuery) {
   }
 
   function lockInfoMethodologyViewElement(element) {
-    element.classList.add("info-methodology-view-locked");
-    element.dataset.infoMethodologyViewLocked = "true";
-    element.setAttribute("aria-disabled", "true");
-    element.setAttribute("title", "Cette vue est en cours de développement.");
-
-    if (!element.querySelector(".info-methodology-view-lock")) {
-      const lock = document.createElement("span");
-      lock.className = "info-methodology-view-lock";
-      lock.setAttribute("aria-hidden", "true");
-      lock.textContent = "🔒";
-      element.appendChild(lock);
-    }
-  }
+    unlockInfoMethodologyViewElement(element);
+}
 
   function syncInfoMethodologyViewDevelopmentLocks() {
-    const alreadyLocked = Array.from(
-      document.querySelectorAll("[data-info-methodology-view-locked='true']")
-    );
-
-    if (isInfoMethodologyAdminBypassAllowed()) {
-      alreadyLocked.forEach(unlockInfoMethodologyViewElement);
-      return;
-    }
-
-    getInfoMethodologyViewElements().forEach(lockInfoMethodologyViewElement);
-  }
+    getInfoMethodologyViewElements().forEach(unlockInfoMethodologyViewElement);
+}
 
   function closeInfoMethodologyDevelopmentPopup() {
     const modal = document.getElementById("infoMethodologyLockedModal");
@@ -28632,125 +28604,17 @@ function getProfessionalConsumptionMapLeanInitialQuery(baseQuery) {
   }
 
   function showInfoMethodologyDevelopmentPopup() {
-    if (document.getElementById("infoMethodologyLockedModal")) {
-      return;
-    }
-
-    const modal = document.createElement("div");
-    modal.id = "infoMethodologyLockedModal";
-    modal.className = "info-methodology-lock-modal";
-    modal.innerHTML = `
-      <div class="info-methodology-lock-backdrop" data-info-methodology-modal-close></div>
-      <section
-        class="info-methodology-lock-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="infoMethodologyLockTitle"
-      >
-        <button
-          class="info-methodology-lock-close"
-          type="button"
-          aria-label="Fermer"
-          data-info-methodology-modal-close
-        >×</button>
-
-        <div class="info-methodology-lock-dialog-icon" aria-hidden="true">🔒</div>
-
-        <h2 id="infoMethodologyLockTitle">Vue en cours de développement</h2>
-
-        <p>Cette vue est en cours de développement.</p>
-
-        <button
-          class="primary-btn info-methodology-lock-ok"
-          type="button"
-          data-info-methodology-modal-close
-        >
-          OK
-        </button>
-      </section>
-    `;
-
-    document.body.appendChild(modal);
-
-    const close = () => closeInfoMethodologyDevelopmentPopup();
-
-    modal.querySelectorAll("[data-info-methodology-modal-close]").forEach(button => {
-      button.addEventListener("click", close);
-    });
-
-    const onKeydown = event => {
-      if (event.key === "Escape") {
-        close();
-        document.removeEventListener("keydown", onKeydown, true);
-      }
-    };
-
-    document.addEventListener("keydown", onKeydown, true);
-
-    const okButton = modal.querySelector(".info-methodology-lock-ok");
-    if (okButton) {
-      okButton.focus();
-    }
-  }
+    return false;
+}
 
   function bindInfoMethodologyViewDevelopmentLockGuard() {
-    if (document.documentElement.dataset.infoMethodologyViewLockGuardBound === "true") {
-      return;
-    }
-
-    document.documentElement.dataset.infoMethodologyViewLockGuardBound = "true";
-
-    document.addEventListener("click", event => {
-      const target = event.target instanceof Element ? event.target : null;
-      if (!target) return;
-
-      const lockedView = target.closest("[data-info-methodology-view-locked='true']");
-      if (!lockedView) return;
-
-      event.preventDefault();
-      event.stopPropagation();
-
-      if (typeof event.stopImmediatePropagation === "function") {
-        event.stopImmediatePropagation();
-      }
-
-      void refreshInfoMethodologyAdminBypass().then(isAdmin => {
-        if (isAdmin) {
-          syncInfoMethodologyViewDevelopmentLocks();
-          lockedView.click();
-          return;
-        }
-
-        showInfoMethodologyDevelopmentPopup();
-      });
-    }, true);
-  }
+    return;
+}
 
   function initializeInfoMethodologyViewDevelopmentLockUi() {
     if (!document.body) return;
-
-    bindInfoMethodologyViewDevelopmentLockGuard();
-
-    void refreshInfoMethodologyAdminBypass();
-
     syncInfoMethodologyViewDevelopmentLocks();
-
-    if (
-      typeof MutationObserver !== "undefined"
-      && document.documentElement.dataset.infoMethodologyViewLockObserverBound !== "true"
-    ) {
-      document.documentElement.dataset.infoMethodologyViewLockObserverBound = "true";
-
-      const observer = new MutationObserver(() => {
-        syncInfoMethodologyViewDevelopmentLocks();
-      });
-
-      observer.observe(document.body, {
-        childList: true,
-        subtree: true
-      });
-    }
-  }
+}
 
   window.isInfoMethodologyViewLockedAsync = isInfoMethodologyViewLockedAsync;
   window.showInfoMethodologyDevelopmentPopup = showInfoMethodologyDevelopmentPopup;
@@ -28927,110 +28791,154 @@ function getProfessionalConsumptionMapLeanInitialQuery(baseQuery) {
 })();
 
 
-/* INFO_UNLOCK001_PUBLIC_INFO_METHODOLOGY_VIEW */
+/* ADMIN_NAV001_STABLE_ADMIN_ROUTE */
 (function () {
   "use strict";
 
-  const INFO_LABEL_PATTERNS = [
-    "info",
-    "méthodologie",
-    "methodologie",
-    "methodology"
-  ];
-
-  function textMatchesInfoMethodology(value) {
-    const normalized = String(value || "")
+  function normalizeAdminRouteValue(value) {
+    return String(value || "")
       .toLowerCase()
       .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "");
-    return normalized.includes("info") && (
-      normalized.includes("methodologie") ||
-      normalized.includes("methodology") ||
-      normalized.includes("method")
-    );
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
   }
 
-  function elementLooksLikeInfoMethodology(element) {
+  function isAdminNavigationValue(value) {
+    const normalized = normalizeAdminRouteValue(value);
+
+    if (!normalized) {
+      return false;
+    }
+
+    return normalized === "admin"
+      || normalized.includes("administration")
+      || normalized.includes("parametres")
+      || normalized.includes("parametre");
+  }
+
+  function isAdminNavigationElement(element) {
     if (!element) {
       return false;
     }
 
-    const candidates = [
+    const values = [
+      element.value,
       element.textContent,
-      element.getAttribute("aria-label"),
-      element.getAttribute("title"),
-      element.getAttribute("data-view"),
-      element.getAttribute("data-section"),
-      element.getAttribute("data-target"),
-      element.getAttribute("href"),
-      element.id,
-      element.className
+      element.getAttribute && element.getAttribute("title"),
+      element.getAttribute && element.getAttribute("aria-label"),
+      element.getAttribute && element.getAttribute("data-view"),
+      element.getAttribute && element.getAttribute("data-nav-view"),
+      element.getAttribute && element.getAttribute("data-sidebar-view"),
+      element.getAttribute && element.getAttribute("data-main-view"),
+      element.getAttribute && element.getAttribute("data-collapsed-view"),
+      element.getAttribute && element.getAttribute("href")
     ];
 
-    return candidates.some(textMatchesInfoMethodology);
+    return values.some(isAdminNavigationValue);
   }
 
-  function unlockInfoMethodologyViewEntry() {
-    document
-      .querySelectorAll("a, button, [role='button'], [data-view], [data-section], [data-target], .nav-item, .sidebar-item, .menu-item")
-      .forEach((element) => {
-        if (!elementLooksLikeInfoMethodology(element)) {
-          return;
-        }
-
-        element.hidden = false;
-        element.disabled = false;
-
-        element.removeAttribute("disabled");
-        element.removeAttribute("aria-disabled");
-        element.removeAttribute("data-admin-only");
-        element.removeAttribute("data-requires-admin");
-        element.removeAttribute("data-locked");
-
-        element.classList.remove(
-          "admin-only",
-          "requires-admin",
-          "require-admin",
-          "admin-required",
-          "is-locked",
-          "locked",
-          "disabled",
-          "d-none",
-          "hidden"
-        );
-
-        if (element.style && element.style.display === "none") {
-          element.style.display = "";
-        }
-
-        if (element.style && element.style.pointerEvents === "none") {
-          element.style.pointerEvents = "";
-        }
-      });
+  function markAdminRadioChecked() {
+    document.querySelectorAll('input[name="dataView"]').forEach((input) => {
+      input.checked = input.value === "admin";
+    });
   }
 
-  window.mlcfluxInfoMethodologyViewIsPublic = true;
+  async function openAdministrationViewDirectly() {
+    try {
+      markAdminRadioChecked();
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", unlockInfoMethodologyViewEntry);
-  } else {
-    unlockInfoMethodologyViewEntry();
+      if (typeof renderAdministrationView === "function") {
+        await renderAdministrationView();
+        return true;
+      }
+
+      throw new Error("renderAdministrationView introuvable");
+    } catch (error) {
+      console.error("ADMIN_NAV001 — impossible d’ouvrir l’administration :", error);
+
+      try {
+        if (typeof appState !== "undefined" && appState) {
+          appState.currentView = "admin";
+        }
+
+        if (typeof syncSidebarView === "function") {
+          syncSidebarView("admin");
+        }
+
+        if (typeof setTitle === "function") {
+          setTitle("Administration & paramètres");
+        }
+
+        if (typeof content !== "undefined" && content) {
+          content.innerHTML = `
+            <section class="card">
+              <p class="info-view-kicker">Administration</p>
+              <h2>Erreur d’ouverture de la vue administration</h2>
+              <p>${String(error && error.message ? error.message : error)}</p>
+            </section>
+          `;
+        }
+      } catch (fallbackError) {
+        console.error("ADMIN_NAV001 — fallback admin impossible :", fallbackError);
+      }
+
+      return false;
+    }
   }
 
-  window.addEventListener("load", unlockInfoMethodologyViewEntry);
-  window.addEventListener("hashchange", unlockInfoMethodologyViewEntry);
-  window.addEventListener("mlcflux:auth-updated", unlockInfoMethodologyViewEntry);
-  window.addEventListener("mlcflux:mlc-changed", unlockInfoMethodologyViewEntry);
+  function installAdministrationNavigationGuard() {
+    if (window.__MLCFluxAdminNav001Installed) {
+      return;
+    }
 
-  const observer = new MutationObserver(() => {
-    window.requestAnimationFrame(unlockInfoMethodologyViewEntry);
-  });
+    window.__MLCFluxAdminNav001Installed = true;
 
-  observer.observe(document.documentElement, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: ["class", "hidden", "disabled", "aria-disabled", "data-admin-only", "data-requires-admin", "data-locked"]
-  });
+    document.addEventListener("click", function (event) {
+      const target = event.target && event.target.closest
+        ? event.target.closest('input[name="dataView"], label, a, button, [role="button"], [data-view], [data-nav-view], [data-sidebar-view], [data-main-view], [data-collapsed-view]')
+        : null;
+
+      if (!target) {
+        return;
+      }
+
+      const navRoot = target.closest(".sidebar, .sidebar-collapsed-rail, #collapsedSidebarRail");
+      if (!navRoot && !(target.matches && target.matches('input[name="dataView"]'))) {
+        return;
+      }
+
+      if (!isAdminNavigationElement(target)) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopImmediatePropagation();
+
+      void openAdministrationViewDirectly();
+    }, true);
+
+    document.addEventListener("change", function (event) {
+      const target = event.target;
+
+      if (
+        !target
+        || !target.matches
+        || !target.matches('input[name="dataView"]')
+        || target.value !== "admin"
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopImmediatePropagation();
+
+      void openAdministrationViewDirectly();
+    }, true);
+  }
+
+  window.mlcfluxOpenAdministrationView = openAdministrationViewDirectly;
+
+  installAdministrationNavigationGuard();
 })();
 
