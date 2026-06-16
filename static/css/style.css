@@ -18702,4 +18702,33 @@ body.dark-mode .info-toc-card {
   border-color: rgba(148, 163, 184, 0.26);
 }
 
+/* VERSION_102_MLCFLUX_MULTI_BADGE */
+.mlcflux-version-badge {
+  position: fixed;
+  left: 14px;
+  bottom: 12px;
+  z-index: 9998;
+  max-width: min(72vw, 420px);
+  padding: 0.35rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.74);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.16);
+  backdrop-filter: blur(8px);
+}
+
+body.dark-mode .mlcflux-version-badge {
+  background: rgba(255, 255, 255, 0.10);
+  color: rgba(255, 255, 255, 0.74);
+}
+
+@media (max-width: 760px) {
+  .mlcflux-version-badge {
+    display: none;
+  }
+}
 

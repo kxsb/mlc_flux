@@ -1,3 +1,11 @@
+/* VERSION_102_MLCFLUX_MULTI */
+window.MLCFLUX_VERSION = {
+  number: "v1.0.2",
+  label: "MLCFlux bêta v1.0.2 multi — juin 2026",
+  meta: "MLCFlux beta v1.0.2 multi - juin 2026"
+};
+document.documentElement.setAttribute("data-mlcflux-version", "v1.0.2");
+
 
 const MLCFLUX_MLC_CONTEXT = {
   id: null,
