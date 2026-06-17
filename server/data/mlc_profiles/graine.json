@@ -480,5 +480,14 @@
   },
   "operator_accounts": [
     "P0053"
-  ]
+  ],
+  "territorial_scope": {
+    "kind": "department_postal_prefixes",
+    "label": "département de l’Hérault",
+    "short_label": "34",
+    "postal_code_prefixes": [
+      "34"
+    ],
+    "outside_label": "Hors département 34"
+  }
 }

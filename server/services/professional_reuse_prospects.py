@@ -62,6 +62,138 @@ def _parse_iso_date(value: str | None, field_name: str) -> str | None:
         ) from exc
 
 
+
+# REUSE_PROSPECTS002_PROFESSIONAL_NAMES
+def _table_columns(conn: sqlite3.Connection, table_name: str) -> set[str]:
+    if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", table_name or ""):
+        return set()
+
+    exists = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+        (table_name,),
+    ).fetchone()
+
+    if not exists:
+        return set()
+
+    return {
+        row["name"]
+        for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+    }
+
+
+def _select_first_existing_column(columns: set[str], candidates: list[str]) -> str | None:
+    for column in candidates:
+        if column in columns:
+            return column
+    return None
+
+
+def _professional_enrichment_lookup(
+    conn: sqlite3.Connection,
+    refs: set[str],
+) -> dict[str, dict[str, Any]]:
+    """Lookup multi-MLC hors Odoo : professional_enrichment quand disponible."""
+    if not refs:
+        return {}
+
+    columns = _table_columns(conn, "professional_enrichment")
+
+    if not columns:
+        return {}
+
+    ref_column = _select_first_existing_column(
+        columns,
+        ["professional_ref", "actor_ref", "ref", "account_number", "cyclos_ref"],
+    )
+
+    name_columns = [
+        column
+        for column in [
+            "display_name",
+            "legal_name",
+            "name",
+            "odoo_name",
+            "business_name",
+            "commercial_name",
+            "label",
+        ]
+        if column in columns
+    ]
+
+    industry_column = _select_first_existing_column(
+        columns,
+        ["industry_name", "sector_name", "activity_sector", "category_name"],
+    )
+
+    activity_column = _select_first_existing_column(
+        columns,
+        ["short_description", "detailed_activity", "activity", "description"],
+    )
+
+    zip_column = _select_first_existing_column(
+        columns,
+        ["cyclos_zip", "zip", "postal_code"],
+    )
+
+    city_column = _select_first_existing_column(
+        columns,
+        ["cyclos_city", "city"],
+    )
+
+    if not ref_column or not name_columns:
+        return {}
+
+    placeholders = ",".join("?" for _ in refs)
+    select_parts = [
+        f"{ref_column} AS professional_ref",
+        *[f"{column} AS name_{index}" for index, column in enumerate(name_columns)],
+    ]
+
+    if industry_column:
+        select_parts.append(f"{industry_column} AS industry_name")
+
+    if activity_column:
+        select_parts.append(f"{activity_column} AS detailed_activity")
+
+    if zip_column:
+        select_parts.append(f"{zip_column} AS zip")
+
+    if city_column:
+        select_parts.append(f"{city_column} AS city")
+
+    rows = conn.execute(
+        f"""
+        SELECT {", ".join(select_parts)}
+        FROM professional_enrichment
+        WHERE {ref_column} IN ({placeholders})
+        """,
+        sorted(refs),
+    ).fetchall()
+
+    lookup: dict[str, dict[str, Any]] = {}
+
+    for row in rows:
+        ref = _normalize_professional_ref(row["professional_ref"])
+        name = None
+
+        for index in range(len(name_columns)):
+            name = _clean_text(row[f"name_{index}"])
+            if name:
+                break
+
+        lookup[ref] = {
+            "professional_ref": ref,
+            "name": name or ref,
+            "industry_name": _clean_text(row["industry_name"]) if "industry_name" in row.keys() else None,
+            "detailed_activity": _clean_text(row["detailed_activity"]) if "detailed_activity" in row.keys() else None,
+            "zip": _clean_text(row["zip"]) if "zip" in row.keys() else None,
+            "city": _clean_text(row["city"]) if "city" in row.keys() else None,
+        }
+
+    return lookup
+
+
 def _professional_identity(
     conn: sqlite3.Connection,
     professional_ref: str,
@@ -141,6 +273,25 @@ def _professional_lookup(
             "zip": _clean_text(row["cyclos_zip"]) or _clean_text(row["zip"]),
             "city": _clean_text(row["cyclos_city"]) or _clean_text(row["city"]),
         }
+
+    # REUSE_PROSPECTS002_PROFESSIONAL_NAMES
+    # Complément multi-MLC : si Odoo est absent/incomplet, récupérer le libellé
+    # depuis professional_enrichment, utilisé notamment par Graine.
+    generic_lookup = _professional_enrichment_lookup(conn, refs)
+
+    for ref, generic in generic_lookup.items():
+        current = lookup.get(ref)
+
+        if not current:
+            lookup[ref] = generic
+            continue
+
+        if current.get("name") == ref and generic.get("name"):
+            current["name"] = generic["name"]
+
+        for key in ["industry_name", "detailed_activity", "zip", "city"]:
+            if not current.get(key) and generic.get(key):
+                current[key] = generic[key]
 
     for ref in refs:
         lookup.setdefault(
@@ -401,6 +552,41 @@ def _candidate_supplier_rows(
     ).fetchall()
 
 
+
+# REUSE_PROSPECTS001D_REPLACE_MAIN_FUNCTION
+def _empirical_network_peer_refs(
+    conn: sqlite3.Connection,
+    *,
+    professional_ref: str,
+    start: str | None,
+    end: str | None,
+) -> list[str]:
+    """Pairs empiriques : pros qui paient d'autres pros sur la période."""
+    period_parts, period_params = _period_where(start, end)
+
+    where_parts = [
+        "SUBSTR(TRIM(from_label), 1, 5) GLOB 'P[0-9][0-9][0-9][0-9]'",
+        "SUBSTR(TRIM(to_label), 1, 5) GLOB 'P[0-9][0-9][0-9][0-9]'",
+        "SUBSTR(TRIM(from_label), 1, 5) NOT IN ('P0000', 'P9999')",
+        "SUBSTR(TRIM(to_label), 1, 5) NOT IN ('P0000', 'P9999')",
+        "SUBSTR(TRIM(from_label), 1, 5) <> ?",
+        "SUBSTR(TRIM(to_label), 1, 5) <> ?",
+    ]
+    where_parts.extend(period_parts)
+
+    rows = conn.execute(
+        f"""
+        SELECT DISTINCT SUBSTR(TRIM(from_label), 1, 5) AS peer_ref
+        FROM transactions
+        WHERE {" AND ".join(where_parts)}
+        ORDER BY peer_ref ASC
+        """,
+        [professional_ref, professional_ref, *period_params],
+    ).fetchall()
+
+    return [row["peer_ref"] for row in rows if row["peer_ref"]]
+
+
 def _signal_level(peer_count: int, peer_share_pct: float) -> str:
     if peer_count >= 3 or peer_share_pct >= 30:
         return "strong"
@@ -427,46 +613,28 @@ def get_professional_reuse_prospects(
         target = _professional_identity(conn, normalized_ref)
         target_industry = _clean_text(target.get("industry_name"))
 
-        if not target_industry:
-            return {
-                "status": "ok",
-                "professional_ref": normalized_ref,
-                "requested_period": {
-                    "start": period["requested_start"],
-                    "end": period["requested_end"],
-                },
-                "effective_period": {
-                    "start": effective_start,
-                    "end": effective_end,
-                },
-                "bounds": {
-                    "min_date": period["min_date"],
-                    "max_date": period["max_date"],
-                },
-                "target": target,
-                "summary": {
-                    "target_industry_name": None,
-                    "same_sector_peer_count": 0,
-                    "active_peer_count": 0,
-                    "candidate_count_total": 0,
-                    "candidate_count_displayed": 0,
-                },
-                "items": [],
-                "status_detail": "missing_target_industry",
-            }
-
-        same_sector_peers = _same_sector_peers(
-            conn,
-            professional_ref=normalized_ref,
-            industry_name=target_industry,
-        )
-
-        active_peer_refs = _active_peer_refs(
-            conn,
-            peer_refs=same_sector_peers,
-            start=effective_start,
-            end=effective_end,
-        )
+        if target_industry:
+            analysis_mode = "same_sector_odoo"
+            same_sector_peers = _same_sector_peers(
+                conn,
+                professional_ref=normalized_ref,
+                industry_name=target_industry,
+            )
+            active_peer_refs = _active_peer_refs(
+                conn,
+                peer_refs=same_sector_peers,
+                start=effective_start,
+                end=effective_end,
+            )
+        else:
+            analysis_mode = "empirical_b2b_network"
+            same_sector_peers = []
+            active_peer_refs = set(_empirical_network_peer_refs(
+                conn,
+                professional_ref=normalized_ref,
+                start=effective_start,
+                end=effective_end,
+            ))
 
         already_paid_in_period = _suppliers_already_paid_by_target(
             conn,
@@ -528,9 +696,8 @@ def get_professional_reuse_prospects(
         all_refs: set[str] = set(candidates_by_supplier.keys()) | set(active_peer_refs)
         professional_info = _professional_lookup(conn, all_refs)
 
-        items: list[dict[str, Any]] = []
-
         active_peer_count = len(active_peer_refs)
+        items: list[dict[str, Any]] = []
 
         for supplier_ref, candidate in candidates_by_supplier.items():
             peer_refs = candidate["peer_refs"]
@@ -541,41 +708,42 @@ def get_professional_reuse_prospects(
                 else 0.0
             )
 
+            info = professional_info.get(supplier_ref, {})
+
             peer_examples = sorted(
                 candidate["peer_examples"],
-                key=lambda item: (
-                    -_safe_float(item["volume"]),
-                    -_safe_int(item["tx_count"]),
-                    item["professional_ref"],
+                key=lambda example: (
+                    -_safe_float(example.get("volume")),
+                    -_safe_int(example.get("tx_count")),
+                    str(example.get("professional_ref") or ""),
                 ),
-            )[:3]
+            )[:4]
 
             enriched_peer_examples = []
             for example in peer_examples:
                 peer_ref = example["professional_ref"]
-                info = professional_info.get(peer_ref, {})
+                peer_info = professional_info.get(peer_ref, {})
                 enriched_peer_examples.append({
-                    **example,
-                    "name": info.get("name") or peer_ref,
-                    "industry_name": info.get("industry_name"),
+                    "professional_ref": peer_ref,
+                    "name": peer_info.get("name") or peer_ref,
+                    "tx_count": _safe_int(example.get("tx_count")),
+                    "volume": _safe_float(example.get("volume")),
                 })
-
-            supplier_info = professional_info.get(supplier_ref, {})
 
             items.append({
                 "professional_ref": supplier_ref,
-                "name": supplier_info.get("name") or supplier_ref,
-                "industry_name": supplier_info.get("industry_name"),
-                "detailed_activity": supplier_info.get("detailed_activity"),
-                "zip": supplier_info.get("zip"),
-                "city": supplier_info.get("city"),
+                "name": info.get("name") or supplier_ref,
+                "industry_name": info.get("industry_name"),
+                "detailed_activity": info.get("detailed_activity"),
+                "zip": info.get("zip"),
+                "city": info.get("city"),
                 "peer_count": peer_count,
                 "peer_share_pct": peer_share_pct,
                 "tx_count": candidate["tx_count"],
                 "volume": candidate["volume"],
                 "signal_level": _signal_level(peer_count, peer_share_pct),
-                "paid_before_period": supplier_ref in paid_before_period,
                 "already_buys_from_target_in_period": supplier_ref in already_buys_from_target,
+                "paid_before_period": supplier_ref in paid_before_period,
                 "peer_examples": enriched_peer_examples,
             })
 
@@ -585,36 +753,36 @@ def get_professional_reuse_prospects(
                 -_safe_float(item["peer_share_pct"]),
                 -_safe_float(item["volume"]),
                 -_safe_int(item["tx_count"]),
-                item["professional_ref"],
+                str(item["professional_ref"]),
             )
         )
 
         displayed_items = items[:clean_limit]
 
-    return {
-        "status": "ok",
-        "professional_ref": normalized_ref,
-        "requested_period": {
-            "start": period["requested_start"],
-            "end": period["requested_end"],
-        },
-        "effective_period": {
-            "start": effective_start,
-            "end": effective_end,
-        },
-        "bounds": {
-            "min_date": period["min_date"],
-            "max_date": period["max_date"],
-        },
-        "target": target,
-        "summary": {
-            "target_industry_name": target_industry,
-            "same_sector_peer_count": len(same_sector_peers),
-            "active_peer_count": len(active_peer_refs),
-            "candidate_count_total": len(items),
-            "candidate_count_displayed": len(displayed_items),
-            "excluded_current_supplier_count": len(already_paid_in_period),
-        },
-        "items": displayed_items,
-        "status_detail": "ok",
-    }
+        return {
+            "status": "ok",
+            "professional_ref": normalized_ref,
+            "requested_period": {
+                "start": period["requested_start"],
+                "end": period["requested_end"],
+            },
+            "effective_period": {
+                "start": effective_start,
+                "end": effective_end,
+            },
+            "bounds": {
+                "min_date": period["min_date"],
+                "max_date": period["max_date"],
+            },
+            "target": target,
+            "summary": {
+                "analysis_mode": analysis_mode,
+                "target_industry_name": target_industry,
+                "same_sector_peer_count": len(same_sector_peers),
+                "active_peer_count": active_peer_count,
+                "candidate_count_total": len(items),
+                "candidate_count_displayed": len(displayed_items),
+            },
+            "items": displayed_items,
+            "status_detail": "ok" if target_industry else "empirical_fallback_missing_target_industry",
+        }

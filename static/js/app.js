@@ -21952,7 +21952,9 @@ function drawProMeetingHeroSection() {
     professionalName = professionalName.slice(prefixDash.length).trim();
   }
 
-  const detailedActivity = String(enrichment.detailed_activity || "").trim();
+  const detailedActivity = plainTextFromHtml(
+    enrichment.short_description || enrichment.detailed_activity || ""
+  );
   const industryName = String(enrichment.industry_name || "").trim();
   const location = formatProfessionalLocation(enrichment);
   const description = plainTextFromHtml(enrichment.website_description_html);
@@ -21984,11 +21986,6 @@ function drawProMeetingHeroSection() {
             <span class="pro-meeting-professional-ref">${escapeHtml(numProf)}</span>
             <h2>${escapeHtml(professionalName || numProf)}</h2>
           </div>
-
-          <p class="pro-meeting-activity">
-            ${escapeHtml(detailedActivity || "Activité professionnelle à préciser")}
-          </p>
-
           ${identityTags ? `<div class="pro-meeting-identity-tags">${identityTags}</div>` : ""}
 
           ${description
@@ -22063,7 +22060,9 @@ function drawProOdooEnrichmentSection() {
     return;
   }
 
-  const detailedActivity = String(enrichment.detailed_activity || "").trim();
+  const detailedActivity = plainTextFromHtml(
+    enrichment.short_description || enrichment.detailed_activity || ""
+  );
   const industryName = String(enrichment.industry_name || "").trim();
   const odooName = String(enrichment.odoo_name || "").trim();
   const displayedName = String(appState.detailData.fullname || "").trim();
@@ -23703,16 +23702,21 @@ function renderProfessionalBalanceHistoryChart(balanceTimeseries = {}) {
   });
 }
 
-function buildProfessionalBalanceSectionHtml(balanceTimeseries = {}) {
+/* PRODATA001_MOVE_BALANCE_CHART */
+function buildProfessionalBalanceSectionHtml(balanceTimeseries = {}, options = {}) {
   const summary = balanceTimeseries?.summary || {};
   const reading = buildProfessionalBalanceTrajectoryReading(balanceTimeseries);
   const hasItems = Array.isArray(balanceTimeseries?.items)
     && balanceTimeseries.items.length > 0;
+  const isCompact = Boolean(options.compact);
 
   const pointCount = Number(summary.point_count || 0);
+  const cardClass = isCompact
+    ? "card pro-detail-balance-card pro-detail-balance-card-compact"
+    : "card pro-detail-balance-card";
 
   return `
-    <section class="card pro-detail-balance-card">
+    <section class="${cardClass}">
       <div class="pro-detail-balance-heading">
         <div>
           <div class="stat-label">Trajectoire de détention</div>
@@ -24486,9 +24490,14 @@ function collectProfessionalPaymentBasinCoordinates(payload = {}) {
     coords.forEach(pushGeoJsonCoordinates);
   };
 
-  Object.values(payload?.geometry?.visible_source_area_geojson || {}).forEach(featureCollection => {
-    (featureCollection?.features || []).forEach(feature => {
-      pushGeoJsonCoordinates(feature?.geometry?.coordinates || []);
+  [
+    payload?.geometry?.territory_area_geojson,
+    payload?.geometry?.visible_source_area_geojson
+  ].forEach(areaGroup => {
+    Object.values(areaGroup || {}).forEach(featureCollection => {
+      (featureCollection?.features || []).forEach(feature => {
+        pushGeoJsonCoordinates(feature?.geometry?.coordinates || []);
+      });
     });
   });
 
@@ -24553,8 +24562,8 @@ function buildProfessionalPaymentBasinProjection(payload, width, height) {
 
 
 function drawProfessionalPaymentBasinPostalLabel(ctx, point, route, radius = 8) {
-  const label = route?.kind === "individual_outside_territory"
-    ? "Hors territoire"
+  const label = isProfessionalPaymentBasinOutsideRoute(route)
+    ? getProfessionalPaymentBasinOutsideLabel(route)
     : String(route?.source?.postal_code || "").trim();
 
   if (!label) {
@@ -24671,8 +24680,11 @@ function getProfessionalPaymentBasinThemePalette() {
     isDark,
     backdrop: isDark ? "rgba(15, 23, 42, 0.12)" : "rgba(255, 255, 255, 0.18)",
     guide: isDark ? "rgba(148, 163, 184, 0.07)" : "rgba(100, 116, 139, 0.06)",
-    areaFill: isDark ? "rgba(148, 163, 184, 0.13)" : "rgba(15, 23, 42, 0.05)",
-    areaStroke: isDark ? "rgba(226, 232, 240, 0.20)" : "rgba(71, 85, 105, 0.16)",
+    /* PRO_BASIN004C_TERRITORY_BACKDROP */
+    territoryFill: isDark ? "rgba(148, 163, 184, 0.055)" : "rgba(15, 23, 42, 0.025)",
+    territoryStroke: isDark ? "rgba(226, 232, 240, 0.11)" : "rgba(71, 85, 105, 0.085)",
+    areaFill: isDark ? "rgba(148, 163, 184, 0.16)" : "rgba(15, 23, 42, 0.07)",
+    areaStroke: isDark ? "rgba(226, 232, 240, 0.24)" : "rgba(71, 85, 105, 0.20)",
     individualRoute: isDark ? "rgba(52, 211, 153, 0.86)" : "rgba(5, 150, 105, 0.78)",
     individualGlow: isDark ? "rgba(52, 211, 153, 0.24)" : "rgba(16, 185, 129, 0.18)",
     professionalRoute: isDark ? "rgba(96, 165, 250, 0.88)" : "rgba(37, 99, 235, 0.80)",
@@ -24835,20 +24847,40 @@ function drawProfessionalPaymentBasinBackdrop(ctx, projection, payload) {
   ctx.restore();
 }
 
+
+/* PRO_BASIN004C_TERRITORY_BACKDROP */
 function drawProfessionalPaymentBasinAreas(ctx, projection, payload) {
   const palette = getProfessionalPaymentBasinThemePalette();
+  const territoryAreaGeojson = payload?.geometry?.territory_area_geojson || {};
+  const visibleSourceAreaGeojson = payload?.geometry?.visible_source_area_geojson || {};
 
   ctx.save();
-  ctx.fillStyle = palette.areaFill;
-  ctx.strokeStyle = palette.areaStroke;
-  ctx.lineWidth = 1.1;
 
-  Object.values(payload?.geometry?.visible_source_area_geojson || {}).forEach(featureCollection => {
-    drawProfessionalPaymentBasinGeoJson(ctx, projection, featureCollection);
-  });
+  const territoryCollections = Object.values(territoryAreaGeojson);
+  if (territoryCollections.length) {
+    ctx.fillStyle = palette.territoryFill;
+    ctx.strokeStyle = palette.territoryStroke;
+    ctx.lineWidth = 0.7;
+
+    territoryCollections.forEach(featureCollection => {
+      drawProfessionalPaymentBasinGeoJson(ctx, projection, featureCollection);
+    });
+  }
+
+  const activeCollections = Object.values(visibleSourceAreaGeojson);
+  if (activeCollections.length) {
+    ctx.fillStyle = palette.areaFill;
+    ctx.strokeStyle = palette.areaStroke;
+    ctx.lineWidth = 1.05;
+
+    activeCollections.forEach(featureCollection => {
+      drawProfessionalPaymentBasinGeoJson(ctx, projection, featureCollection);
+    });
+  }
 
   ctx.restore();
 }
+
 
 function drawProfessionalPaymentBasinRoutes(ctx, projection, payload, timestamp) {
   const palette = getProfessionalPaymentBasinThemePalette();
@@ -25045,24 +25077,145 @@ function drawProfessionalPaymentBasinCenter(ctx, projection, payload) {
 
 
 
+
+/* PRO_BASIN002B_FRONT_OUTSIDE_TOOLTIP */
+function isProfessionalPaymentBasinOutsideRoute(route = {}) {
+  return (
+    route?.kind === "individual_outside_territory"
+    || route?.kind === "professional_outside_territory"
+  );
+}
+
+function getProfessionalPaymentBasinScope(payload = {}) {
+  const scope = payload?.territorial_scope || {};
+  return scope && typeof scope === "object" ? scope : {};
+}
+
+function formatProfessionalPaymentBasinScopeShort(scope = {}) {
+  const shortLabel = String(scope?.short_label || "").trim();
+
+  if (shortLabel) {
+    return `${shortLabel}xxx`;
+  }
+
+  const prefixes = Array.isArray(scope?.postal_code_prefixes)
+    ? scope.postal_code_prefixes.filter(Boolean)
+    : [];
+
+  if (prefixes.length) {
+    return `${prefixes.join(", ")}xxx`;
+  }
+
+  return "périmètre principal";
+}
+
+function getProfessionalPaymentBasinOutsideLabel(routeOrSource = {}) {
+  const source = routeOrSource?.source || routeOrSource || {};
+
+  return String(
+    source?.outside_scope_label
+    || source?.display_label
+    || source?.city_label
+    || source?.name
+    || "Hors département"
+  ).trim();
+}
+
+function getProfessionalPaymentBasinCurrencyPluralLabel() {
+  const instance = String(
+    document.documentElement.getAttribute("data-mlc-instance")
+    || document.body?.dataset?.mlcInstance
+    || ""
+  ).trim().toLowerCase();
+
+  if (instance === "graine") {
+    return "Graines";
+  }
+
+  if (instance === "gonette") {
+    return "Gonettes";
+  }
+
+  return "unités";
+}
+
+function buildProfessionalPaymentBasinOutsideDetailsHtml(details = []) {
+  if (!Array.isArray(details) || !details.length) {
+    return "";
+  }
+
+  const visibleDetails = details.slice(0, 8);
+  const remainingCount = Math.max(0, details.length - visibleDetails.length);
+
+  const detailRows = visibleDetails.map(detail => {
+    const postalCode = String(detail?.postal_code || "").trim();
+    const city = String(detail?.city_label || "").trim();
+    const ref = String(detail?.professional_ref || "").trim();
+    const name = String(detail?.name || "").trim();
+    const txCount = formatProfessionalNetworkCount(detail?.tx_count || 0);
+    const volume = euro(detail?.volume || 0);
+
+    const labelParts = [
+      postalCode,
+      city,
+      ref && name ? `${ref} — ${name}` : ref || name
+    ].filter(Boolean);
+
+    return `
+      <div class="pro-detail-payment-basin-tooltip-row">
+        <span>${escapeHtml(labelParts.join(" · ") || "Origine hors département")}</span>
+        <strong>${txCount} tx · ${volume}</strong>
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <div class="pro-detail-payment-basin-tooltip-row">
+      <strong>Détail</strong>
+    </div>
+    ${detailRows}
+    ${
+      remainingCount > 0
+        ? `
+          <div class="pro-detail-payment-basin-tooltip-row">
+            <span>Autres origines hors département</span>
+            <strong>+${formatProfessionalNetworkCount(remainingCount)}</strong>
+          </div>
+        `
+        : ""
+    }
+  `;
+}
+
+
 function buildProfessionalPaymentBasinTooltipHtml(route = {}) {
   const source = route?.source || {};
   const txCount = formatProfessionalNetworkCount(route?.tx_count || source?.tx_count || 0);
   const volume = euro(route?.volume || source?.volume || 0);
 
-  if (route?.kind === "individual_outside_territory") {
+  if (isProfessionalPaymentBasinOutsideRoute(route)) {
+    const outsideLabel = escapeHtml(getProfessionalPaymentBasinOutsideLabel(route));
+    const sourceCount = formatProfessionalNetworkCount(source?.postal_source_count || source?.outside_scope_details?.length || 0);
     const payerCount = formatProfessionalNetworkCount(route?.payer_count || source?.payer_count || 0);
-    const postalSourceCount = formatProfessionalNetworkCount(source?.postal_source_count || 0);
+    const detailsHtml = buildProfessionalPaymentBasinOutsideDetailsHtml(source?.outside_scope_details || []);
+
+    const actorLabel = route?.kind === "professional_outside_territory"
+      ? "professionnel(s) payeur(s)"
+      : "payeur(s) particulier(s)";
+
+    const sourceLabel = route?.kind === "professional_outside_territory"
+      ? "origine(s) professionnelle(s) agrégée(s)"
+      : "code(s) postal(aux) agrégé(s)";
 
     return `
       <div class="pro-detail-payment-basin-tooltip-title">
-        Hors territoire
+        ${outsideLabel}
       </div>
       <div class="pro-detail-payment-basin-tooltip-row">
-        <strong>${payerCount}</strong> payeur(s) particulier(s)
+        <strong>${payerCount}</strong> ${actorLabel}
       </div>
       <div class="pro-detail-payment-basin-tooltip-row">
-        <strong>${postalSourceCount}</strong> code(s) postal(aux) hors 69xxx agrégé(s)
+        <strong>${sourceCount}</strong> ${sourceLabel}
       </div>
       <div class="pro-detail-payment-basin-tooltip-row">
         <strong>${txCount}</strong> transaction(s)
@@ -25070,6 +25223,7 @@ function buildProfessionalPaymentBasinTooltipHtml(route = {}) {
       <div class="pro-detail-payment-basin-tooltip-row">
         <strong>${volume}</strong> reçus
       </div>
+      ${detailsHtml}
     `;
   }
 
@@ -25108,6 +25262,7 @@ function buildProfessionalPaymentBasinTooltipHtml(route = {}) {
     </div>
   `;
 }
+
 
 function findProfessionalPaymentBasinHoveredSource(
   canvas,
@@ -25185,10 +25340,159 @@ function hideProfessionalPaymentBasinTooltip(tooltip) {
   tooltip.innerHTML = "";
 }
 
+
+/* PRO_BASIN004A_NAVIGABLE_CANVAS */
+/* PRO_BASIN004B_NAV_CONTROLS */
+function getProfessionalPaymentBasinHomeZoom() {
+  return 1;
+}
+
+function getProfessionalPaymentBasinViewportSignature(payload = {}) {
+  const center = payload?.center || {};
+  const routes = Array.isArray(payload?.routes) ? payload.routes : [];
+
+  return JSON.stringify({
+    center: [
+      center?.professional_ref || "",
+      center?.latitude || "",
+      center?.longitude || ""
+    ],
+    routeCount: routes.length,
+    routeSignature: routes.slice(0, 220).map(route => [
+      route?.kind || "",
+      route?.source?.postal_code || "",
+      route?.source?.professional_ref || "",
+      route?.source?.outside_scope_label || "",
+      route?.tx_count || 0,
+      route?.volume || 0
+    ])
+  });
+}
+
+function getProfessionalPaymentBasinViewport(payload = {}) {
+  const signature = getProfessionalPaymentBasinViewportSignature(payload);
+
+  if (
+    !appState.proDetailPaymentBasinViewport
+    || appState.proDetailPaymentBasinViewport.signature !== signature
+  ) {
+    appState.proDetailPaymentBasinViewport = {
+      signature,
+      zoom: getProfessionalPaymentBasinHomeZoom(payload),
+      offsetX: 0,
+      offsetY: 0,
+      isDragging: false,
+      lastX: 0,
+      lastY: 0
+    };
+  }
+
+  return appState.proDetailPaymentBasinViewport;
+}
+
+function clampProfessionalPaymentBasinViewport(viewport, width = 960, height = 560) {
+  viewport.zoom = Math.min(8, Math.max(0.75, Number(viewport.zoom || 1)));
+
+  const maxOffsetX = Math.max(240, width * viewport.zoom * 1.3);
+  const maxOffsetY = Math.max(180, height * viewport.zoom * 1.3);
+
+  viewport.offsetX = Math.min(maxOffsetX, Math.max(-maxOffsetX, Number(viewport.offsetX || 0)));
+  viewport.offsetY = Math.min(maxOffsetY, Math.max(-maxOffsetY, Number(viewport.offsetY || 0)));
+
+  return viewport;
+}
+
+function resetProfessionalPaymentBasinViewport(payload = {}) {
+  const viewport = getProfessionalPaymentBasinViewport(payload);
+  viewport.zoom = getProfessionalPaymentBasinHomeZoom(payload);
+  viewport.offsetX = 0;
+  viewport.offsetY = 0;
+  viewport.isDragging = false;
+  viewport.lastX = 0;
+  viewport.lastY = 0;
+  return viewport;
+}
+
+function buildProfessionalPaymentBasinViewportProjection(baseProjection, viewport) {
+  if (!baseProjection) {
+    return null;
+  }
+
+  const zoom = Number(viewport?.zoom || 1);
+  const offsetX = Number(viewport?.offsetX || 0);
+  const offsetY = Number(viewport?.offsetY || 0);
+  const centerX = Number(baseProjection.width || 0) / 2;
+  const centerY = Number(baseProjection.height || 0) / 2;
+
+  return {
+    ...baseProjection,
+    viewportZoom: zoom,
+    viewportOffsetX: offsetX,
+    viewportOffsetY: offsetY,
+    pixelsPerLongitudeDegree: Number(baseProjection.pixelsPerLongitudeDegree || 0) * zoom,
+    project(longitude, latitude) {
+      const basePoint = baseProjection.project(longitude, latitude);
+
+      return {
+        x: ((basePoint.x - centerX) * zoom) + centerX + offsetX,
+        y: ((basePoint.y - centerY) * zoom) + centerY + offsetY
+      };
+    }
+  };
+}
+
+function zoomProfessionalPaymentBasinViewportAtPoint(
+  viewport,
+  mouseX,
+  mouseY,
+  deltaY,
+  width,
+  height
+) {
+  const oldZoom = Number(viewport.zoom || 1);
+  const factor = deltaY < 0 ? 1.18 : 0.85;
+  const newZoom = Math.min(8, Math.max(0.75, oldZoom * factor));
+
+  if (Math.abs(newZoom - oldZoom) < 0.0001) {
+    return viewport;
+  }
+
+  const centerX = width / 2;
+  const centerY = height / 2;
+
+  viewport.offsetX =
+    mouseX - centerX - (((mouseX - centerX - viewport.offsetX) / oldZoom) * newZoom);
+  viewport.offsetY =
+    mouseY - centerY - (((mouseY - centerY - viewport.offsetY) / oldZoom) * newZoom);
+  viewport.zoom = newZoom;
+
+  return clampProfessionalPaymentBasinViewport(viewport, width, height);
+}
+
+function updateProfessionalPaymentBasinResetButton(payload = {}) {
+  const button = document.getElementById("proDetailPaymentBasinResetView");
+  const viewport = getProfessionalPaymentBasinViewport(payload);
+
+  if (!button) {
+    return;
+  }
+
+  const isDefault =
+    Math.abs(Number(viewport.zoom || 1) - getProfessionalPaymentBasinHomeZoom(payload)) < 0.001
+    && Math.abs(Number(viewport.offsetX || 0)) < 0.5
+    && Math.abs(Number(viewport.offsetY || 0)) < 0.5;
+
+  button.hidden = isDefault;
+}
+
+
 function renderProfessionalPaymentBasinMapCanvas(payload = {}) {
   const canvas = document.getElementById("proDetailPaymentBasinCanvas");
   const frame = canvas?.closest(".pro-detail-payment-basin-map-frame");
   const tooltip = document.getElementById("proDetailPaymentBasinTooltip");
+  const resetButton = document.getElementById("proDetailPaymentBasinResetView");
+  const zoomInButton = document.getElementById("proDetailPaymentBasinZoomIn");
+  const zoomOutButton = document.getElementById("proDetailPaymentBasinZoomOut");
 
   if (!canvas || !frame) {
     return;
@@ -25207,36 +25511,135 @@ function renderProfessionalPaymentBasinMapCanvas(payload = {}) {
   canvas.height = Math.round(height * dpr);
   canvas.style.width = `${width}px`;
   canvas.style.height = `${height}px`;
-  canvas.style.cursor = "default";
+  canvas.style.cursor = "grab";
+  canvas.style.touchAction = "none";
 
   const ctx = canvas.getContext("2d");
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  const projection = buildProfessionalPaymentBasinProjection(payload, width, height);
-  updateProfessionalPaymentBasinScale(projection, payload);
+  const baseProjection = buildProfessionalPaymentBasinProjection(payload, width, height);
+  const viewport = getProfessionalPaymentBasinViewport(payload);
+  clampProfessionalPaymentBasinViewport(viewport, width, height);
 
-  if (!projection || !payload?.center?.has_coordinates || !(payload?.routes || []).length) {
+  const getProjection = () => buildProfessionalPaymentBasinViewportProjection(
+    baseProjection,
+    viewport
+  );
+
+  updateProfessionalPaymentBasinScale(getProjection(), payload);
+  updateProfessionalPaymentBasinResetButton(payload);
+
+  if (!baseProjection || !payload?.center?.has_coordinates || !(payload?.routes || []).length) {
     ctx.clearRect(0, 0, width, height);
     hideProfessionalPaymentBasinTooltip(tooltip);
-    canvas.onmousemove = null;
+    canvas.onwheel = null;
+    canvas.onpointerdown = null;
+    canvas.onpointermove = null;
+    canvas.onpointerup = null;
+    canvas.onpointercancel = null;
     canvas.onmouseleave = null;
+    canvas.ondblclick = null;
+    if (resetButton) {
+      resetButton.onclick = null;
+      resetButton.hidden = true;
+    }
+    if (zoomInButton) {
+      zoomInButton.onclick = null;
+    }
+    if (zoomOutButton) {
+      zoomOutButton.onclick = null;
+    }
     return;
   }
 
-  canvas.onmousemove = event => {
+  const applyButtonZoom = deltaY => {
+    zoomProfessionalPaymentBasinViewportAtPoint(
+      viewport,
+      width / 2,
+      height / 2,
+      deltaY,
+      width,
+      height
+    );
+
+    updateProfessionalPaymentBasinScale(getProjection(), payload);
+    updateProfessionalPaymentBasinResetButton(payload);
+    hideProfessionalPaymentBasinTooltip(tooltip);
+  };
+
+  if (resetButton) {
+    resetButton.onclick = event => {
+      event.preventDefault();
+      resetProfessionalPaymentBasinViewport(payload);
+      updateProfessionalPaymentBasinScale(getProjection(), payload);
+      updateProfessionalPaymentBasinResetButton(payload);
+      hideProfessionalPaymentBasinTooltip(tooltip);
+    };
+  }
+
+  if (zoomInButton) {
+    zoomInButton.onclick = event => {
+      event.preventDefault();
+      applyButtonZoom(-1);
+    };
+  }
+
+  if (zoomOutButton) {
+    zoomOutButton.onclick = event => {
+      event.preventDefault();
+      applyButtonZoom(1);
+    };
+  }
+
+  // Molette volontairement désactivée : elle doit continuer à scroller la page.
+  canvas.onwheel = null;
+
+  canvas.onpointerdown = event => {
+    if (event.button !== 0) {
+      return;
+    }
+
+    viewport.isDragging = true;
+    viewport.lastX = event.clientX;
+    viewport.lastY = event.clientY;
+    canvas.style.cursor = "grabbing";
+    hideProfessionalPaymentBasinTooltip(tooltip);
+
+    if (typeof canvas.setPointerCapture === "function") {
+      canvas.setPointerCapture(event.pointerId);
+    }
+  };
+
+  canvas.onpointermove = event => {
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = event.clientX - rect.left;
+    const mouseY = event.clientY - rect.top;
+
+    if (viewport.isDragging) {
+      viewport.offsetX += event.clientX - viewport.lastX;
+      viewport.offsetY += event.clientY - viewport.lastY;
+      viewport.lastX = event.clientX;
+      viewport.lastY = event.clientY;
+      clampProfessionalPaymentBasinViewport(viewport, width, height);
+      updateProfessionalPaymentBasinScale(getProjection(), payload);
+      updateProfessionalPaymentBasinResetButton(payload);
+      hideProfessionalPaymentBasinTooltip(tooltip);
+      return;
+    }
+
     if (!tooltip) {
       return;
     }
 
-    const { visual, mouseX, mouseY } = findProfessionalPaymentBasinHoveredSource(
+    const { visual } = findProfessionalPaymentBasinHoveredSource(
       canvas,
-      projection,
+      getProjection(),
       payload,
       event
     );
 
     if (!visual) {
-      canvas.style.cursor = "default";
+      canvas.style.cursor = "grab";
       hideProfessionalPaymentBasinTooltip(tooltip);
       return;
     }
@@ -25251,8 +25654,32 @@ function renderProfessionalPaymentBasinMapCanvas(payload = {}) {
     );
   };
 
-  canvas.onmouseleave = () => {
-    canvas.style.cursor = "default";
+  const stopDrag = event => {
+    viewport.isDragging = false;
+    canvas.style.cursor = "grab";
+
+    if (event && typeof canvas.releasePointerCapture === "function") {
+      try {
+        canvas.releasePointerCapture(event.pointerId);
+      } catch (error) {
+        // capture déjà libérée
+      }
+    }
+  };
+
+  canvas.onpointerup = stopDrag;
+  canvas.onpointercancel = stopDrag;
+
+  canvas.onmouseleave = event => {
+    stopDrag(event);
+    hideProfessionalPaymentBasinTooltip(tooltip);
+  };
+
+  canvas.ondblclick = event => {
+    event.preventDefault();
+    resetProfessionalPaymentBasinViewport(payload);
+    updateProfessionalPaymentBasinScale(getProjection(), payload);
+    updateProfessionalPaymentBasinResetButton(payload);
     hideProfessionalPaymentBasinTooltip(tooltip);
   };
 
@@ -25264,6 +25691,8 @@ function renderProfessionalPaymentBasinMapCanvas(payload = {}) {
       appState.proDetailPaymentBasinAnimationFrame = null;
       return;
     }
+
+    const projection = getProjection();
 
     drawProfessionalPaymentBasinBackdrop(ctx, projection, payload);
     drawProfessionalPaymentBasinAreas(ctx, projection, payload);
@@ -25277,9 +25706,12 @@ function renderProfessionalPaymentBasinMapCanvas(payload = {}) {
   appState.proDetailPaymentBasinAnimationFrame = window.requestAnimationFrame(draw);
 }
 
-
 function buildProfessionalPaymentBasinPostalBreakdownHtml(payload = {}) {
   const coverage = payload?.coverage || {};
+  const scope = getProfessionalPaymentBasinScope(payload);
+  const outsideLabel = String(scope?.outside_label || "Hors département").trim();
+  const scopeShortLabel = formatProfessionalPaymentBasinScopeShort(scope);
+
   const visibleSourceCount = Number(
     coverage.individual_visible_postal_source_count || 0
   );
@@ -25304,7 +25736,7 @@ function buildProfessionalPaymentBasinPostalBreakdownHtml(payload = {}) {
           Survolez les points de la carte pour afficher le détail.
           ${
             outsideSourceCount > 0
-              ? ` Les ${formatProfessionalNetworkCount(outsideSourceCount)} foyer(s) hors 69xxx sont regroupés en un seul vecteur « Hors territoire ».`
+              ? ` Les ${formatProfessionalNetworkCount(outsideSourceCount)} foyer(s) hors ${escapeHtml(scopeShortLabel)} sont regroupés dans « ${escapeHtml(outsideLabel)} ».`
               : ""
           }
         </small>
@@ -25312,6 +25744,7 @@ function buildProfessionalPaymentBasinPostalBreakdownHtml(payload = {}) {
     </div>
   `;
 }
+
 
 function buildProfessionalPaymentBasinSectionHtml(payload = {}) {
   const coverage = payload?.coverage || {};
@@ -25328,18 +25761,23 @@ function buildProfessionalPaymentBasinSectionHtml(payload = {}) {
   const missingUPostalData = coverage.individual_missing_postal_data || {};
   const missingUGeometry = coverage.individual_missing_postal_geometry || {};
   const missingPros = Number(coverage.professional_missing_geometry_source_count || 0);
+  const scope = getProfessionalPaymentBasinScope(payload);
+  const scopeLabel = String(scope?.label || "territoire principal").trim();
+  const scopeShortLabel = formatProfessionalPaymentBasinScopeShort(scope);
+  const outsideLabel = String(scope?.outside_label || "Hors département").trim();
+  const currencyLabel = getProfessionalPaymentBasinCurrencyPluralLabel();
 
   return `
     <section class="card pro-detail-payment-basin-card">
       <div class="pro-detail-payment-basin-heading">
         <div>
-          <div class="stat-label">Bassin de paiement Gonette</div>
-          <h3>D’où viennent les Gonettes reçues par ce professionnel ?</h3>
+          <div class="stat-label">Bassin de paiement</div>
+          <h3>D’où viennent les ${escapeHtml(currencyLabel)} reçues par ce professionnel ?</h3>
           <p>
             Cette carte met en scène les flux entrants :
             les foyers de particuliers <strong>U→P</strong> sont agrégés par code postal
-            sur le territoire 69xxx, tandis que les origines extérieures sont regroupées
-            dans un vecteur <strong>Hors territoire</strong>.
+            sur le ${escapeHtml(scopeLabel)} (${escapeHtml(scopeShortLabel)}), tandis que les origines extérieures sont regroupées
+            dans un vecteur <strong>${escapeHtml(outsideLabel)}</strong>.
             Les professionnels payeurs <strong>P→P</strong> apparaissent
             individuellement lorsqu’ils sont géolocalisables.
           </p>
@@ -25384,6 +25822,33 @@ function buildProfessionalPaymentBasinSectionHtml(payload = {}) {
                 class="pro-detail-payment-basin-scale"
                 hidden
               ></div>
+
+              <div class="pro-detail-payment-basin-controls" aria-label="Contrôles de la carte">
+                <button
+                  id="proDetailPaymentBasinZoomIn"
+                  class="pro-detail-payment-basin-zoom-button"
+                  type="button"
+                  aria-label="Zoomer"
+                  title="Zoomer"
+                >+</button>
+
+                <button
+                  id="proDetailPaymentBasinZoomOut"
+                  class="pro-detail-payment-basin-zoom-button"
+                  type="button"
+                  aria-label="Dézoomer"
+                  title="Dézoomer"
+                >−</button>
+
+                <button
+                  id="proDetailPaymentBasinResetView"
+                  class="pro-detail-payment-basin-reset"
+                  type="button"
+                  hidden
+                >
+                  Recentrer
+                </button>
+              </div>
 
               <div class="pro-detail-payment-basin-legend">
                 <span><i class="pro-detail-payment-basin-dot pro-detail-payment-basin-dot-u"></i> Foyers particuliers U→P</span>
@@ -25551,13 +26016,16 @@ function getProfessionalProspectSignalLabel(signalLevel) {
   return "Piste exploratoire";
 }
 
+/* REUSE_PROSPECTS001_EMPIRICAL_FALLBACK */
 function buildProfessionalProspectsReading(data = {}) {
   const summary = data?.summary || {};
   const candidateCount = Number(summary.candidate_count_displayed || 0);
   const activePeerCount = Number(summary.active_peer_count || 0);
   const sector = String(summary.target_industry_name || "").trim();
+  const analysisMode = String(summary.analysis_mode || "").trim();
+  const isEmpiricalFallback = analysisMode === "empirical_b2b_network";
 
-  if (!sector) {
+  if (!sector && !isEmpiricalFallback) {
     return {
       title: "Secteur de comparaison indisponible",
       text: "Le secteur principal Odoo de ce professionnel n’est pas renseigné, ce qui empêche de construire une comparaison robuste avec des pairs.",
@@ -25566,15 +26034,30 @@ function buildProfessionalProspectsReading(data = {}) {
 
   if (activePeerCount <= 0) {
     return {
-      title: `Aucun pair actif du secteur « ${sector} » sur la période`,
-      text: "La période sélectionnée ne fournit pas encore de base empirique suffisante pour suggérer des débouchés issus des pratiques du secteur.",
+      title: isEmpiricalFallback
+        ? "Aucun pair B2B actif exploitable sur la période"
+        : `Aucun pair actif du secteur « ${sector} » sur la période`,
+      text: isEmpiricalFallback
+        ? "La période sélectionnée ne fournit pas assez de paiements B2B entre professionnels pour proposer des débouchés empiriques."
+        : "La période sélectionnée ne fournit pas encore de base empirique suffisante pour suggérer des débouchés issus des pratiques du secteur.",
     };
   }
 
   if (candidateCount <= 0) {
     return {
-      title: "Aucun débouché nouveau clairement repéré chez les pairs",
-      text: `Les professionnels comparables du secteur « ${sector} » n’offrent pas, sur cette période, de piste supplémentaire suffisamment distincte des fournisseurs déjà activés.`,
+      title: isEmpiricalFallback
+        ? "Aucun débouché B2B supplémentaire clairement repéré"
+        : "Aucun débouché nouveau clairement repéré chez les pairs",
+      text: isEmpiricalFallback
+        ? "Les paiements B2B observés dans le réseau ne font pas ressortir de piste supplémentaire suffisamment distincte des fournisseurs déjà activés par ce professionnel."
+        : `Les professionnels comparables du secteur « ${sector} » n’offrent pas, sur cette période, de piste supplémentaire suffisamment distincte des fournisseurs déjà activés.`,
+    };
+  }
+
+  if (isEmpiricalFallback) {
+    return {
+      title: `${formatProfessionalNetworkCount(candidateCount)} piste(s) de réemploi observée(s) dans le réseau B2B`,
+      text: `Ces débouchés sont construits à partir des paiements B2B réalisés par ${formatProfessionalNetworkCount(activePeerCount)} professionnel(s) actif(s) du réseau. En l’absence de secteur Odoo exploitable, il s’agit d’un repérage empirique de débouchés, utile pour préparer des hypothèses de rendez-vous.`,
     };
   }
 
@@ -25614,6 +26097,9 @@ function buildProfessionalProspectsSectionHtml(data = {}) {
   const items = Array.isArray(data?.items) ? data.items : [];
   const reading = buildProfessionalProspectsReading(data);
   const sector = String(summary.target_industry_name || "").trim();
+  const analysisMode = String(summary.analysis_mode || "").trim();
+  const isEmpiricalFallback = analysisMode === "empirical_b2b_network";
+  const comparedBaseLabel = isEmpiricalFallback ? "Réseau B2B observé" : (sector || "—");
   const activePeers = Number(summary.active_peer_count || 0);
   const totalCandidates = Number(summary.candidate_count_total || 0);
   const displayedCandidates = Number(summary.candidate_count_displayed || 0);
@@ -25630,8 +26116,8 @@ function buildProfessionalProspectsSectionHtml(data = {}) {
 
       <div class="pro-prospects-summary-kpis">
         <div>
-          <span>Secteur comparé</span>
-          <strong>${escapeHtml(sector || "—")}</strong>
+          <span>${isEmpiricalFallback ? "Base comparée" : "Secteur comparé"}</span>
+          <strong>${escapeHtml(comparedBaseLabel)}</strong>
         </div>
         <div>
           <span>Pairs actifs</span>
@@ -25740,7 +26226,11 @@ function buildProfessionalProspectsSectionHtml(data = {}) {
 
     <section class="card pro-prospects-method-card">
       <strong>Lecture méthodologique.</strong>
-      Les pistes sont déduites des paiements B2B réalisés par des professionnels du même secteur principal Odoo.
+      ${
+        isEmpiricalFallback
+          ? "Les pistes sont déduites des paiements B2B observés dans le réseau, car aucun secteur Odoo exploitable n’est disponible pour ce professionnel."
+          : "Les pistes sont déduites des paiements B2B réalisés par des professionnels du même secteur principal Odoo."
+      }
       Les comptes opérateurs P0000 / P9999 sont exclus, ainsi que les fournisseurs déjà payés par le professionnel
       étudié pendant la période. Une piste peut donc signaler soit un débouché inédit, soit une relation ancienne à réactiver.
     </section>
@@ -25779,6 +26269,92 @@ async function renderProProspectsTab() {
     `;
   }
 }
+
+
+
+/* PRODATA001G_STABLE_BALANCE_AUTOLOAD */
+function scheduleProfessionalBalanceChartStableAutoload() {
+  const delays = [0, 80, 220, 520, 1000, 1800];
+
+  delays.forEach(delay => {
+    window.setTimeout(() => {
+      if (appState.proTab !== "data") {
+        return;
+      }
+
+      const canvas = document.getElementById("proDetailBalanceHistoryChart");
+      const frame = canvas?.closest(".pro-detail-balance-chart-frame");
+      const frameRect = frame?.getBoundingClientRect?.();
+      const balanceTimeseries = appState.proDetailDynamics?.balance_timeseries || {};
+      const items = Array.isArray(balanceTimeseries.items)
+        ? balanceTimeseries.items
+        : [];
+
+      if (!canvas || !frameRect || frameRect.width <= 0 || frameRect.height <= 0 || !items.length) {
+        return;
+      }
+
+      if (
+        appState.charts.proDetailBalanceHistory
+        && appState.charts.proDetailBalanceHistory.data?.datasets?.[0]?.data?.length === items.length
+      ) {
+        return;
+      }
+
+      renderProfessionalBalanceHistoryChart(balanceTimeseries);
+
+      window.requestAnimationFrame(() => {
+        appState.charts.proDetailBalanceHistory?.resize?.();
+        appState.charts.proDetailBalanceHistory?.update?.("none");
+      });
+    }, delay);
+  });
+}
+
+
+async function renderProfessionalBalanceDataSection() {
+  const host = document.getElementById("proDetailBalanceDataSection");
+
+  if (!host || !appState.detailData || !appState.currentPro) {
+    return;
+  }
+
+  const numProf = appState.currentPro;
+
+  host.innerHTML = `
+    <section class="card pro-detail-balance-card pro-detail-balance-card-compact pro-detail-balance-loading-card">
+      Chargement de la trajectoire de solde…
+    </section>
+  `;
+
+  try {
+    const dynamics = await loadProfessionalDetailDynamics(numProf);
+
+    if (
+      appState.proTab !== "data"
+      || appState.currentPro !== numProf
+      || document.getElementById("proDetailBalanceDataSection") !== host
+    ) {
+      return;
+    }
+
+    appState.proDetailDynamics = dynamics;
+    host.innerHTML = buildProfessionalBalanceSectionHtml(
+      dynamics?.balance_timeseries || {},
+      { compact: true }
+    );
+
+    scheduleProfessionalBalanceChartStableAutoload();
+  } catch (error) {
+    console.error("Erreur chargement trajectoire de solde dans Données :", error);
+    host.innerHTML = `
+      <section class="card pro-detail-balance-card pro-detail-balance-card-compact pro-detail-balance-empty">
+        La trajectoire de solde n’est pas disponible pour cette période.
+      </section>
+    `;
+  }
+}
+
 
 async function renderProCharts() {
   const chartsSection = document.getElementById("proChartsSection");
@@ -25911,16 +26487,50 @@ async function renderProCharts() {
               </div>
             `
         }
-      </section>
-
-      ${buildProfessionalBalanceSectionHtml(dynamics?.balance_timeseries || {})}
-    `;
+      </section>    `;
 
     if (hasVisibleNetworkRelations) {
       renderProfessionalDetailB2BNetworkGraph(dynamics);
     }
 
-    renderProfessionalBalanceHistoryChart(dynamics?.balance_timeseries || {});
+    /* PRODATA001E_AUTOLOAD_BALANCE_CHART */
+    const balanceTimeseries = dynamics?.balance_timeseries || {};
+
+    const renderBalanceChartWhenReady = attempt => {
+      if (
+        appState.proTab !== "data"
+        || appState.currentPro !== numProf
+        || document.getElementById("proDetailBalanceDataSection") !== host
+      ) {
+        return;
+      }
+
+      const canvas = document.getElementById("proDetailBalanceHistoryChart");
+      const frame = canvas?.closest(".pro-detail-balance-chart-frame");
+      const frameRect = frame?.getBoundingClientRect?.();
+
+      if (canvas && frameRect && frameRect.width > 0 && frameRect.height > 0) {
+        renderProfessionalBalanceHistoryChart(balanceTimeseries);
+
+        window.requestAnimationFrame(() => {
+          appState.charts.proDetailBalanceHistory?.resize?.();
+          appState.charts.proDetailBalanceHistory?.update?.("none");
+        });
+
+        return;
+      }
+
+      if (attempt < 12) {
+        window.requestAnimationFrame(() => renderBalanceChartWhenReady(attempt + 1));
+      }
+    };
+
+    window.requestAnimationFrame(() => renderBalanceChartWhenReady(0));
+
+    /* PRODATA001F_DELAYED_BALANCE_AUTOLOAD */
+    [80, 220, 520, 1000].forEach(delay => {
+      window.setTimeout(() => renderBalanceChartWhenReady(0), delay);
+    });
   } catch (error) {
     console.error("Erreur chargement dynamiques fiche pro :", error);
     chartsSection.innerHTML = `
@@ -25954,6 +26564,7 @@ function drawProTabContent() {
     void renderProProspectsTab();
   } else {
     destroyProCharts();
+    void renderProfessionalBalanceDataSection();
   }
 
   updateProTabButtons();
@@ -26058,6 +26669,7 @@ async function renderProDetail(numProf, detailMode = "all") {
 
     <div id="proDataSection">
       <div id="proSummarySection"></div>
+      <div id="proDetailBalanceDataSection"></div>
       <div id="detailSection"></div>
     </div>
 
@@ -26471,6 +27083,93 @@ waitForNextBrowserPaint()
     hydrate: () => renderStatsView(false),
     message: "Chargement des statistiques de l’année en cours…"
   }));
+
+
+/* PRODATA002_SCROLL_TO_RAW_TRANSACTIONS */
+function scrollProfessionalDataToRawTransactions() {
+  const target =
+    document.getElementById("detailSection")
+    || document.querySelector("[data-pro-raw-transactions]")
+    || document.querySelector(".pro-detail-transactions-section")
+    || document.querySelector(".detail-transactions-section");
+
+  if (!target) {
+    return;
+  }
+
+  const offset = 92;
+  const top = target.getBoundingClientRect().top + window.scrollY - offset;
+
+  window.scrollTo({
+    top: Math.max(0, top),
+    behavior: "smooth"
+  });
+
+  target.classList.add("pro-detail-raw-transactions-scroll-focus");
+
+  window.setTimeout(() => {
+    target.classList.remove("pro-detail-raw-transactions-scroll-focus");
+  }, 1200);
+}
+
+function isProfessionalSummaryFilterClickTarget(eventTarget) {
+  const target = eventTarget instanceof Element ? eventTarget : null;
+
+  if (!target) {
+    return false;
+  }
+
+  const summary = target.closest("#proSummarySection");
+
+  if (!summary) {
+    return false;
+  }
+
+  return Boolean(
+    target.closest(`
+      #proSummarySection button,
+      #proSummarySection [role="button"],
+      #proSummarySection [onclick],
+      #proSummarySection [data-filter],
+      #proSummarySection [data-transaction-filter],
+      #proSummarySection [data-flow-filter],
+      #proSummarySection [data-category],
+      #proSummarySection .pro-summary-card,
+      #proSummarySection .pro-flow-card,
+      #proSummarySection .pro-detail-flow-card,
+      #proSummarySection .pro-trajectory-card,
+      #proSummarySection .pro-pilotage-flow-card,
+      #proSummarySection .pro-pilotage-card
+    `)
+  );
+}
+
+function bindProfessionalDataSummaryFilterScroll() {
+  if (document.body?.dataset?.prodata002SummaryScrollBound === "true") {
+    return;
+  }
+
+  document.addEventListener("click", event => {
+    if (appState.currentView !== "pro-detail" || appState.proTab !== "data") {
+      return;
+    }
+
+    if (!isProfessionalSummaryFilterClickTarget(event.target)) {
+      return;
+    }
+
+    // Laisse d’abord le handler existant appliquer le filtre,
+    // puis descend vers la table brute filtrée.
+    window.setTimeout(scrollProfessionalDataToRawTransactions, 120);
+  });
+
+  if (document.body) {
+    document.body.dataset.prodata002SummaryScrollBound = "true";
+  }
+}
+
+
+bindProfessionalDataSummaryFilterScroll();
 
 window.renderProDetail = renderProDetail;
 window.renderProsView = renderProsView;
@@ -27757,319 +28456,8 @@ function getProfessionalConsumptionMapLeanInitialQuery(baseQuery) {
 
 
 
-/* PRO_SUBTABS_FREEZE001_LOCKED_DEV_TABS */
-(function initializeProfessionalListSubtabsDevelopmentLocks() {
-  const LOCKED_PROFESSIONAL_LIST_SUBTAB_LABELS = [
-    "Fond de commerce",
-    "Dynamiques & réseau",
-    "Perspectives & débouchés"
-  ];
+/* PRO_SUBTABS_UNLOCK001_REMOVE_DEV_LOCKS — onglets professionnels ouverts */
 
-  const professionalListSubtabAdminBypassState = {
-    checked: false,
-    checking: false,
-    allowed: false
-  };
-
-  function normalizeProfessionalListSubtabText(value) {
-    return String(value || "")
-      .replace(/🔒/g, "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .toLowerCase();
-  }
-
-  function isProfessionalListSubtabAdminBypassAllowed() {
-    if (professionalListSubtabAdminBypassState.allowed === true) {
-      return true;
-    }
-
-    if (
-      typeof window.hasProfessionalClustersAdminBypass === "function"
-      && window.hasProfessionalClustersAdminBypass() === true
-    ) {
-      return true;
-    }
-
-    return false;
-  }
-
-  function extractProfessionalListSubtabUserFromMePayload(payload) {
-    if (!payload || typeof payload !== "object") {
-      return null;
-    }
-
-    return payload.user
-      || payload.current_user
-      || payload.account
-      || payload.me
-      || null;
-  }
-
-  function isProfessionalListSubtabMainAdminPayload(payload) {
-    const user = extractProfessionalListSubtabUserFromMePayload(payload);
-    const globalRole = String(
-      user?.global_role
-      || user?.role
-      || payload?.global_role
-      || payload?.role
-      || ""
-    ).toLowerCase();
-
-    return Boolean(
-      payload?.authenticated !== false
-      && (
-        globalRole === "admin"
-        || globalRole === "superadmin"
-        || user?.is_admin === true
-        || payload?.is_admin === true
-      )
-    );
-  }
-
-  async function refreshProfessionalListSubtabAdminBypass() {
-    if (professionalListSubtabAdminBypassState.checking) {
-      return professionalListSubtabAdminBypassState.allowed;
-    }
-
-    professionalListSubtabAdminBypassState.checking = true;
-
-    try {
-      const response = await fetch("/api/me", {
-        method: "GET",
-        credentials: "same-origin",
-        headers: {
-          "Accept": "application/json"
-        }
-      });
-
-      if (!response.ok) {
-        professionalListSubtabAdminBypassState.allowed = false;
-        professionalListSubtabAdminBypassState.checked = true;
-        return false;
-      }
-
-      const payload = await response.json();
-      professionalListSubtabAdminBypassState.allowed = isProfessionalListSubtabMainAdminPayload(payload);
-      professionalListSubtabAdminBypassState.checked = true;
-      return professionalListSubtabAdminBypassState.allowed;
-    } catch (_err) {
-      professionalListSubtabAdminBypassState.allowed = false;
-      professionalListSubtabAdminBypassState.checked = true;
-      return false;
-    } finally {
-      professionalListSubtabAdminBypassState.checking = false;
-      syncProfessionalListSubtabDevelopmentLocks();
-    }
-  }
-
-  function getProfessionalListSubtabCandidates() {
-    return Array.from(document.querySelectorAll(`
-      button,
-      a,
-      [role="tab"],
-      [data-tab],
-      [data-pro-tab],
-      [data-professional-tab],
-      [data-professional-analysis-tab],
-      [data-professional-detail-tab],
-      [data-professionals-view-tab]
-    `));
-  }
-
-  function isLockedProfessionalListSubtabElement(element) {
-    if (!element) return false;
-
-    const normalizedText = normalizeProfessionalListSubtabText(element.textContent || "");
-    const normalizedLabels = LOCKED_PROFESSIONAL_LIST_SUBTAB_LABELS
-      .map(normalizeProfessionalListSubtabText);
-
-    return normalizedLabels.includes(normalizedText);
-  }
-
-  function getLockedProfessionalListSubtabElements() {
-    return getProfessionalListSubtabCandidates()
-      .filter(isLockedProfessionalListSubtabElement);
-  }
-
-  function unlockProfessionalListSubtabElement(element) {
-    element.classList.remove("professional-list-subtab-locked");
-    delete element.dataset.professionalListSubtabLocked;
-    element.removeAttribute("aria-disabled");
-
-    if (element.getAttribute("title") === "Cette vue est en cours de développement.") {
-      element.removeAttribute("title");
-    }
-
-    element.querySelectorAll(".professional-list-subtab-lock").forEach(lock => {
-      lock.remove();
-    });
-  }
-
-  function lockProfessionalListSubtabElement(element) {
-    element.classList.add("professional-list-subtab-locked");
-    element.dataset.professionalListSubtabLocked = "true";
-    element.setAttribute("aria-disabled", "true");
-    element.setAttribute("title", "Cette vue est en cours de développement.");
-
-    if (!element.querySelector(".professional-list-subtab-lock")) {
-      const lock = document.createElement("span");
-      lock.className = "professional-list-subtab-lock";
-      lock.setAttribute("aria-hidden", "true");
-      lock.textContent = "🔒";
-      element.appendChild(lock);
-    }
-  }
-
-  function syncProfessionalListSubtabDevelopmentLocks() {
-    const alreadyLocked = Array.from(
-      document.querySelectorAll("[data-professional-list-subtab-locked='true']")
-    );
-
-    if (isProfessionalListSubtabAdminBypassAllowed()) {
-      alreadyLocked.forEach(unlockProfessionalListSubtabElement);
-      return;
-    }
-
-    getLockedProfessionalListSubtabElements().forEach(lockProfessionalListSubtabElement);
-  }
-
-  function closeProfessionalListSubtabDevelopmentPopup() {
-    const modal = document.getElementById("professionalListSubtabLockedModal");
-    if (modal) {
-      modal.remove();
-    }
-  }
-
-  function showProfessionalListSubtabDevelopmentPopup() {
-    if (document.getElementById("professionalListSubtabLockedModal")) {
-      return;
-    }
-
-    const modal = document.createElement("div");
-    modal.id = "professionalListSubtabLockedModal";
-    modal.className = "professional-list-subtab-lock-modal";
-    modal.innerHTML = `
-      <div class="professional-list-subtab-lock-backdrop" data-professional-list-subtab-modal-close></div>
-      <section
-        class="professional-list-subtab-lock-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="professionalListSubtabLockTitle"
-      >
-        <button
-          class="professional-list-subtab-lock-close"
-          type="button"
-          aria-label="Fermer"
-          data-professional-list-subtab-modal-close
-        >×</button>
-
-        <div class="professional-list-subtab-lock-dialog-icon" aria-hidden="true">🔒</div>
-
-        <h2 id="professionalListSubtabLockTitle">Vue en cours de développement</h2>
-
-        <p>Cette vue est en cours de développement.</p>
-
-        <button
-          class="primary-btn professional-list-subtab-lock-ok"
-          type="button"
-          data-professional-list-subtab-modal-close
-        >
-          OK
-        </button>
-      </section>
-    `;
-
-    document.body.appendChild(modal);
-
-    const close = () => closeProfessionalListSubtabDevelopmentPopup();
-
-    modal.querySelectorAll("[data-professional-list-subtab-modal-close]").forEach(button => {
-      button.addEventListener("click", close);
-    });
-
-    const onKeydown = event => {
-      if (event.key === "Escape") {
-        close();
-        document.removeEventListener("keydown", onKeydown, true);
-      }
-    };
-
-    document.addEventListener("keydown", onKeydown, true);
-
-    const okButton = modal.querySelector(".professional-list-subtab-lock-ok");
-    if (okButton) {
-      okButton.focus();
-    }
-  }
-
-  function bindProfessionalListSubtabDevelopmentLockGuard() {
-    if (document.documentElement.dataset.professionalListSubtabLockGuardBound === "true") {
-      return;
-    }
-
-    document.documentElement.dataset.professionalListSubtabLockGuardBound = "true";
-
-    document.addEventListener("click", event => {
-      const target = event.target instanceof Element ? event.target : null;
-      if (!target) return;
-
-      const lockedTab = target.closest("[data-professional-list-subtab-locked='true']");
-      if (!lockedTab) return;
-
-      event.preventDefault();
-      event.stopPropagation();
-
-      if (typeof event.stopImmediatePropagation === "function") {
-        event.stopImmediatePropagation();
-      }
-
-      void refreshProfessionalListSubtabAdminBypass().then(isAdmin => {
-        if (isAdmin) {
-          syncProfessionalListSubtabDevelopmentLocks();
-          lockedTab.click();
-          return;
-        }
-
-        showProfessionalListSubtabDevelopmentPopup();
-      });
-    }, true);
-  }
-
-  function initializeProfessionalListSubtabDevelopmentLockUi() {
-    if (!document.body) return;
-
-    bindProfessionalListSubtabDevelopmentLockGuard();
-
-    void refreshProfessionalListSubtabAdminBypass();
-
-    syncProfessionalListSubtabDevelopmentLocks();
-
-    if (
-      typeof MutationObserver !== "undefined"
-      && document.documentElement.dataset.professionalListSubtabLockObserverBound !== "true"
-    ) {
-      document.documentElement.dataset.professionalListSubtabLockObserverBound = "true";
-
-      const observer = new MutationObserver(() => {
-        syncProfessionalListSubtabDevelopmentLocks();
-      });
-
-      observer.observe(document.body, {
-        childList: true,
-        subtree: true
-      });
-    }
-  }
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initializeProfessionalListSubtabDevelopmentLockUi);
-  } else {
-    initializeProfessionalListSubtabDevelopmentLockUi();
-  }
-
-  window.addEventListener("load", initializeProfessionalListSubtabDevelopmentLockUi);
-})();
 
 
 /* STATS_ASSOC_TECH_FREEZE001_LOCKED_TAB */

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 import sqlite3
 from datetime import date
@@ -45,6 +46,332 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+
+# PRO_BASIN001A_ADAPTIVE_MAP_PAYLOAD
+def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
+    row = conn.execute(
+        """
+        SELECT 1
+        FROM sqlite_master
+        WHERE type = 'table'
+          AND name = ?
+        """,
+        (table_name,),
+    ).fetchone()
+    return row is not None
+
+
+def _first_text(*values: Any) -> str | None:
+    for value in values:
+        cleaned = _clean_text(value)
+        if cleaned:
+            return cleaned
+    return None
+
+
+def _finite_pair(latitude: Any, longitude: Any) -> tuple[float | None, float | None, bool]:
+    lat = _safe_float(latitude, default=float("nan"))
+    lon = _safe_float(longitude, default=float("nan"))
+    has_coordinates = math.isfinite(lat) and math.isfinite(lon)
+    return (
+        lat if has_coordinates else None,
+        lon if has_coordinates else None,
+        has_coordinates,
+    )
+
+
+def _synthetic_source_area_feature_collection(source: dict[str, Any]) -> dict[str, Any] | None:
+    latitude = _safe_float(source.get("latitude"), default=float("nan"))
+    longitude = _safe_float(source.get("longitude"), default=float("nan"))
+
+    if not math.isfinite(latitude) or not math.isfinite(longitude):
+        return None
+
+    payer_count = max(1, _safe_int(source.get("payer_count"), 1))
+    radius_km = max(0.45, min(2.2, 0.45 + math.sqrt(payer_count) * 0.16))
+
+    lat_delta = radius_km / 111.32
+    cos_lat = max(0.25, math.cos(math.radians(latitude)))
+    lon_delta = radius_km / (111.32 * cos_lat)
+
+    points = []
+    for index in range(28):
+        angle = (2 * math.pi * index) / 28
+        points.append([
+            longitude + math.cos(angle) * lon_delta,
+            latitude + math.sin(angle) * lat_delta,
+        ])
+
+    points.append(points[0])
+
+    postal_code = _clean_text(source.get("postal_code"))
+
+    return {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {
+                    "postal_code": postal_code,
+                    "city_label": _clean_text(source.get("city_label")),
+                    "synthetic": True,
+                    "source": "actor_map_locations_centroid_buffer",
+                },
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [points],
+                },
+            }
+        ],
+    }
+
+
+
+# PRO_BASIN002A_SCOPE_OUTSIDE_AGGREGATE
+
+def _payment_basin_active_mlc_id() -> str:
+    """
+    Résout l'instance MLC réellement active.
+
+    Ordre volontaire :
+    1. contexte HTTP multi-MLC : query string / session / g ;
+    2. variables d'environnement : scripts, tests directs, tâches CLI ;
+    3. fallback historique.
+    """
+    try:
+        from flask import g, has_request_context, request, session
+
+        if has_request_context():
+            candidates = [
+                request.args.get("mlc"),
+                session.get("active_mlc_id"),
+                session.get("pending_mlc_id"),
+                getattr(g, "active_mlc_id", None),
+                request.headers.get("X-MLC-Id"),
+                request.headers.get("X-MLCFlux-MLC-Id"),
+            ]
+
+            for candidate in candidates:
+                cleaned = str(candidate or "").strip()
+                if cleaned:
+                    return cleaned
+    except Exception:
+        pass
+
+    return (
+        os.environ.get("MLCFLUX_DEFAULT_MLC_ID")
+        or os.environ.get("MLCFLUX_ACTIVE_MLC_ID")
+        or "gonette"
+    )
+
+
+def _payment_basin_load_profile() -> dict[str, Any]:
+    mlc_id = _payment_basin_active_mlc_id()
+    profile_path = Path(__file__).resolve().parents[1] / "data" / "mlc_profiles" / f"{mlc_id}.json"
+
+    try:
+        return json.loads(profile_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _payment_basin_territorial_scope() -> dict[str, Any]:
+    profile = _payment_basin_load_profile()
+    scope = profile.get("territorial_scope")
+
+    if isinstance(scope, dict):
+        prefixes = [
+            str(prefix).strip()
+            for prefix in scope.get("postal_code_prefixes", [])
+            if str(prefix).strip()
+        ]
+        if prefixes:
+            result = dict(scope)
+            result["postal_code_prefixes"] = prefixes
+            return result
+
+    mlc_id = _payment_basin_active_mlc_id()
+
+    if mlc_id == "graine":
+        return {
+            "kind": "department_postal_prefixes",
+            "label": "département de l’Hérault",
+            "short_label": "34",
+            "postal_code_prefixes": ["34"],
+            "outside_label": "Hors département 34",
+        }
+
+    if mlc_id == "gonette":
+        return {
+            "kind": "department_postal_prefixes",
+            "label": "département du Rhône",
+            "short_label": "69",
+            "postal_code_prefixes": ["69"],
+            "outside_label": "Hors département 69",
+        }
+
+    return {
+        "kind": "none",
+        "label": "territoire principal",
+        "short_label": "",
+        "postal_code_prefixes": [],
+        "outside_label": "Hors territoire",
+    }
+
+
+def _postal_code_in_payment_scope(postal_code: Any, scope: dict[str, Any]) -> bool:
+    cleaned = _clean_zip(postal_code)
+    prefixes = [
+        str(prefix).strip()
+        for prefix in (scope or {}).get("postal_code_prefixes", [])
+        if str(prefix).strip()
+    ]
+
+    if not prefixes:
+        return True
+
+    # Si le périmètre local est défini mais que la source n'a pas de code postal
+    # exploitable, elle ne doit pas faire planter le service : elle sort du
+    # périmètre cartographique local et pourra être agrégée.
+    if not cleaned:
+        return False
+
+    return any(cleaned.startswith(prefix) for prefix in prefixes)
+
+
+def _split_sources_by_payment_scope(
+    sources: list[dict[str, Any]],
+    scope: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    in_scope = []
+    outside_scope = []
+
+    for source in sources:
+        if _postal_code_in_payment_scope(source.get("postal_code") or source.get("zip"), scope):
+            in_scope.append(source)
+        else:
+            outside_scope.append(source)
+
+    return in_scope, outside_scope
+
+
+def _outside_scope_anchor_coordinates(
+    *,
+    center: dict[str, Any],
+    visible_sources: list[dict[str, Any]],
+) -> tuple[float | None, float | None]:
+    center_latitude, center_longitude, center_ok = _finite_pair(
+        center.get("latitude"),
+        center.get("longitude"),
+    )
+
+    if center_ok:
+        # Point volontairement proche du bassin local : il représente un agrégat,
+        # pas une localisation réelle des hors-département.
+        return center_latitude, center_longitude - 0.075
+
+    weighted_latitude = 0.0
+    weighted_longitude = 0.0
+    total_weight = 0
+
+    for source in visible_sources:
+        latitude, longitude, ok = _finite_pair(
+            source.get("latitude"),
+            source.get("longitude"),
+        )
+        if not ok:
+            continue
+
+        weight = max(1, _safe_int(source.get("payer_count") or source.get("tx_count"), 1))
+        weighted_latitude += latitude * weight
+        weighted_longitude += longitude * weight
+        total_weight += weight
+
+    if total_weight <= 0:
+        return None, None
+
+    return weighted_latitude / total_weight, weighted_longitude / total_weight
+
+
+def _aggregate_outside_scope_sources(
+    sources: list[dict[str, Any]],
+    *,
+    center: dict[str, Any],
+    in_scope_sources: list[dict[str, Any]],
+    scope: dict[str, Any],
+    source_kind: str,
+) -> dict[str, Any] | None:
+    if not sources:
+        return None
+
+    latitude, longitude = _outside_scope_anchor_coordinates(
+        center=center,
+        visible_sources=[*in_scope_sources, *sources],
+    )
+
+    if latitude is None or longitude is None:
+        return None
+
+    outside_label = (
+        _clean_text((scope or {}).get("outside_label"))
+        or "Hors département"
+    )
+
+    details = []
+    for source in sorted(
+        sources,
+        key=lambda item: (
+            -_safe_float(item.get("volume")),
+            -_safe_int(item.get("tx_count")),
+            str(item.get("postal_code") or item.get("zip") or ""),
+        ),
+    ):
+        details.append({
+            "postal_code": _clean_text(source.get("postal_code") or source.get("zip")),
+            "city_label": _clean_text(source.get("city_label") or source.get("city")),
+            "professional_ref": _clean_text(source.get("professional_ref")),
+            "name": _clean_text(source.get("name")),
+            "payer_count": _safe_int(source.get("payer_count"), 0),
+            "tx_count": _safe_int(source.get("tx_count"), 0),
+            "volume": _safe_float(source.get("volume")),
+        })
+
+    aggregate = {
+        "postal_code": None,
+        "zip": None,
+        "display_label": outside_label,
+        "city_label": outside_label,
+        "name": outside_label,
+        "longitude": longitude,
+        "latitude": latitude,
+        "payer_count": sum(
+            max(1, _safe_int(source.get("payer_count"), 0))
+            for source in sources
+        ),
+        "tx_count": sum(_safe_int(source.get("tx_count"), 0) for source in sources),
+        "volume": sum(_safe_float(source.get("volume")) for source in sources),
+        "postal_source_count": len(sources),
+        "is_outside_territory": True,
+        "is_outside_scope": True,
+        "outside_scope_label": outside_label,
+        "outside_scope_details": details,
+        "outside_scope_postal_codes": [
+            value for value in sorted({
+                _clean_text(source.get("postal_code") or source.get("zip"))
+                for source in sources
+                if _clean_text(source.get("postal_code") or source.get("zip"))
+            })
+        ],
+        "source_kind": source_kind,
+        "has_coordinates": True,
+    }
+
+    if source_kind == "professional":
+        aggregate["professional_ref"] = "P_OUTSIDE_SCOPE"
+
+    return aggregate
 
 
 def _normalize_professional_ref(value: str | None) -> str:
@@ -109,57 +436,141 @@ def _resolve_period(
         "max_date": bounds["max_date"] if bounds else None,
     }
 
-
 def _professional_center(
     conn: sqlite3.Connection,
     professional_ref: str,
 ) -> dict[str, Any]:
-    row = conn.execute(
-        """
-        SELECT
-          professional_ref,
-          odoo_name,
-          industry_name,
-          detailed_activity,
-          COALESCE(cyclos_zip, zip) AS zip,
-          COALESCE(cyclos_city, city) AS city,
-          cyclos_latitude AS latitude,
-          cyclos_longitude AS longitude,
-          geo_match_status
-        FROM odoo_professional_enrichment
-        WHERE professional_ref = ?
-        """,
-        (professional_ref,),
-    ).fetchone()
+    location = None
+    if _table_exists(conn, "actor_map_locations"):
+        location = conn.execute(
+            """
+            SELECT
+              actor_ref,
+              postal_code,
+              city,
+              latitude,
+              longitude,
+              cartographiable,
+              location_strategy,
+              source_provider
+            FROM actor_map_locations
+            WHERE actor_ref = ?
+            LIMIT 1
+            """,
+            (professional_ref,),
+        ).fetchone()
 
-    if not row:
-        return {
-            "professional_ref": professional_ref,
-            "name": professional_ref,
-            "industry_name": None,
-            "detailed_activity": None,
-            "zip": None,
-            "city": None,
-            "latitude": None,
-            "longitude": None,
-            "geo_match_status": None,
-            "has_coordinates": False,
-        }
+    generic = None
+    if _table_exists(conn, "professional_enrichment"):
+        generic = conn.execute(
+            """
+            SELECT
+              professional_ref,
+              display_name,
+              legal_name,
+              industry_name,
+              detailed_activity,
+              short_description,
+              zip,
+              city,
+              latitude,
+              longitude
+            FROM professional_enrichment
+            WHERE professional_ref = ?
+              AND (
+                    cyclos_group_set LIKE 'B %'
+                    OR LOWER(COALESCE(cyclos_group, '')) LIKE '%prestataire%'
+                    OR actor_type_internal IN ('MonComptePro', 'compteProBillets')
+              )
+            LIMIT 1
+            """,
+            (professional_ref,),
+        ).fetchone()
 
-    latitude = _safe_float(row["latitude"], default=float("nan"))
-    longitude = _safe_float(row["longitude"], default=float("nan"))
-    has_coordinates = math.isfinite(latitude) and math.isfinite(longitude)
+    legacy = None
+    if _table_exists(conn, "odoo_professional_enrichment"):
+        legacy = conn.execute(
+            """
+            SELECT
+              professional_ref,
+              odoo_name,
+              industry_name,
+              detailed_activity,
+              COALESCE(cyclos_zip, zip) AS zip,
+              COALESCE(cyclos_city, city) AS city,
+              COALESCE(cyclos_latitude, latitude) AS latitude,
+              COALESCE(cyclos_longitude, longitude) AS longitude,
+              geo_match_status
+            FROM odoo_professional_enrichment
+            WHERE professional_ref = ?
+            LIMIT 1
+            """,
+            (professional_ref,),
+        ).fetchone()
+
+    latitude = None
+    longitude = None
+    has_coordinates = False
+
+    coordinate_candidates = []
+    if location is not None and _safe_int(location["cartographiable"], 0) == 1:
+        coordinate_candidates.append((location["latitude"], location["longitude"]))
+    if generic is not None:
+        coordinate_candidates.append((generic["latitude"], generic["longitude"]))
+    if legacy is not None:
+        coordinate_candidates.append((legacy["latitude"], legacy["longitude"]))
+
+    for raw_latitude, raw_longitude in coordinate_candidates:
+        latitude, longitude, has_coordinates = _finite_pair(raw_latitude, raw_longitude)
+        if has_coordinates:
+            break
+
+    name = _first_text(
+        generic["display_name"] if generic is not None else None,
+        generic["legal_name"] if generic is not None else None,
+        legacy["odoo_name"] if legacy is not None else None,
+        professional_ref,
+    )
+
+    industry_name = _first_text(
+        generic["industry_name"] if generic is not None else None,
+        legacy["industry_name"] if legacy is not None else None,
+    )
+
+    detailed_activity = _first_text(
+        generic["short_description"] if generic is not None else None,
+        generic["detailed_activity"] if generic is not None else None,
+        legacy["detailed_activity"] if legacy is not None else None,
+    )
+
+    zip_code = _first_text(
+        location["postal_code"] if location is not None else None,
+        generic["zip"] if generic is not None else None,
+        legacy["zip"] if legacy is not None else None,
+    )
+
+    city = _first_text(
+        location["city"] if location is not None else None,
+        generic["city"] if generic is not None else None,
+        legacy["city"] if legacy is not None else None,
+    )
+
+    geo_match_status = _first_text(
+        location["location_strategy"] if location is not None else None,
+        legacy["geo_match_status"] if legacy is not None else None,
+        "actor_map_location" if has_coordinates else None,
+    )
 
     return {
-        "professional_ref": row["professional_ref"],
-        "name": _clean_text(row["odoo_name"]) or professional_ref,
-        "industry_name": _clean_text(row["industry_name"]),
-        "detailed_activity": _clean_text(row["detailed_activity"]),
-        "zip": _clean_text(row["zip"]),
-        "city": _clean_text(row["city"]),
-        "latitude": latitude if has_coordinates else None,
-        "longitude": longitude if has_coordinates else None,
-        "geo_match_status": _clean_text(row["geo_match_status"]),
+        "professional_ref": professional_ref,
+        "name": name or professional_ref,
+        "industry_name": industry_name,
+        "detailed_activity": detailed_activity,
+        "zip": zip_code,
+        "city": city,
+        "latitude": latitude,
+        "longitude": longitude,
+        "geo_match_status": geo_match_status,
         "has_coordinates": has_coordinates,
     }
 
@@ -204,44 +615,39 @@ def _rough_centroid_from_feature_collection(feature_collection: Any) -> dict[str
 
 
 @lru_cache(maxsize=1)
+
+# PRO_BASIN003A_INSTANCE_POSTAL_AREAS
+def _postal_areas_candidate_paths() -> list[Path]:
+    mlc_id = _payment_basin_active_mlc_id()
+
+    return [
+        DATA_DIR / "instances" / mlc_id / "consumption_postal_areas.json",
+        POSTAL_AREAS_PATH,
+    ]
+
+
 def _load_postal_areas() -> dict[str, dict[str, Any]]:
-    if not POSTAL_AREAS_PATH.exists():
-        return {}
-
-    try:
-        payload = json.loads(POSTAL_AREAS_PATH.read_text())
-    except (OSError, json.JSONDecodeError):
-        return {}
-
-    areas = payload.get("areas") if isinstance(payload, dict) else None
-    if not isinstance(areas, dict):
-        return {}
-
-    cleaned: dict[str, dict[str, Any]] = {}
-
-    for postal_code, area in areas.items():
-        if not isinstance(area, dict):
+    for path in _postal_areas_candidate_paths():
+        if not path.exists():
             continue
 
-        cleaned_postal_code = _clean_zip(postal_code or area.get("postal_code"))
-        if not cleaned_postal_code:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
             continue
 
-        feature_collection = area.get("feature_collection")
-        centroid = _rough_centroid_from_feature_collection(feature_collection)
-
-        if not centroid:
+        areas = payload.get("areas")
+        if not isinstance(areas, dict):
             continue
 
-        cleaned[cleaned_postal_code] = {
-            "postal_code": cleaned_postal_code,
-            "city_label": _clean_text(area.get("city_label")),
-            "feature_collection": feature_collection,
-            "longitude": centroid["longitude"],
-            "latitude": centroid["latitude"],
+        return {
+            str(postal_code): area
+            for postal_code, area in areas.items()
+            if isinstance(area, dict)
         }
 
-    return cleaned
+    return {}
+
 
 
 def _period_sql(start: str | None, end: str | None) -> tuple[list[str], list[Any]]:
@@ -295,7 +701,6 @@ def _individual_totals(
         "volume": _safe_float(row["volume"] if row else 0.0),
     }
 
-
 def _individual_postal_rows(
     conn: sqlite3.Connection,
     *,
@@ -311,9 +716,57 @@ def _individual_postal_rows(
           SUBSTR(TRIM(t.from_label), 1, 2) = 'U_'
           OR SUBSTR(TRIM(t.from_label), 1, 3) = 'UD_'
         )""",
-        "NULLIF(TRIM(i.zip), '') IS NOT NULL",
     ]
     where_parts.extend(date_clauses)
+
+    if _table_exists(conn, "actor_map_locations"):
+        rows = conn.execute(
+            f"""
+            SELECT
+              REPLACE(TRIM(l.postal_code), ' ', '') AS postal_code,
+              MIN(NULLIF(TRIM(l.city), '')) AS city_label,
+              COUNT(DISTINCT TRIM(t.from_label)) AS payer_count,
+              COUNT(*) AS tx_count,
+              COALESCE(SUM(t.amount), 0) AS volume,
+              AVG(l.latitude) AS latitude,
+              AVG(l.longitude) AS longitude
+            FROM transactions t
+            JOIN actor_map_locations l
+              ON l.actor_ref = TRIM(t.from_label)
+            WHERE {" AND ".join(where_parts)}
+              AND l.cartographiable = 1
+              AND NULLIF(TRIM(l.postal_code), '') IS NOT NULL
+              AND l.latitude IS NOT NULL
+              AND l.longitude IS NOT NULL
+            GROUP BY REPLACE(TRIM(l.postal_code), ' ', '')
+            ORDER BY volume DESC, payer_count DESC, postal_code ASC
+            """,
+            [professional_ref, *date_params],
+        ).fetchall()
+
+        if rows:
+            return [
+                {
+                    "postal_code": _clean_zip(row["postal_code"]),
+                    "city_label": _clean_text(row["city_label"]),
+                    "payer_count": _safe_int(row["payer_count"]),
+                    "tx_count": _safe_int(row["tx_count"]),
+                    "volume": _safe_float(row["volume"]),
+                    "latitude": _safe_float(row["latitude"], default=None),
+                    "longitude": _safe_float(row["longitude"], default=None),
+                    "location_source": "actor_map_locations",
+                }
+                for row in rows
+                if _clean_zip(row["postal_code"])
+            ]
+
+    if not _table_exists(conn, "odoo_individual_enrichment"):
+        return []
+
+    fallback_where_parts = [
+        *where_parts,
+        "NULLIF(TRIM(i.zip), '') IS NOT NULL",
+    ]
 
     rows = conn.execute(
         f"""
@@ -322,11 +775,13 @@ def _individual_postal_rows(
           MIN(NULLIF(TRIM(i.city), '')) AS city_label,
           COUNT(DISTINCT TRIM(t.from_label)) AS payer_count,
           COUNT(*) AS tx_count,
-          COALESCE(SUM(t.amount), 0) AS volume
+          COALESCE(SUM(t.amount), 0) AS volume,
+          AVG(i.latitude) AS latitude,
+          AVG(i.longitude) AS longitude
         FROM transactions t
         JOIN odoo_individual_enrichment i
           ON i.pseudonym = TRIM(t.from_label)
-        WHERE {" AND ".join(where_parts)}
+        WHERE {" AND ".join(fallback_where_parts)}
         GROUP BY REPLACE(TRIM(i.zip), ' ', '')
         ORDER BY volume DESC, payer_count DESC, postal_code ASC
         """,
@@ -340,11 +795,13 @@ def _individual_postal_rows(
             "payer_count": _safe_int(row["payer_count"]),
             "tx_count": _safe_int(row["tx_count"]),
             "volume": _safe_float(row["volume"]),
+            "latitude": _safe_float(row["latitude"], default=None),
+            "longitude": _safe_float(row["longitude"], default=None),
+            "location_source": "odoo_individual_enrichment",
         }
         for row in rows
         if _clean_zip(row["postal_code"])
     ]
-
 
 def _professional_inbound_rows(
     conn: sqlite3.Connection,
@@ -365,24 +822,67 @@ def _professional_inbound_rows(
 
     rows = conn.execute(
         f"""
+        WITH source_flows AS (
+            SELECT
+              SUBSTR(TRIM(t.from_label), 1, 5) AS professional_ref,
+              COUNT(*) AS tx_count,
+              COALESCE(SUM(t.amount), 0) AS volume
+            FROM transactions t
+            WHERE {" AND ".join(where_parts)}
+            GROUP BY SUBSTR(TRIM(t.from_label), 1, 5)
+        )
         SELECT
-          SUBSTR(TRIM(t.from_label), 1, 5) AS professional_ref,
-          COALESCE(NULLIF(TRIM(p.odoo_name), ''), SUBSTR(TRIM(t.from_label), 1, 5)) AS name,
-          p.industry_name,
-          p.detailed_activity,
-          COALESCE(p.cyclos_zip, p.zip) AS zip,
-          COALESCE(p.cyclos_city, p.city) AS city,
-          p.cyclos_latitude AS latitude,
-          p.cyclos_longitude AS longitude,
-          p.geo_match_status,
-          COUNT(*) AS tx_count,
-          COALESCE(SUM(t.amount), 0) AS volume
-        FROM transactions t
-        LEFT JOIN odoo_professional_enrichment p
-          ON p.professional_ref = SUBSTR(TRIM(t.from_label), 1, 5)
-        WHERE {" AND ".join(where_parts)}
-        GROUP BY SUBSTR(TRIM(t.from_label), 1, 5)
-        ORDER BY volume DESC, tx_count DESC, professional_ref ASC
+          sf.professional_ref,
+          COALESCE(
+            NULLIF(TRIM(pe.display_name), ''),
+            NULLIF(TRIM(pe.legal_name), ''),
+            NULLIF(TRIM(oe.odoo_name), ''),
+            sf.professional_ref
+          ) AS name,
+          COALESCE(
+            NULLIF(TRIM(pe.industry_name), ''),
+            NULLIF(TRIM(oe.industry_name), '')
+          ) AS industry_name,
+          COALESCE(
+            NULLIF(TRIM(pe.short_description), ''),
+            NULLIF(TRIM(pe.detailed_activity), ''),
+            NULLIF(TRIM(oe.detailed_activity), '')
+          ) AS detailed_activity,
+          COALESCE(
+            NULLIF(TRIM(l.postal_code), ''),
+            NULLIF(TRIM(pe.zip), ''),
+            NULLIF(TRIM(oe.cyclos_zip), ''),
+            NULLIF(TRIM(oe.zip), '')
+          ) AS zip,
+          COALESCE(
+            NULLIF(TRIM(l.city), ''),
+            NULLIF(TRIM(pe.city), ''),
+            NULLIF(TRIM(oe.cyclos_city), ''),
+            NULLIF(TRIM(oe.city), '')
+          ) AS city,
+          COALESCE(l.latitude, pe.latitude, oe.cyclos_latitude, oe.latitude) AS latitude,
+          COALESCE(l.longitude, pe.longitude, oe.cyclos_longitude, oe.longitude) AS longitude,
+          COALESCE(
+            NULLIF(TRIM(l.location_strategy), ''),
+            NULLIF(TRIM(oe.geo_match_status), ''),
+            'adaptive_location'
+          ) AS geo_match_status,
+          sf.tx_count,
+          sf.volume
+        FROM source_flows sf
+        LEFT JOIN actor_map_locations l
+          ON l.actor_ref = sf.professional_ref
+         AND l.cartographiable = 1
+        LEFT JOIN professional_enrichment pe
+          ON pe.professional_ref = sf.professional_ref
+         AND (
+              pe.cyclos_group_set LIKE 'B %'
+              OR LOWER(COALESCE(pe.cyclos_group, '')) LIKE '%prestataire%'
+              OR pe.actor_type_internal IN ('MonComptePro', 'compteProBillets')
+         )
+        LEFT JOIN odoo_professional_enrichment oe
+          ON oe.professional_ref = sf.professional_ref
+        ORDER BY sf.volume DESC, sf.tx_count DESC, sf.professional_ref ASC
         """,
         [professional_ref, professional_ref, *date_params],
     ).fetchall()
@@ -390,12 +890,9 @@ def _professional_inbound_rows(
     result: list[dict[str, Any]] = []
 
     for row in rows:
-        latitude = _safe_float(row["latitude"], default=float("nan"))
-        longitude = _safe_float(row["longitude"], default=float("nan"))
-        has_coordinates = (
-            _clean_text(row["geo_match_status"]) == "confirmed"
-            and math.isfinite(latitude)
-            and math.isfinite(longitude)
+        latitude, longitude, has_coordinates = _finite_pair(
+            row["latitude"],
+            row["longitude"],
         )
 
         result.append({
@@ -405,8 +902,8 @@ def _professional_inbound_rows(
             "detailed_activity": _clean_text(row["detailed_activity"]),
             "zip": _clean_text(row["zip"]),
             "city": _clean_text(row["city"]),
-            "latitude": latitude if has_coordinates else None,
-            "longitude": longitude if has_coordinates else None,
+            "latitude": latitude,
+            "longitude": longitude,
             "geo_match_status": _clean_text(row["geo_match_status"]),
             "has_coordinates": has_coordinates,
             "tx_count": _safe_int(row["tx_count"]),
@@ -504,70 +1001,49 @@ def get_professional_payment_basin_map(
             hidden_below_threshold["volume"] += row["volume"]
             continue
 
-        if not area:
-            missing_postal_geometry["source_count"] += 1
-            missing_postal_geometry["payer_count"] += row["payer_count"]
-            missing_postal_geometry["tx_count"] += row["tx_count"]
-            missing_postal_geometry["volume"] += row["volume"]
-            missing_postal_geometry["postal_codes"].append(postal_code)
+        row_latitude = _safe_float(row.get("latitude"), default=float("nan"))
+        row_longitude = _safe_float(row.get("longitude"), default=float("nan"))
+        row_has_coordinates = math.isfinite(row_latitude) and math.isfinite(row_longitude)
+
+        if row_has_coordinates:
+            visible_individual_sources.append({
+                **row,
+                "city_label": row["city_label"] or (area or {}).get("city_label"),
+                "longitude": row_longitude,
+                "latitude": row_latitude,
+            })
             continue
 
-        visible_individual_sources.append({
-            **row,
-            "city_label": row["city_label"] or area.get("city_label"),
-            "longitude": area["longitude"],
-            "latitude": area["latitude"],
-        })
+        if area:
+            visible_individual_sources.append({
+                **row,
+                "city_label": row["city_label"] or area.get("city_label"),
+                "longitude": area["longitude"],
+                "latitude": area["latitude"],
+                "location_source": row.get("location_source") or "postal_area_geometry",
+            })
+            continue
+
+        missing_postal_geometry["source_count"] += 1
+        missing_postal_geometry["payer_count"] += row["payer_count"]
+        missing_postal_geometry["tx_count"] += row["tx_count"]
+        missing_postal_geometry["volume"] += row["volume"]
+        missing_postal_geometry["postal_codes"].append(postal_code)
 
 
-    territory_individual_sources = []
-    outside_territory_individual_sources = []
+    payment_scope = _payment_basin_territorial_scope()
 
-    for source in visible_individual_sources:
-        postal_code = str(source.get("postal_code") or "").strip()
+    territory_individual_sources, outside_territory_individual_sources = (
+        _split_sources_by_payment_scope(visible_individual_sources, payment_scope)
+    )
 
-        if postal_code.startswith("69"):
-            territory_individual_sources.append(source)
-        else:
-            outside_territory_individual_sources.append(source)
-
-    outside_territory_route_source = None
-
-    if outside_territory_individual_sources:
-        payer_weight_total = sum(
-            max(1, _safe_int(source.get("payer_count"), 0))
-            for source in outside_territory_individual_sources
-        ) or len(outside_territory_individual_sources)
-
-        outside_territory_route_source = {
-            "postal_code": None,
-            "display_label": "Hors territoire",
-            "city_label": "Hors territoire",
-            "longitude": sum(
-                _safe_float(source.get("longitude"))
-                * max(1, _safe_int(source.get("payer_count"), 0))
-                for source in outside_territory_individual_sources
-            ) / payer_weight_total,
-            "latitude": sum(
-                _safe_float(source.get("latitude"))
-                * max(1, _safe_int(source.get("payer_count"), 0))
-                for source in outside_territory_individual_sources
-            ) / payer_weight_total,
-            "payer_count": sum(
-                _safe_int(source.get("payer_count"), 0)
-                for source in outside_territory_individual_sources
-            ),
-            "tx_count": sum(
-                _safe_int(source.get("tx_count"), 0)
-                for source in outside_territory_individual_sources
-            ),
-            "volume": sum(
-                _safe_float(source.get("volume"))
-                for source in outside_territory_individual_sources
-            ),
-            "postal_source_count": len(outside_territory_individual_sources),
-            "is_outside_territory": True,
-        }
+    outside_territory_route_source = _aggregate_outside_scope_sources(
+        outside_territory_individual_sources,
+        center=center,
+        in_scope_sources=territory_individual_sources,
+        scope=payment_scope,
+        source_kind="individual",
+    )
 
     mapped_individual_route_sources = [
         *territory_individual_sources,
@@ -578,12 +1054,33 @@ def get_professional_payment_basin_map(
         ),
     ]
 
-    visible_professional_sources = [
+    cartographiable_professional_sources = [
         row for row in professional_rows if row["has_coordinates"]
     ]
 
     hidden_professional_sources = [
         row for row in professional_rows if not row["has_coordinates"]
+    ]
+
+    territory_professional_sources, outside_territory_professional_sources = (
+        _split_sources_by_payment_scope(cartographiable_professional_sources, payment_scope)
+    )
+
+    outside_professional_route_source = _aggregate_outside_scope_sources(
+        outside_territory_professional_sources,
+        center=center,
+        in_scope_sources=territory_professional_sources,
+        scope=payment_scope,
+        source_kind="professional",
+    )
+
+    visible_professional_sources = [
+        *territory_professional_sources,
+        *(
+            [outside_professional_route_source]
+            if outside_professional_route_source
+            else []
+        ),
     ]
 
     routes: list[dict[str, Any]] = []
@@ -611,14 +1108,25 @@ def get_professional_payment_basin_map(
             })
 
         for source in visible_professional_sources:
+            source_ref = source.get("professional_ref") or "P_OUTSIDE_SCOPE"
+            is_outside_scope = bool(source.get("is_outside_scope"))
+
             routes.append({
-                "id": f"professional:{source['professional_ref']}",
-                "kind": "professional_inbound",
+                "id": f"professional:{source_ref}",
+                "kind": (
+                    "professional_outside_territory"
+                    if is_outside_scope
+                    else "professional_inbound"
+                ),
                 "source": source,
                 "destination": center,
                 "tx_count": source["tx_count"],
                 "volume": source["volume"],
-                "payer_count": 1,
+                "payer_count": (
+                    max(1, _safe_int(source.get("payer_count"), 1))
+                    if is_outside_scope
+                    else 1
+                ),
             })
 
     visible_individual_payer_count = sum(
@@ -641,11 +1149,20 @@ def get_professional_payment_basin_map(
     professional_total_tx_count = sum(row["tx_count"] for row in professional_rows)
     professional_total_volume = sum(row["volume"] for row in professional_rows)
 
-    visible_source_area_geojson = {
-        source["postal_code"]: postal_areas[source["postal_code"]]["feature_collection"]
-        for source in territory_individual_sources
-        if source["postal_code"] in postal_areas
-    }
+    visible_source_area_geojson = {}
+
+    for source in territory_individual_sources:
+        postal_code = source.get("postal_code")
+        area = postal_areas.get(postal_code or "")
+        feature_collection = area.get("feature_collection") if area else None
+
+        if not feature_collection:
+            feature_collection = _synthetic_source_area_feature_collection(source)
+
+        if feature_collection:
+            visible_source_area_geojson[
+                postal_code or f"source:{len(visible_source_area_geojson) + 1}"
+            ] = feature_collection
 
     coverage = {
         "min_users": cleaned_min_users,
@@ -655,7 +1172,7 @@ def get_professional_payment_basin_map(
         "individual_total_tx_count": individual_totals["tx_count"],
         "individual_total_volume": individual_totals["volume"],
 
-        "individual_visible_postal_source_count": len(visible_individual_sources),
+        "individual_visible_postal_source_count": len(mapped_individual_route_sources),
         "individual_visible_payer_count": visible_individual_payer_count,
         "individual_visible_tx_count": visible_individual_tx_count,
         "individual_visible_volume": visible_individual_volume,
@@ -701,6 +1218,18 @@ def get_professional_payment_basin_map(
         "professional_missing_geometry_volume": sum(
             row["volume"] for row in hidden_professional_sources
         ),
+        "professional_outside_territory": {
+            "source_count": len(outside_territory_professional_sources),
+            "tx_count": sum(
+                _safe_int(source.get("tx_count"), 0)
+                for source in outside_territory_professional_sources
+            ),
+            "volume": sum(
+                _safe_float(source.get("volume"))
+                for source in outside_territory_professional_sources
+            ),
+            "aggregated_into_single_route": bool(outside_professional_route_source),
+        },
     }
 
     status_detail = "ok"
@@ -725,10 +1254,11 @@ def get_professional_payment_basin_map(
         },
         "center": center,
         "coverage": coverage,
+        "territorial_scope": payment_scope,
         "geometry": {
             "visible_source_area_geojson": visible_source_area_geojson,
         },
-        "individual_sources": visible_individual_sources,
+        "individual_sources": mapped_individual_route_sources,
         "professional_sources": visible_professional_sources,
         "routes": routes,
     }

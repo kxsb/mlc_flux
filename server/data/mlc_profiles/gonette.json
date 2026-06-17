@@ -307,5 +307,14 @@
       "P0000",
       "P9999"
     ]
+  },
+  "territorial_scope": {
+    "kind": "department_postal_prefixes",
+    "label": "département du Rhône",
+    "short_label": "69",
+    "postal_code_prefixes": [
+      "69"
+    ],
+    "outside_label": "Hors département 69"
   }
 }

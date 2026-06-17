@@ -1078,6 +1078,155 @@ def compute_professionals_ranking(start=None, end=None, year=None):
     return ranking
 
 
+
+# PRO_IDENTITY001 — résolution unifiée des libellés professionnels pour les fiches.
+def _get_professional_detail_enrichment(professional_ref):
+    """
+    Retourne un enrichissement professionnel normalisé pour une fiche Pxxxx.
+
+    Source prioritaire multi-MLC :
+    - professional_enrichment
+
+    Fallback historique :
+    - odoo_professional_enrichment
+
+    Le format conserve les clés historiques attendues côté frontend
+    afin de ne pas devoir modifier immédiatement app.js.
+    """
+    ref = str(professional_ref or "").strip()
+    if not ref:
+        return None
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+        row = cur.execute("""
+            SELECT
+                professional_ref,
+                display_name,
+                legal_name,
+                industry_name,
+                detailed_activity,
+                short_description,
+                keywords,
+                zip,
+                city,
+                latitude,
+                longitude,
+                fetched_at
+            FROM professional_enrichment
+            WHERE professional_ref = ?
+              AND (
+                    cyclos_group_set LIKE 'B %'
+                    OR LOWER(COALESCE(cyclos_group, '')) LIKE '%prestataire%'
+                    OR actor_type_internal IN ('MonComptePro', 'compteProBillets')
+              )
+        """, (ref,)).fetchone()
+    except Exception:
+        row = None
+
+    if row is not None:
+        conn.close()
+        data = dict(row)
+        display_name = str(data.get("display_name") or "").strip()
+        legal_name = str(data.get("legal_name") or "").strip()
+        commercial_name = display_name or legal_name or ref
+
+        return {
+            "professional_ref": ref,
+            "odoo_name": commercial_name,
+            "commercial_name": commercial_name,
+            "display_name": display_name,
+            "legal_name": legal_name,
+            "industry_name": data.get("industry_name") or "",
+            "short_description": data.get("short_description") or "",
+            "detailed_activity": data.get("detailed_activity") or data.get("short_description") or "",
+            "website_description_html": data.get("detailed_activity") or "",
+            "keywords": data.get("keywords") or "",
+            "zip": data.get("zip") or "",
+            "city": data.get("city") or "",
+            "latitude": data.get("latitude"),
+            "longitude": data.get("longitude"),
+            "fetched_at": data.get("fetched_at"),
+            "enrichment_source": "professional_enrichment",
+        }
+
+    conn.close()
+
+    # Fallback historique Gonette/Odoo.
+    legacy = _get_odoo_professional_enrichment(ref)
+    if legacy is None:
+        return None
+
+    legacy = dict(legacy)
+    legacy["commercial_name"] = legacy.get("odoo_name") or ref
+    legacy["display_name"] = legacy.get("odoo_name") or ref
+    legacy["enrichment_source"] = "odoo_professional_enrichment"
+    return legacy
+
+
+def _get_professional_display_label_from_enrichment(professional_ref, enrichment):
+    ref = str(professional_ref or "").strip()
+    if not ref:
+        return ""
+
+    if not enrichment:
+        return ref
+
+    for key in ("commercial_name", "display_name", "odoo_name", "legal_name"):
+        value = str(enrichment.get(key) or "").strip()
+        if value and value != ref:
+            return f"{ref} - {value}"
+
+    return ref
+
+
+def _build_professional_detail_identity_index(rows, primary_ref=None, primary_enrichment=None):
+    refs = set()
+
+    if primary_ref:
+        refs.add(str(primary_ref).strip())
+
+    for row in rows or []:
+        for key in ("from_label", "to_label"):
+            ref = _extract_professional_ref(row.get(key))
+            if ref:
+                refs.add(ref)
+
+    identity_index = {}
+
+    for ref in refs:
+        if primary_ref and ref == primary_ref and primary_enrichment is not None:
+            enrichment = primary_enrichment
+        else:
+            enrichment = _get_professional_detail_enrichment(ref)
+
+        identity_index[ref] = {
+            "enrichment": enrichment,
+            "display_label": _get_professional_display_label_from_enrichment(ref, enrichment),
+        }
+
+    return identity_index
+
+
+def _format_professional_actor_label_for_detail(label, identity_index):
+    raw = str(label or "").strip()
+    ref = _extract_professional_ref(raw)
+
+    if not ref:
+        return raw
+
+    identity = (identity_index or {}).get(ref) or {}
+    display_label = str(identity.get("display_label") or "").strip()
+
+    if display_label and display_label != ref:
+        return display_label
+
+    return raw
+
+
+
 def _get_odoo_professional_enrichment(professional_ref):
     """
     Retourne les métadonnées Odoo stockées en SQLite pour un professionnel Pxxxx.
@@ -1217,25 +1366,33 @@ def get_professional_detail(num_professionnel, start=None, end=None, year=None):
         "total_montant_emis_sans_reconversion": float(emis_vers_pro + emis_vers_particuliers),
     }
 
+    professional_enrichment = _get_professional_detail_enrichment(num_professionnel)
+
+    identity_index = _build_professional_detail_identity_index(
+        related,
+        primary_ref=num_professionnel,
+        primary_enrichment=professional_enrichment,
+    )
+
     transactions = [
         {
             "Date": row["date"][:10],
-            "Réalisé par": row.get("from_label", ""),
-            "Vers": row.get("to_label", ""),
+            "Réalisé par": _format_professional_actor_label_for_detail(
+                row.get("from_label", ""),
+                identity_index,
+            ),
+            "Vers": _format_professional_actor_label_for_detail(
+                row.get("to_label", ""),
+                identity_index,
+            ),
             "Montant": float(row.get("amount", 0) or 0),
         }
         for row in related
     ]
 
-    fullname = next(
-        (
-            label for label in (
-                str(related[0].get("from_label", "")),
-                str(related[0].get("to_label", "")),
-            )
-            if num_professionnel in label
-        ),
-        num_professionnel
+    fullname = _get_professional_display_label_from_enrichment(
+        num_professionnel,
+        professional_enrichment,
     )
 
     return {
@@ -1243,7 +1400,9 @@ def get_professional_detail(num_professionnel, start=None, end=None, year=None):
         "fullname": fullname,
         "stats": stats,
         "transactions": transactions,
-        "odoo_enrichment": _get_odoo_professional_enrichment(num_professionnel),
+        # Clé historique conservée côté frontend.
+        "odoo_enrichment": professional_enrichment,
+        "professional_enrichment": professional_enrichment,
     }
 
 
