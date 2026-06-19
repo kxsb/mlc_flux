@@ -1,0 +1,23 @@
+{
+  "comment": "Règles explicites de reconstruction de soldes individuels quand Cyclos répond 404 sur balances-history. Les soldes sont reconstruits à partir du dernier solde réel connu et des transactions locales.",
+  "rules": [
+    {
+      "pseudonym": "U_Clara_013",
+      "start_date": "2026-06-11",
+      "reason": "Cyclos balances-history HTTP 404 après conversion totale vers T_Conversion le 2026-06-11.",
+      "source": "reconstructed_after_cyclos_404_from_last_balance_and_transactions"
+    },
+    {
+      "pseudonym": "U_Héloïse_006",
+      "start_date": "2026-06-11",
+      "reason": "Cyclos balances-history HTTP 404 après conversion totale vers T_Conversion le 2026-06-11.",
+      "source": "reconstructed_after_cyclos_404_from_last_balance_and_transactions"
+    },
+    {
+      "pseudonym": "U_Théo",
+      "start_date": "2026-06-11",
+      "reason": "Cyclos balances-history HTTP 404 ; solde maintenu par reconstruction transactionnelle jusqu’à conversion vers T_Conversion le 2026-06-15.",
+      "source": "reconstructed_after_cyclos_404_from_last_balance_and_transactions"
+    }
+  ]
+}

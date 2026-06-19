@@ -22,7 +22,19 @@ OPERATOR_PRO_REFS = {"P0000", "P9999"}
 
 SERVER_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = SERVER_DIR / "data"
-SUMMARY_PATH = DATA_DIR / "professional_chain_fate_summary.json"
+
+def _active_mlc_id() -> str:
+    return (
+        os.getenv("MLCFLUX_ACTIVE_MLC_ID")
+        or os.getenv("MLCFLUX_DEFAULT_MLC_ID")
+        or "gonette"
+    ).strip()
+
+
+def _summary_path() -> Path:
+    mlc_id = _active_mlc_id()
+    return DATA_DIR / "instances" / mlc_id / "professional_chain_fate_summary.json"
+
 
 
 @dataclass
@@ -681,12 +693,13 @@ def compute_professional_chain_fate_summary() -> dict:
 
 
 def write_professional_chain_fate_summary(payload: dict) -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    summary_path = _summary_path()
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
 
     with tempfile.NamedTemporaryFile(
         mode="w",
         encoding="utf-8",
-        dir=str(DATA_DIR),
+        dir=str(summary_path.parent),
         prefix=".professional_chain_fate_summary.",
         suffix=".json.tmp",
         delete=False,
@@ -695,12 +708,13 @@ def write_professional_chain_fate_summary(payload: dict) -> None:
         tmp.write("\n")
         tmp_path = Path(tmp.name)
 
-    os.replace(tmp_path, SUMMARY_PATH)
+    os.replace(tmp_path, summary_path)
 
 
 def load_professional_chain_fate_summary() -> dict | None:
-    if not SUMMARY_PATH.exists():
+    summary_path = _summary_path()
+    if not summary_path.exists():
         return None
 
-    with SUMMARY_PATH.open("r", encoding="utf-8") as fh:
+    with summary_path.open("r", encoding="utf-8") as fh:
         return json.load(fh)

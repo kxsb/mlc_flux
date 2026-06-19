@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import argparse
 import json
+import os
 
 from server.services.professional_chain_fate_analytics import (
     compute_professional_chain_fate_summary,
@@ -8,7 +10,21 @@ from server.services.professional_chain_fate_analytics import (
 )
 
 
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Pré-calcule le résumé de trajectoires professionnelles pour une instance MLCFlux."
+    )
+    parser.add_argument("--mlc", choices=["graine", "gonette"])
+    return parser
+
+
 def main() -> None:
+    args = build_parser().parse_args()
+
+    if args.mlc:
+        os.environ["MLCFLUX_DEFAULT_MLC_ID"] = args.mlc
+        os.environ["MLCFLUX_ACTIVE_MLC_ID"] = args.mlc
+
     payload = compute_professional_chain_fate_summary()
     write_professional_chain_fate_summary(payload)
 
@@ -17,6 +33,10 @@ def main() -> None:
     extended = payload["models"]["u_to_p_plus_t_to_p_seeds"]
 
     compact = {
+        "mlc_id": (
+            os.getenv("MLCFLUX_ACTIVE_MLC_ID")
+            or os.getenv("MLCFLUX_DEFAULT_MLC_ID")
+        ),
         "generated_at": payload["generated_at"],
         "metadata": payload["metadata"],
         "primary_model": primary_key,
