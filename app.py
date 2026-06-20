@@ -72,8 +72,8 @@ def api_monetary_indicators():
 
 
 # VERSION_UI001_RELEASE_NOTES_API
-MLCFLUX_APP_VERSION = "v1.0.6"
-MLCFLUX_RELEASE_LABEL = "MLCFlux bêta v1.0.6 multi — juin 2026"
+MLCFLUX_APP_VERSION = "v1.0.7"
+MLCFLUX_RELEASE_LABEL = "MLCFlux bêta v1.0.7 multi — juin 2026"
 
 
 def _extract_changelog_sections(markdown_text):
