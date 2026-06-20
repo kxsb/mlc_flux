@@ -19,6 +19,8 @@ LOG_FILE="$LOG_DIR/multi_daily_sync_${STAMP}.log"
 JSON_FILE="$LOG_DIR/multi_daily_sync_${STAMP}.json"
 
 DAYS="${SYNC_DAYS:-3}"
+PROFESSIONAL_PROFILE_DAYS="${SYNC_PROFESSIONAL_PROFILE_DAYS:-3650}"
+PROFESSIONAL_PROFILE_LIMIT="${SYNC_PROFESSIONAL_PROFILE_LIMIT:-none}"
 
 {
   echo "=================================================================="
@@ -27,6 +29,8 @@ DAYS="${SYNC_DAYS:-3}"
   echo "app=$APP"
   echo "python=$PY"
   echo "days=$DAYS"
+  echo "professional_profile_days=$PROFESSIONAL_PROFILE_DAYS"
+  echo "professional_profile_limit=$PROFESSIONAL_PROFILE_LIMIT"
   echo "=================================================================="
 
   cd "$APP"
@@ -35,6 +39,8 @@ DAYS="${SYNC_DAYS:-3}"
     --mlc graine \
     --mlc gonette \
     --days "$DAYS" \
+    --professional-profile-days "$PROFESSIONAL_PROFILE_DAYS" \
+    --professional-profile-limit "$PROFESSIONAL_PROFILE_LIMIT" \
     --json-out "$JSON_FILE"
 
   echo

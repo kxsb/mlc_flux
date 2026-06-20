@@ -379,12 +379,14 @@ def sectors_activity():
     year = request.args.get("year", default=None, type=int)
     start = request.args.get("start")
     end = request.args.get("end")
+    sector_mode = request.args.get("sector_mode") or request.args.get("mode") or "internal"
 
     return jsonify(
         compute_sector_activity(
             start=start,
             end=end,
             year=year,
+            sector_mode=sector_mode,
         )
     )
 

@@ -1913,11 +1913,35 @@ def compute_zip_territorial_activity(start=None, end=None, year=None):
             bucket["emitted_count"] += 1
             bucket["total_flow_count"] += 1
 
+            professional_item = bucket["professional_items"].get(from_ref)
+            if professional_item is not None:
+                professional_item["emitted_volume"] += value
+                professional_item["total_flow_volume"] += value
+                professional_item["emitted_count"] += 1
+
     territory_items = []
 
     for (_zip_code, _city), bucket in territories.items():
         professional_refs = bucket.pop("professional_refs")
         active_refs = bucket.pop("active_professional_refs")
+        professional_items_map = bucket.pop("professional_items", {})
+
+        top_professionals = sorted(
+            professional_items_map.values(),
+            key=lambda item: (
+                float(item.get("received_volume") or 0.0),
+                float(item.get("total_flow_volume") or 0.0),
+                str(item.get("professional_ref") or ""),
+            ),
+            reverse=True,
+        )[:10]
+
+        for professional_item in top_professionals:
+            professional_item["received_volume"] = round(float(professional_item["received_volume"]), 2)
+            professional_item["emitted_volume"] = round(float(professional_item["emitted_volume"]), 2)
+            professional_item["total_flow_volume"] = round(float(professional_item["total_flow_volume"]), 2)
+            professional_item["c2b_received_volume"] = round(float(professional_item["c2b_received_volume"]), 2)
+            professional_item["b2b_received_volume"] = round(float(professional_item["b2b_received_volume"]), 2)
 
         received_volume = float(bucket["received_volume"])
         emitted_volume = float(bucket["emitted_volume"])
@@ -2020,55 +2044,510 @@ def compute_zip_territorial_activity(start=None, end=None, year=None):
     }
 
 
-def compute_sector_activity(start=None, end=None, year=None):
+
+# ECON_UI004B_SECTOR_ACTIVITY_MODES — typologies alternatives pour l’analyse sectorielle.
+def _normalize_sector_activity_mode(value):
+    mode = str(value or "internal").strip().lower()
+    if mode in {"naf", "naf_section", "naf_sections", "naf_aggregate", "aggregate"}:
+        return "naf_section"
+    if mode in {"naf_code", "naf_codes", "naf_precise", "ape", "ape_code"}:
+        return "naf_code"
+    return "internal"
+
+
+def _sector_activity_classification_meta(mode):
+    normalized = _normalize_sector_activity_mode(mode)
+
+    if normalized == "naf_section":
+        return {
+            "mode": "naf_section",
+            "label": "NAF agrégé",
+            "unit_label": "sections NAF",
+            "unclassified_label": "NAF non renseigné",
+            "description": "Regroupement par grandes sections de la nomenclature NAF.",
+        }
+
+    if normalized == "naf_code":
+        return {
+            "mode": "naf_code",
+            "label": "NAF précis / APE",
+            "unit_label": "codes NAF / APE",
+            "unclassified_label": "NAF non renseigné",
+            "description": "Regroupement par code NAF / APE précis.",
+        }
+
+    return {
+        "mode": "internal",
+        "label": "Catégories internes MLC",
+        "unit_label": "catégories sectorielles internes",
+        "unclassified_label": "Secteur non renseigné",
+        "description": "Regroupement par catégories sectorielles internes à l’association.",
+    }
+
+
+def _sector_activity_table_exists(conn, table_name):
+    row = conn.execute(
+        """
+        SELECT 1
+        FROM sqlite_master
+        WHERE type = 'table'
+          AND name = ?
+        """,
+        (table_name,),
+    ).fetchone()
+    return row is not None
+
+
+def _sector_activity_row_value(row, key):
+    try:
+        return row[key]
+    except Exception:
+        return None
+
+
+def _clean_sector_activity_value(value):
+    cleaned = str(value or "").strip()
+    return cleaned or ""
+
+
+# ECON_UI006B_NAF_SECTION_ANALYTICAL_LABELS — libellés plus lisibles que les intitulés administratifs longs.
+_NAF_SECTION_ANALYTICAL_LABELS = {
+    # Le libellé officiel “Commerce ; réparation d'automobiles et de motocycles”
+    # est exact administrativement, mais trompeur pour une lecture MLC :
+    # la section G contient surtout du commerce de détail, vente et distribution.
+    "G": "Commerce, vente et distribution",
+    "M": "Conseil, ingénierie et services professionnels",
+}
+
+
+def _format_naf_section_label(section, section_label):
+    section = _clean_sector_activity_value(section).upper()
+    section_label = _clean_sector_activity_value(section_label)
+
+    if not section:
+        return ""
+
+    display_label = _NAF_SECTION_ANALYTICAL_LABELS.get(section, section_label)
+    return f"{section} — {display_label}" if display_label else section
+
+
+def _format_naf_code_label(code, label):
+    code = _clean_sector_activity_value(code).upper()
+    label = _clean_sector_activity_value(label)
+
+    if not code:
+        return ""
+
+    # Important : pas de libellé placeholder du type “à compléter”.
+    # Si le référentiel précis manque encore, le code NAF seul reste une donnée utile.
+    return f"{code} — {label}" if label else code
+
+
+def _sector_activity_label_for_row(row, mode):
+    normalized = _normalize_sector_activity_mode(mode)
+
+    if normalized == "naf_section":
+        usable = int(_sector_activity_row_value(row, "naf_usable") or 0) == 1
+        if not usable:
+            return ""
+        return _format_naf_section_label(
+            _sector_activity_row_value(row, "naf_section"),
+            _sector_activity_row_value(row, "naf_section_label"),
+        )
+
+    if normalized == "naf_code":
+        usable = int(_sector_activity_row_value(row, "naf_usable") or 0) == 1
+        if not usable:
+            return ""
+        return _format_naf_code_label(
+            _sector_activity_row_value(row, "naf_code"),
+            _sector_activity_row_value(row, "naf_label"),
+        )
+
+    return _clean_sector_activity_value(
+        _sector_activity_row_value(row, "industry_name")
+    )
+
+
+# ECON_UI007A_SECTOR_TOP_PROFESSIONALS — noms lisibles pour expliquer qui porte chaque secteur.
+def _load_sector_activity_professional_display_index(professional_refs):
+    refs = sorted({str(ref or "").strip() for ref in professional_refs if str(ref or "").strip()})
+    if not refs:
+        return {}
+
+    conn = get_connection()
+    try:
+        values_clause = ",".join(["(?)"] * len(refs))
+        registry_available = _sector_activity_table_exists(conn, "professional_economic_registry")
+
+        if registry_available:
+            query = f"""
+                WITH requested(professional_ref) AS (
+                    VALUES {values_clause}
+                )
+                SELECT
+                    r.professional_ref,
+                    COALESCE(
+                        NULLIF(TRIM(pe.display_name), ''),
+                        NULLIF(TRIM(pe.legal_name), ''),
+                        NULLIF(TRIM(oe.odoo_name), ''),
+                        NULLIF(TRIM(er.display_name_snapshot), ''),
+                        NULLIF(TRIM(er.legal_name_snapshot), ''),
+                        r.professional_ref
+                    ) AS display_name,
+                    COALESCE(
+                        NULLIF(TRIM(pe.industry_name), ''),
+                        NULLIF(TRIM(oe.industry_name), '')
+                    ) AS internal_sector
+                FROM requested r
+                LEFT JOIN professional_enrichment pe
+                  ON pe.professional_ref = r.professional_ref
+                LEFT JOIN odoo_professional_enrichment oe
+                  ON oe.professional_ref = r.professional_ref
+                LEFT JOIN professional_economic_registry er
+                  ON er.professional_ref = r.professional_ref
+            """
+        else:
+            query = f"""
+                WITH requested(professional_ref) AS (
+                    VALUES {values_clause}
+                )
+                SELECT
+                    r.professional_ref,
+                    COALESCE(
+                        NULLIF(TRIM(pe.display_name), ''),
+                        NULLIF(TRIM(pe.legal_name), ''),
+                        NULLIF(TRIM(oe.odoo_name), ''),
+                        r.professional_ref
+                    ) AS display_name,
+                    COALESCE(
+                        NULLIF(TRIM(pe.industry_name), ''),
+                        NULLIF(TRIM(oe.industry_name), '')
+                    ) AS internal_sector
+                FROM requested r
+                LEFT JOIN professional_enrichment pe
+                  ON pe.professional_ref = r.professional_ref
+                LEFT JOIN odoo_professional_enrichment oe
+                  ON oe.professional_ref = r.professional_ref
+            """
+
+        rows = conn.execute(query, refs).fetchall()
+
+        return {
+            str(row["professional_ref"]): {
+                "display_name": str(row["display_name"] or row["professional_ref"]).replace("\ufeff", "").strip(),
+                "internal_sector": str(row["internal_sector"] or "").strip(),
+            }
+            for row in rows
+        }
+    finally:
+        conn.close()
+
+
+def _load_sector_activity_registry_rows():
+    conn = get_connection()
+    try:
+        if not _sector_activity_table_exists(conn, "professional_economic_registry"):
+            return []
+
+        label_table_available = _sector_activity_table_exists(conn, "naf_activity_labels")
+
+        if label_table_available:
+            return conn.execute(
+                """
+                SELECT
+                    r.professional_ref,
+                    COALESCE(r.naf_usable, 0) AS naf_usable,
+                    NULLIF(TRIM(r.naf_code), '') AS naf_code,
+                    COALESCE(
+                        NULLIF(TRIM(r.naf_label), ''),
+                        NULLIF(TRIM(l.naf_label), '')
+                    ) AS naf_label,
+                    NULLIF(TRIM(r.naf_section), '') AS naf_section,
+                    NULLIF(TRIM(r.naf_section_label), '') AS naf_section_label
+                FROM professional_economic_registry r
+                LEFT JOIN naf_activity_labels l
+                  ON UPPER(REPLACE(TRIM(l.naf_code), ' ', '')) = UPPER(REPLACE(TRIM(r.naf_code), ' ', ''))
+                ORDER BY r.professional_ref
+                """
+            ).fetchall()
+
+        return conn.execute(
+            """
+            SELECT
+                professional_ref,
+                COALESCE(naf_usable, 0) AS naf_usable,
+                NULLIF(TRIM(naf_code), '') AS naf_code,
+                NULLIF(TRIM(naf_label), '') AS naf_label,
+                NULLIF(TRIM(naf_section), '') AS naf_section,
+                NULLIF(TRIM(naf_section_label), '') AS naf_section_label
+            FROM professional_economic_registry
+            ORDER BY professional_ref
+            """
+        ).fetchall()
+    finally:
+        conn.close()
+
+
+
+# ECON_UI009A_SECTOR_ACTIVITY_QUALITY — indicateurs compacts pour le cockpit sectoriel.
+def _sector_activity_quality_status(value, green=85.0, yellow=70.0, orange=50.0, inverse=False):
+    try:
+        numeric = float(value or 0.0)
+    except Exception:
+        numeric = 0.0
+
+    if inverse:
+        if numeric <= 5.0:
+            return "green"
+        if numeric <= 15.0:
+            return "yellow"
+        if numeric <= 30.0:
+            return "orange"
+        return "red"
+
+    if numeric >= green:
+        return "green"
+    if numeric >= yellow:
+        return "yellow"
+    if numeric >= orange:
+        return "orange"
+    return "red"
+
+
+def _load_sector_activity_confidence_summary(sector_mode):
+    if sector_mode not in {"naf_section", "naf_code"}:
+        return None
+
+    conn = get_connection()
+    try:
+        if not _sector_activity_table_exists(conn, "professional_economic_registry"):
+            return None
+
+        row = conn.execute("""
+            SELECT
+                COUNT(*) AS total,
+                COALESCE(SUM(CASE
+                    WHEN siret_exact_safe = 1 OR confidence_level = 'exact'
+                    THEN 1 ELSE 0 END), 0) AS exact_count,
+                COALESCE(SUM(CASE
+                    WHEN confidence_level = 'high'
+                    THEN 1 ELSE 0 END), 0) AS high_count,
+                COALESCE(SUM(CASE
+                    WHEN confidence_level = 'medium'
+                    THEN 1 ELSE 0 END), 0) AS medium_count,
+                COALESCE(SUM(CASE
+                    WHEN manual_review_required = 1
+                    THEN 1 ELSE 0 END), 0) AS manual_review_count,
+                COALESCE(SUM(CASE
+                    WHEN naf_usable = 1
+                    THEN 1 ELSE 0 END), 0) AS naf_usable_count,
+                COALESCE(SUM(CASE
+                    WHEN decision_bucket = 'not_eligible_functional_account'
+                    THEN 1 ELSE 0 END), 0) AS out_of_scope_count
+            FROM professional_economic_registry
+        """).fetchone()
+
+        if not row:
+            return None
+
+        total = int(row["total"] or 0)
+        exact_count = int(row["exact_count"] or 0)
+        high_count = int(row["high_count"] or 0)
+        medium_count = int(row["medium_count"] or 0)
+        manual_review_count = int(row["manual_review_count"] or 0)
+        naf_usable_count = int(row["naf_usable_count"] or 0)
+        out_of_scope_count = int(row["out_of_scope_count"] or 0)
+
+        denominator = max(total - out_of_scope_count, 1)
+        score = (
+            (exact_count * 1.0)
+            + (high_count * 0.85)
+            + (medium_count * 0.55)
+        ) / denominator * 100.0
+
+        return {
+            "total": total,
+            "denominator": denominator,
+            "exact_count": exact_count,
+            "high_count": high_count,
+            "medium_count": medium_count,
+            "manual_review_count": manual_review_count,
+            "naf_usable_count": naf_usable_count,
+            "out_of_scope_count": out_of_scope_count,
+            "score": round(score, 1),
+            "status": _sector_activity_quality_status(score, green=80.0, yellow=65.0, orange=45.0),
+        }
+    except Exception as exc:
+        return {
+            "error": str(exc),
+            "score": None,
+            "status": "orange",
+        }
+    finally:
+        conn.close()
+
+
+def _compute_sector_activity_quality(summary, sector_items, classification, sector_mode):
+    total_professionals = int(summary.get("professional_count") or 0)
+    professionals_with_sector = int(summary.get("professionals_with_sector") or 0)
+    active_professionals = int(summary.get("active_professional_count") or 0)
+    active_with_sector = int(summary.get("active_professionals_with_sector") or 0)
+
+    coverage = (
+        professionals_with_sector / total_professionals * 100.0
+        if total_professionals else 0.0
+    )
+    active_coverage = (
+        active_with_sector / active_professionals * 100.0
+        if active_professionals else 0.0
+    )
+
+    unclassified_label = classification.get("unclassified_label") or "Secteur non renseigné"
+    unclassified_item = next(
+        (
+            item for item in sector_items
+            if item.get("sector_name") == unclassified_label
+            or item.get("sector") == unclassified_label
+        ),
+        None,
+    )
+
+    unclassified_professionals = int(
+        summary.get("professionals_without_sector")
+        or (unclassified_item or {}).get("professional_count")
+        or 0
+    )
+    unclassified_active = int(
+        summary.get("active_professionals_without_sector")
+        or (unclassified_item or {}).get("active_professional_count")
+        or 0
+    )
+    unclassified_received = float((unclassified_item or {}).get("received_volume") or 0.0)
+    total_received = float(summary.get("total_received_volume") or 0.0)
+    unclassified_volume_share = (
+        unclassified_received / total_received * 100.0
+        if total_received else 0.0
+    )
+
+    confidence = _load_sector_activity_confidence_summary(sector_mode)
+    if confidence is None:
+        confidence_score = coverage
+        confidence = {
+            "score": round(confidence_score, 1),
+            "status": _sector_activity_quality_status(confidence_score),
+            "note": "Qualité estimée depuis la couverture de la typologie interne.",
+        }
+
+    indicators = [
+        {
+            "key": "coverage",
+            "label": "Couverture",
+            "value": round(coverage, 1),
+            "unit": "%",
+            "status": _sector_activity_quality_status(coverage),
+            "detail": f"{professionals_with_sector}/{total_professionals} pros classés",
+        },
+        {
+            "key": "active_coverage",
+            "label": "Actifs classés",
+            "value": round(active_coverage, 1),
+            "unit": "%",
+            "status": _sector_activity_quality_status(active_coverage),
+            "detail": f"{active_with_sector}/{active_professionals} pros actifs",
+        },
+        {
+            "key": "confidence",
+            "label": "Confiance",
+            "value": confidence.get("score"),
+            "unit": "%",
+            "status": confidence.get("status") or "orange",
+            "detail": (
+                f"{confidence.get('exact_count', 0)} exacts · "
+                f"{confidence.get('high_count', 0)} haute confiance · "
+                f"{confidence.get('medium_count', 0)} moyens"
+                if sector_mode in {"naf_section", "naf_code"}
+                else confidence.get("note", "")
+            ),
+        },
+        {
+            "key": "unclassified",
+            "label": "Non classé",
+            "value": round(unclassified_volume_share, 1),
+            "unit": "%",
+            "status": _sector_activity_quality_status(unclassified_volume_share, inverse=True),
+            "detail": (
+                f"{unclassified_professionals} pros"
+                + (f" · {unclassified_active} actifs" if unclassified_active else "")
+                + f" · {round(unclassified_received, 0):,.0f} G".replace(",", " ")
+            ),
+        },
+    ]
+
+    return {
+        "mode": sector_mode,
+        "unclassified_label": unclassified_label,
+        "coverage_percent": round(coverage, 1),
+        "active_coverage_percent": round(active_coverage, 1),
+        "unclassified_professionals": unclassified_professionals,
+        "unclassified_active_professionals": unclassified_active,
+        "unclassified_received_volume": round(unclassified_received, 2),
+        "unclassified_volume_share": round(unclassified_volume_share, 1),
+        "confidence": confidence,
+        "indicators": indicators,
+    }
+
+
+
+def compute_sector_activity(start=None, end=None, year=None, sector_mode="internal"):
     """
     Analyse sectorielle générique multi-MLC.
 
-    Source prioritaire :
-    - professional_enrichment, table générique multi-MLC.
-
-    Fallback :
-    - odoo_professional_enrichment, historique Gonette/Odoo.
-
-    Les volumes sectoriels sont calculés depuis les transactions économiques :
-    - reçus : U/P → P ;
-    - émis : P → U/P ;
-    - les flux techniques T sont exclus de l'activité sectorielle.
+    ECON_UI007A_FIX2 :
+    - conserve les indicateurs historiques ;
+    - permet le regroupement interne / NAF agrégé / NAF précis ;
+    - ajoute top_professionals pour rendre lisible qui porte chaque secteur.
     """
     rows = fetch_transactions(start=start, end=end, year=year)
 
-    conn = get_connection()
-    cur = conn.cursor()
+    sector_mode = _normalize_sector_activity_mode(sector_mode)
+    classification = _sector_activity_classification_meta(sector_mode)
 
-    enrichment_rows = cur.execute("""
-        WITH generic AS (
-            SELECT
-                professional_ref,
-                NULLIF(TRIM(industry_name), '') AS industry_name
-            FROM professional_enrichment
-            WHERE (
-                cyclos_group_set LIKE 'B %'
-                OR LOWER(COALESCE(cyclos_group, '')) LIKE '%prestataire%'
-                OR actor_type_internal IN ('MonComptePro', 'compteProBillets')
-            )
-        ),
-        odoo AS (
-            SELECT
-                professional_ref,
-                NULLIF(TRIM(industry_name), '') AS industry_name
-            FROM odoo_professional_enrichment
-            WHERE professional_ref NOT IN (
-                SELECT professional_ref FROM generic
-            )
-        )
-        SELECT professional_ref, industry_name
-        FROM generic
-        UNION ALL
-        SELECT professional_ref, industry_name
-        FROM odoo
-    """).fetchall()
+    if sector_mode in {"naf_section", "naf_code"}:
+        enrichment_rows = _load_sector_activity_registry_rows()
+    else:
+        conn = get_connection()
+        cur = conn.cursor()
 
-    conn.close()
+        enrichment_rows = cur.execute("""
+            WITH generic AS (
+                SELECT
+                    professional_ref,
+                    NULLIF(TRIM(industry_name), '') AS industry_name
+                FROM professional_enrichment
+                WHERE (
+                    cyclos_group_set LIKE 'B %'
+                    OR LOWER(COALESCE(cyclos_group, '')) LIKE '%prestataire%'
+                    OR actor_type_internal IN ('MonComptePro', 'compteProBillets')
+                )
+            ),
+            odoo AS (
+                SELECT
+                    professional_ref,
+                    NULLIF(TRIM(industry_name), '') AS industry_name
+                FROM odoo_professional_enrichment
+                WHERE professional_ref NOT IN (
+                    SELECT professional_ref FROM generic
+                )
+            )
+            SELECT professional_ref, industry_name
+            FROM generic
+            UNION ALL
+            SELECT professional_ref, industry_name
+            FROM odoo
+        """).fetchall()
+
+        conn.close()
 
     professional_sector = {}
     all_professionals = set()
@@ -2079,12 +2558,14 @@ def compute_sector_activity(start=None, end=None, year=None):
         if not ref:
             continue
 
-        industry_name = str(item["industry_name"] or "").strip()
+        sector_label = _sector_activity_label_for_row(item, sector_mode)
         all_professionals.add(ref)
-        professional_sector[ref] = industry_name
+        professional_sector[ref] = sector_label
 
-        if industry_name:
+        if sector_label:
             professionals_with_sector.add(ref)
+
+    professional_display_index = _load_sector_activity_professional_display_index(all_professionals)
 
     active_professionals = set()
 
@@ -2092,18 +2573,34 @@ def compute_sector_activity(start=None, end=None, year=None):
         return float(row.get("amount", 0) or 0)
 
     def get_sector(ref):
-        return professional_sector.get(ref, "") or "Secteur non renseigné"
+        return professional_sector.get(ref, "") or classification["unclassified_label"]
 
     sectors = {}
+
+    def ensure_professional_item(bucket, ref):
+        display = professional_display_index.get(ref, {})
+        return bucket["professional_items"].setdefault(ref, {
+            "professional_ref": ref,
+            "name": display.get("display_name") or ref,
+            "internal_sector": display.get("internal_sector") or "",
+            "received_volume": 0.0,
+            "emitted_volume": 0.0,
+            "total_flow_volume": 0.0,
+            "received_count": 0,
+            "emitted_count": 0,
+            "c2b_received_volume": 0.0,
+            "b2b_received_volume": 0.0,
+        })
 
     def bucket_for(ref):
         sector_label = get_sector(ref)
         bucket = sectors.setdefault(sector_label, {
             "sector": sector_label,
             "sector_name": sector_label,
-            "industry_name": sector_label if sector_label != "Secteur non renseigné" else "",
+            "industry_name": sector_label if sector_label != classification["unclassified_label"] else "",
             "professional_refs": set(),
             "active_professional_refs": set(),
+            "professional_items": {},
             "received_volume": 0.0,
             "emitted_volume": 0.0,
             "total_flow_volume": 0.0,
@@ -2121,7 +2618,10 @@ def compute_sector_activity(start=None, end=None, year=None):
             "b2b_received_share": 0.0,
             "other_received_share": 0.0,
         })
+
         bucket["professional_refs"].add(ref)
+        ensure_professional_item(bucket, ref)
+
         return bucket
 
     for ref in all_professionals:
@@ -2148,12 +2648,19 @@ def compute_sector_activity(start=None, end=None, year=None):
             bucket["received_count"] += 1
             bucket["total_flow_count"] += 1
 
+            professional_item = ensure_professional_item(bucket, to_ref)
+            professional_item["received_volume"] += value
+            professional_item["total_flow_volume"] += value
+            professional_item["received_count"] += 1
+
             if from_family == "U":
                 bucket["c2b_received_volume"] += value
                 bucket["c2b_received_count"] += 1
+                professional_item["c2b_received_volume"] += value
             elif from_family == "P":
                 bucket["b2b_received_volume"] += value
                 bucket["b2b_received_count"] += 1
+                professional_item["b2b_received_volume"] += value
             else:
                 bucket["other_received_volume"] += value
                 bucket["other_received_count"] += 1
@@ -2167,11 +2674,17 @@ def compute_sector_activity(start=None, end=None, year=None):
             bucket["emitted_count"] += 1
             bucket["total_flow_count"] += 1
 
+            professional_item = ensure_professional_item(bucket, from_ref)
+            professional_item["emitted_volume"] += value
+            professional_item["total_flow_volume"] += value
+            professional_item["emitted_count"] += 1
+
     sector_items = []
 
     for sector_label, bucket in sectors.items():
         professional_refs = bucket.pop("professional_refs")
         active_refs = bucket.pop("active_professional_refs")
+        professional_items_map = bucket.pop("professional_items", {})
 
         received_volume = float(bucket["received_volume"])
         emitted_volume = float(bucket["emitted_volume"])
@@ -2185,6 +2698,23 @@ def compute_sector_activity(start=None, end=None, year=None):
         c2b_received_volume = float(bucket["c2b_received_volume"])
         b2b_received_volume = float(bucket["b2b_received_volume"])
         other_received_volume = float(bucket["other_received_volume"])
+
+        top_professionals = sorted(
+            professional_items_map.values(),
+            key=lambda item: (
+                float(item.get("received_volume") or 0.0),
+                float(item.get("total_flow_volume") or 0.0),
+                str(item.get("professional_ref") or ""),
+            ),
+            reverse=True,
+        )[:10]
+
+        for professional_item in top_professionals:
+            professional_item["received_volume"] = round(float(professional_item["received_volume"]), 2)
+            professional_item["emitted_volume"] = round(float(professional_item["emitted_volume"]), 2)
+            professional_item["total_flow_volume"] = round(float(professional_item["total_flow_volume"]), 2)
+            professional_item["c2b_received_volume"] = round(float(professional_item["c2b_received_volume"]), 2)
+            professional_item["b2b_received_volume"] = round(float(professional_item["b2b_received_volume"]), 2)
 
         sector_items.append({
             **bucket,
@@ -2206,6 +2736,7 @@ def compute_sector_activity(start=None, end=None, year=None):
                 other_received_volume / received_volume
                 if received_volume else 0.0
             ),
+            "top_professionals": top_professionals,
         })
 
     sector_items.sort(
@@ -2235,7 +2766,7 @@ def compute_sector_activity(start=None, end=None, year=None):
     sector_count = len({
         item["sector"]
         for item in sector_items
-        if item["sector"] != "Secteur non renseigné"
+        if item["sector"] != classification["unclassified_label"]
     })
 
     summary = {
@@ -2280,9 +2811,18 @@ def compute_sector_activity(start=None, end=None, year=None):
         },
     }
 
+    quality = _compute_sector_activity_quality(
+        summary,
+        sector_items,
+        classification,
+        sector_mode,
+    )
+
     return {
         "summary": summary,
         "sectors": sector_items,
+        "classification": classification,
+        "quality": quality,
     }
 
 

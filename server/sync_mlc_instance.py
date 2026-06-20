@@ -242,6 +242,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--skip-balance-reconstruction", action="store_true")
     parser.add_argument("--skip-professional-chain-fate", action="store_true")
     parser.add_argument("--skip-actor-links", action="store_true")
+    parser.add_argument("--skip-cyclos-professional-profiles", action="store_true")
     parser.add_argument("--skip-caches", action="store_true")
     parser.add_argument("--skip-integrity", action="store_true")
     parser.add_argument("--skip-odoo", action="store_true")
@@ -252,6 +253,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser.add_argument("--limit-users", type=int)
     parser.add_argument("--limit-professionals", type=int)
+    parser.add_argument("--professional-profile-days", type=int, default=3650)
+    parser.add_argument("--professional-profile-limit", default="none")
     parser.add_argument("--max-windows-per-user", type=int)
     parser.add_argument("--max-windows-per-professional", type=int)
     parser.add_argument("--request-pause-seconds", type=float)
@@ -304,10 +307,13 @@ def main(argv: list[str] | None = None) -> int:
         "skip_balance_reconstruction": bool(args.skip_balance_reconstruction),
         "skip_professional_chain_fate": bool(args.skip_professional_chain_fate),
         "skip_actor_links": bool(args.skip_actor_links),
+        "skip_cyclos_professional_profiles": bool(args.skip_cyclos_professional_profiles),
         "skip_caches": bool(args.skip_caches),
         "skip_integrity": bool(args.skip_integrity),
         "limit_users": args.limit_users,
         "limit_professionals": args.limit_professionals,
+        "professional_profile_days": args.professional_profile_days,
+        "professional_profile_limit": args.professional_profile_limit,
         "max_windows_per_user": args.max_windows_per_user,
         "max_windows_per_professional": args.max_windows_per_professional,
         "request_pause_seconds": args.request_pause_seconds,
@@ -412,6 +418,28 @@ def main(argv: list[str] | None = None) -> int:
         ),
         skip_when=args.dry_run or args.skip_actor_links,
         skip_reason="dry_run ou --skip-actor-links",
+    )
+
+    professional_profile_args = [
+        "--mlc",
+        mlc_id,
+        "--days",
+        str(args.professional_profile_days),
+        "--limit",
+        str(args.professional_profile_limit),
+        "--apply",
+    ]
+
+    add_step(
+        "cyclos_professional_profile_enrichment",
+        lambda: run_subprocess_module(
+            "server.sync_cyclos_professional_profile_enrichment",
+            professional_profile_args,
+            mlc_id=mlc_id,
+            env_file=env_file,
+        ),
+        skip_when=args.dry_run or args.skip_cyclos_professional_profiles,
+        skip_reason="dry_run ou --skip-cyclos-professional-profiles",
     )
 
     individual_balance_args = ["--date-from", date_from, "--date-to", date_to]

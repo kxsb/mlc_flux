@@ -864,7 +864,10 @@ const appState = {
   },
 
   sectors: {
-    data: null
+    data: null,
+    economicRegistryNafSections: null,
+    economicRegistryNafCodes: null,
+    analysisMode: "internal"
   },
 
   monetaryIndicators: {
@@ -1424,6 +1427,802 @@ function buildSectorReceiptsMixHtml(sectors) {
   `;
 }
 
+
+function buildSectorCategoriesCatalogHtml(sectors) {
+  const sectorName = sector => (
+    String(sector.sector_name || sector.sector || "Secteur non renseigné").trim()
+    || "Secteur non renseigné"
+  );
+
+  const names = [...new Set(
+    sectors
+      .map(sector => sectorName(sector))
+      .filter(Boolean)
+  )].sort((a, b) => {
+    if (a === "Secteur non renseigné" && b !== "Secteur non renseigné") {
+      return 1;
+    }
+
+    if (b === "Secteur non renseigné" && a !== "Secteur non renseigné") {
+      return -1;
+    }
+
+    return a.localeCompare(b, "fr", { sensitivity: "base" });
+  });
+
+  const namedNames = names.filter(name => name !== "Secteur non renseigné");
+  const hasUnspecified = names.includes("Secteur non renseigné");
+  const displayNames = hasUnspecified
+    ? [...namedNames, "Secteur non renseigné"]
+    : namedNames;
+
+  if (!displayNames.length) {
+    return `
+      <section class="card sector-catalog-card">
+        <div class="sector-empty-state">Aucune catégorie sectorielle disponible sur la période.</div>
+      </section>
+    `;
+  }
+
+  return `
+    <section class="card sector-catalog-card">
+      <details class="sector-catalog-details">
+        <summary class="sector-catalog-summary">
+          <span>Voir la liste des regroupements sectoriels</span>
+          <small>
+            ${namedNames.length.toLocaleString("fr-FR")} catégorie(s) renseignée(s)
+            ${hasUnspecified ? "· + secteur non renseigné" : ""}
+          </small>
+        </summary>
+
+        <p class="sector-catalog-intro">
+          Cette liste correspond à la nomenclature sectorielle interne utilisée par l’association.
+          Le tableau “Détail par secteur” ci-dessous conserve les indicateurs d’activité recalculés
+          selon la période sélectionnée.
+        </p>
+
+        <p class="sector-catalog-names">
+          ${displayNames.map(name => `<span>${escapeHtml(name)}</span>`).join(" · ")}
+        </p>
+      </details>
+    </section>
+  `;
+}
+
+
+/* ECON_UI001B_SECTOR_MODE — switch analyse sectorielle Interne / NAF */
+function ensureSectorAnalysisModeStyles() {
+  if (document.getElementById("sector-analysis-mode-style")) return;
+
+  const style = document.createElement("style");
+  style.id = "sector-analysis-mode-style";
+  style.textContent = `
+    .sector-analysis-mode-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .sector-analysis-mode-card h3 {
+      margin: 0 0 0.25rem;
+    }
+
+    .sector-analysis-mode-card p {
+      margin: 0;
+      color: var(--text-muted, #667085);
+    }
+
+    .sector-analysis-mode-switch {
+      display: inline-flex;
+      gap: 0.35rem;
+      padding: 0.25rem;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.18);
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      flex-shrink: 0;
+    }
+
+    .sector-analysis-mode-btn {
+      border: 0;
+      border-radius: 999px;
+      padding: 0.42rem 0.8rem;
+      cursor: pointer;
+      font-weight: 700;
+      background: transparent;
+      color: inherit;
+    }
+
+    .sector-analysis-mode-btn.is-active {
+      background: var(--accent-color, #f97316);
+      color: white;
+      box-shadow: 0 8px 18px rgba(249, 115, 22, 0.22);
+    }
+
+    .sector-analysis-naf-summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 0.75rem;
+      margin: 1rem 0;
+    }
+
+    .sector-analysis-naf-note {
+      margin-top: 1rem;
+      color: var(--text-muted, #667085);
+      font-size: 0.92rem;
+      line-height: 1.45;
+    }
+
+    @media (max-width: 720px) {
+      .sector-analysis-mode-card {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .sector-analysis-mode-switch {
+        width: 100%;
+      }
+
+      .sector-analysis-mode-btn {
+        flex: 1;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function getSectorAnalysisMode() {
+  const mode = appState?.sectors?.analysisMode;
+  if (mode === "naf_precise") return "naf_precise";
+  if (mode === "naf_aggregate" || mode === "naf") return "naf_aggregate";
+  return "internal";
+}
+
+
+
+function setSectorAnalysisMode(mode) {
+  if (!appState.sectors) appState.sectors = {};
+
+  if (mode === "naf_precise") {
+    appState.sectors.analysisMode = "naf_precise";
+    return;
+  }
+
+  if (mode === "naf_aggregate" || mode === "naf") {
+    appState.sectors.analysisMode = "naf_aggregate";
+    return;
+  }
+
+  appState.sectors.analysisMode = "internal";
+}
+
+/* ECON_UI003A_SECTOR_THREE_MODES — Interne / NAF agrégé / NAF précis */
+function getSectorAnalysisModeFromValue(value) {
+  if (value === "naf_precise") return "naf_precise";
+  if (value === "naf_aggregate" || value === "naf") return "naf_aggregate";
+  return "internal";
+}
+
+/* ECON_UI004B_SECTOR_ACTIVITY_GRAPHS — le switch change la typologie, pas la forme de l’analyse */
+function getSectorActivityApiModeFromAnalysisMode(mode = getSectorAnalysisMode()) {
+  if (mode === "naf_aggregate") return "naf_section";
+  if (mode === "naf_precise") return "naf_code";
+  return "internal";
+}
+
+function getSectorActivityQueryParamForMode(apiMode = "internal") {
+  const periodQuery = getPeriodQueryParam() || "";
+  const normalizedMode = apiMode || "internal";
+
+  if (normalizedMode === "internal") {
+    return periodQuery;
+  }
+
+  const separator = periodQuery ? "&" : "?";
+  return `${periodQuery}${separator}sector_mode=${encodeURIComponent(normalizedMode)}`;
+}
+
+function getSectorClassificationMeta(data = {}) {
+  return data.classification || {};
+}
+
+function getSectorClassificationUnitLabel(data = {}) {
+  const meta = getSectorClassificationMeta(data);
+  return meta.unit_label || "secteurs";
+}
+
+function getSectorClassificationUnclassifiedLabel(data = {}) {
+  const meta = getSectorClassificationMeta(data);
+  return meta.unclassified_label || "Secteur non renseigné";
+}
+
+/* ECON_UI006A_UNCLASSIFIED_SECTOR_SPLIT — garde le non-classé visible sans écraser les graphes */
+function getSectorItemLabel(item = {}) {
+  return String(
+    item.sector_name
+    || item.sector
+    || item.industry_name
+    || ""
+  ).trim();
+}
+
+function isUnclassifiedSectorItem(item = {}) {
+  const label = getSectorItemLabel(item);
+  return label === "Secteur non renseigné" || label === "NAF non renseigné";
+}
+
+function getSectorUnclassifiedItem(sectors = []) {
+  return (Array.isArray(sectors) ? sectors : []).find(isUnclassifiedSectorItem) || null;
+}
+
+function getClassifiedSectorsForMainCharts(sectors = []) {
+  return (Array.isArray(sectors) ? sectors : []).filter(item => !isUnclassifiedSectorItem(item));
+}
+
+function getSectorsWithUnclassifiedLast(sectors = []) {
+  const safeSectors = Array.isArray(sectors) ? sectors : [];
+  const classified = safeSectors.filter(item => !isUnclassifiedSectorItem(item));
+  const unclassified = safeSectors.filter(isUnclassifiedSectorItem);
+  return [...classified, ...unclassified];
+}
+
+function formatSectorAnalysisMoney(value) {
+  return `${Number(value || 0).toLocaleString("fr-FR", {
+    maximumFractionDigits: 0
+  })} G`;
+}
+
+function formatSectorAnalysisPercentValue(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "—";
+  return `${Number(value).toLocaleString("fr-FR", {
+    maximumFractionDigits: 1
+  })} %`;
+}
+
+/* ECON_UI007A_SECTOR_TOP_PROFESSIONALS — rend lisible l'acteur qui porte chaque secteur */
+function buildSectorTopProfessionalsHtml(sectors = []) {
+  const safeSectors = (Array.isArray(sectors) ? sectors : [])
+    .filter(sector => Array.isArray(sector.top_professionals) && sector.top_professionals.length)
+    .slice(0, 12);
+
+  if (!safeSectors.length) return "";
+
+  return `
+    <section class="card sector-top-professionals-card">
+      <details>
+        <summary>
+          Voir les principaux professionnels derrière ces regroupements
+        </summary>
+
+        <div class="sector-top-professionals-list">
+          ${safeSectors.map(sector => `
+            <div class="sector-top-professionals-sector">
+              <h4>${escapeHtml(getSectorItemLabel(sector) || "Secteur non renseigné")}</h4>
+              <div class="sector-table-wrap">
+                <table class="sector-table sector-top-professionals-table">
+                  <thead>
+                    <tr>
+                      <th>Professionnel</th>
+                      <th>Reçu</th>
+                      <th>Émis</th>
+                      <th>C2B reçu</th>
+                      <th>B2B reçu</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${sector.top_professionals.slice(0, 6).map(item => `
+                      <tr>
+                        <td>
+                          <strong>${escapeHtml(item.professional_ref || "—")}</strong>
+                          ${item.name && item.name !== item.professional_ref
+                            ? ` — ${escapeHtml(item.name)}`
+                            : ""}
+                        </td>
+                        <td>${formatSectorAnalysisMoney(item.received_volume)}</td>
+                        <td>${formatSectorAnalysisMoney(item.emitted_volume)}</td>
+                        <td>${formatSectorAnalysisMoney(item.c2b_received_volume)}</td>
+                        <td>${formatSectorAnalysisMoney(item.b2b_received_volume)}</td>
+                      </tr>
+                    `).join("")}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          `).join("")}
+        </div>
+      </details>
+    </section>
+  `;
+}
+
+
+function buildSectorUnclassifiedSummaryHtml(item = null) {
+  if (!item) return "";
+
+  const label = getSectorItemLabel(item) || "Non renseigné";
+  const reuseRate = item.reuse_rate;
+
+  return `
+    <section class="card sector-unclassified-card">
+      <div class="sector-overview-header">
+        <div>
+          <div class="stat-label">Qualité du classement sectoriel</div>
+          <h3>${escapeHtml(label)}</h3>
+          <p>
+            Ce bloc regroupe les professionnels qui ne peuvent pas encore être rattachés
+            à la typologie sélectionnée. Il est conservé pour transparence, mais retiré
+            des graphes principaux afin de ne pas masquer les secteurs effectivement qualifiés.
+          </p>
+        </div>
+      </div>
+
+      <div class="sector-analysis-naf-summary">
+        <div class="sector-kpi">
+          <span>Professionnels</span>
+          <strong>${formatSectorAnalysisInteger(item.professional_count)}</strong>
+        </div>
+        <div class="sector-kpi">
+          <span>Professionnels actifs</span>
+          <strong>${formatSectorAnalysisInteger(item.active_professional_count)}</strong>
+        </div>
+        <div class="sector-kpi">
+          <span>Volume reçu</span>
+          <strong>${formatSectorAnalysisMoney(item.received_volume)}</strong>
+        </div>
+        <div class="sector-kpi">
+          <span>Taux de réemploi</span>
+          <strong>${formatSectorAnalysisPercentValue(reuseRate)}</strong>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+
+async function loadEconomicRegistryNafCodes(forceReload = false) {
+  if (!appState.sectors) appState.sectors = {};
+
+  if (!appState.sectors.economicRegistryNafCodes || forceReload) {
+    try {
+      appState.sectors.economicRegistryNafCodes = await apiGet("/api/economic-registry/naf-codes");
+    } catch (error) {
+      console.warn("Impossible de charger les codes NAF :", error);
+      appState.sectors.economicRegistryNafCodes = {
+        available: false,
+        error: error?.message || String(error || "Erreur inconnue"),
+        codes: [],
+        unknown_or_unusable_count: 0
+      };
+    }
+  }
+
+  return appState.sectors.economicRegistryNafCodes;
+}
+
+function getSectorAnalysisNafCodeLabel(code, label = "") {
+  const existing = String(label || "").trim();
+  if (existing) return existing;
+
+  const normalizedCode = String(code || "").trim().toUpperCase().replace(/\s+/g, "");
+
+  if (
+    typeof PROFESSIONAL_ECONOMIC_NAF_LABELS !== "undefined"
+    && PROFESSIONAL_ECONOMIC_NAF_LABELS
+    && PROFESSIONAL_ECONOMIC_NAF_LABELS[normalizedCode]
+  ) {
+    return PROFESSIONAL_ECONOMIC_NAF_LABELS[normalizedCode];
+  }
+
+  return "";
+}
+
+function buildNafCodesTableHtml(codes, unknownOrUnusableCount = 0) {
+  const safeCodes = Array.isArray(codes) ? codes : [];
+  const total = safeCodes.reduce((sum, item) => sum + Number(item.count || 0), 0)
+    + Number(unknownOrUnusableCount || 0);
+
+  if (!safeCodes.length) {
+    return `<div class="sector-empty-state">Aucun code NAF précis exploitable pour cette instance.</div>`;
+  }
+
+  return `
+    <div class="sector-table-wrap">
+      <table class="sector-table">
+        <thead>
+          <tr>
+            <th>Code NAF / APE</th>
+            <th>Libellé précis</th>
+            <th>NAF agrégé</th>
+            <th>Pros</th>
+            <th>Part</th>
+            <th>SIRET exacts</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${safeCodes.map(item => {
+            const label = getSectorAnalysisNafCodeLabel(item.naf_code, item.naf_label);
+            const aggregate = [
+              item.naf_section,
+              item.naf_section_label
+            ].filter(Boolean).join(" — ") || "—";
+
+            return `
+              <tr>
+                <td><strong>${escapeHtml(item.naf_code || "—")}</strong></td>
+                <td>${escapeHtml(label || item.naf_code || "—")}</td>
+                <td>${escapeHtml(aggregate)}</td>
+                <td>${formatSectorAnalysisInteger(item.count)}</td>
+                <td>${formatSectorAnalysisShare(item.count, total)}</td>
+                <td>${formatSectorAnalysisInteger(item.with_exact_siret)}</td>
+              </tr>
+            `;
+          }).join("")}
+          ${Number(unknownOrUnusableCount || 0) > 0 ? `
+            <tr>
+              <td><strong>—</strong></td>
+              <td>Code NAF non exploitable</td>
+              <td>—</td>
+              <td>${formatSectorAnalysisInteger(unknownOrUnusableCount)}</td>
+              <td>${formatSectorAnalysisShare(unknownOrUnusableCount, total)}</td>
+              <td>—</td>
+            </tr>
+          ` : ""}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function buildNafPreciseSectorAnalysisViewHtml(payload) {
+  const available = payload && payload.available !== false && Array.isArray(payload.codes);
+  const codes = available ? payload.codes : [];
+  const unknownOrUnusableCount = Number(payload?.unknown_or_unusable_count || 0);
+  const codedCount = codes.reduce((sum, item) => sum + Number(item.count || 0), 0);
+  const exactSiretCount = codes.reduce((sum, item) => sum + Number(item.with_exact_siret || 0), 0);
+
+  if (!available) {
+    return `
+      ${buildSectorAnalysisModeSwitchHtml("naf_precise")}
+      <section class="card sector-overview-card">
+        <div class="sector-overview-header">
+          <div>
+            <div class="stat-label">NAF précis / APE</div>
+            <h2>Analyse NAF précis indisponible</h2>
+            <p>
+              La table d’enrichissement économique n’est pas disponible pour cette instance.
+              L’analyse sectorielle interne reste accessible.
+            </p>
+          </div>
+        </div>
+        <div class="sector-empty-state">
+          ${escapeHtml(payload?.reason || payload?.error || "Registre économique indisponible.")}
+        </div>
+      </section>
+    `;
+  }
+
+  return `
+    ${buildSectorAnalysisModeSwitchHtml("naf_precise")}
+
+    <section class="card sector-overview-card">
+      <div class="sector-overview-header">
+        <div>
+          <div class="stat-label">Typologie économique standard détaillée</div>
+          <h2>${formatSectorAnalysisInteger(codes.length)} codes NAF / APE représentés</h2>
+          <p>
+            Cette vue descend au niveau précis du code NAF / APE. Elle permet de distinguer,
+            par exemple, les librairies, les travaux de plomberie, les restaurants ou les activités culturelles,
+            tout en conservant le rattachement à la section NAF agrégée.
+          </p>
+        </div>
+      </div>
+
+      <div class="sector-analysis-naf-summary">
+        <div class="sector-kpi">
+          <span>Pros avec code NAF</span>
+          <strong>${formatSectorAnalysisInteger(codedCount)}</strong>
+        </div>
+        <div class="sector-kpi">
+          <span>Codes NAF distincts</span>
+          <strong>${formatSectorAnalysisInteger(codes.length)}</strong>
+        </div>
+        <div class="sector-kpi">
+          <span>SIRET exacts</span>
+          <strong>${formatSectorAnalysisInteger(exactSiretCount)}</strong>
+        </div>
+        <div class="sector-kpi">
+          <span>Non codés</span>
+          <strong>${formatSectorAnalysisInteger(unknownOrUnusableCount)}</strong>
+        </div>
+      </div>
+
+      ${buildNafCodesTableHtml(codes, unknownOrUnusableCount)}
+
+      <p class="sector-analysis-naf-note">
+        Lecture prudente : le code NAF / APE est plus précis que la section agrégée,
+        mais son libellé complet dépend du référentiel NAF disponible. Les lignes sans libellé
+        devront être complétées par un référentiel centralisé côté backend.
+      </p>
+    </section>
+  `;
+}
+
+
+
+
+async function loadEconomicRegistryNafSections(forceReload = false) {
+  if (!appState.sectors) appState.sectors = {};
+
+  if (!appState.sectors.economicRegistryNafSections || forceReload) {
+    try {
+      appState.sectors.economicRegistryNafSections = await apiGet("/api/economic-registry/naf-sections");
+    } catch (error) {
+      console.warn("Impossible de charger les sections NAF :", error);
+      appState.sectors.economicRegistryNafSections = {
+        available: false,
+        error: error?.message || String(error || "Erreur inconnue"),
+        sections: [],
+        unknown_or_unusable_count: 0
+      };
+    }
+  }
+
+  return appState.sectors.economicRegistryNafSections;
+}
+
+function buildSectorAnalysisModeSwitchHtml() {
+  const activeMode = getSectorAnalysisMode();
+
+  const options = [
+    {
+      mode: "internal",
+      label: "Catégories internes",
+      title: "Typologie définie par l’association"
+    },
+    {
+      mode: "naf_aggregate",
+      label: "NAF agrégé",
+      title: "Sections NAF agrégées"
+    },
+    {
+      mode: "naf_precise",
+      label: "NAF précis",
+      title: "Codes NAF / APE détaillés"
+    }
+  ];
+
+  return `
+    <div class="sector-analysis-mode-switch econ-ui008b-sector-switch"
+         role="tablist"
+         aria-label="Mode d’analyse sectorielle">
+      ${options.map((option) => {
+        const isActive = option.mode === activeMode;
+        return `
+          <button type="button"
+                  class="sector-analysis-mode-option ${isActive ? "active is-active" : ""}"
+                  data-sector-analysis-mode="${option.mode}"
+                  data-analysis-mode="${option.mode}"
+                  data-mode="${option.mode}"
+                  role="tab"
+                  aria-selected="${isActive ? "true" : "false"}"
+                  aria-pressed="${isActive ? "true" : "false"}"
+                  title="${option.title}">
+            ${option.label}
+          </button>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+
+
+function formatSectorAnalysisInteger(value) {
+  return Number(value || 0).toLocaleString("fr-FR");
+}
+
+function formatSectorAnalysisShare(value, total) {
+  const count = Number(value || 0);
+  const base = Number(total || 0);
+
+  if (!base) return "—";
+
+  return `${((count / base) * 100).toLocaleString("fr-FR", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1
+  })} %`;
+}
+
+function buildNafSectionsTableHtml(sections, unknownOrUnusableCount = 0) {
+  const safeSections = Array.isArray(sections) ? sections : [];
+  const total = safeSections.reduce((sum, section) => sum + Number(section.count || 0), 0)
+    + Number(unknownOrUnusableCount || 0);
+
+  if (!safeSections.length) {
+    return `<div class="sector-empty-state">Aucune section NAF exploitable pour cette instance.</div>`;
+  }
+
+  return `
+    <div class="sector-table-wrap">
+      <table class="sector-table">
+        <thead>
+          <tr>
+            <th>Section NAF</th>
+            <th>Libellé</th>
+            <th>Pros</th>
+            <th>Part</th>
+            <th>Avec code NAF</th>
+            <th>Avec SIRET exact</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${safeSections.map(section => `
+            <tr>
+              <td><strong>${escapeHtml(section.naf_section || "—")}</strong></td>
+              <td>${escapeHtml(section.naf_section_label || "Section non renseignée")}</td>
+              <td>${formatSectorAnalysisInteger(section.count)}</td>
+              <td>${formatSectorAnalysisShare(section.count, total)}</td>
+              <td>${formatSectorAnalysisInteger(section.with_naf_code)}</td>
+              <td>${formatSectorAnalysisInteger(section.with_exact_siret)}</td>
+            </tr>
+          `).join("")}
+          ${Number(unknownOrUnusableCount || 0) > 0 ? `
+            <tr>
+              <td><strong>—</strong></td>
+              <td>Non classé / NAF non exploitable</td>
+              <td>${formatSectorAnalysisInteger(unknownOrUnusableCount)}</td>
+              <td>${formatSectorAnalysisShare(unknownOrUnusableCount, total)}</td>
+              <td>—</td>
+              <td>—</td>
+            </tr>
+          ` : ""}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function buildNafSectorAnalysisViewHtml(payload) {
+  const available = payload && payload.available !== false && Array.isArray(payload.sections);
+  const sections = available ? payload.sections : [];
+  const unknownOrUnusableCount = Number(payload?.unknown_or_unusable_count || 0);
+  const classifiedCount = sections.reduce((sum, section) => sum + Number(section.count || 0), 0);
+  const total = classifiedCount + unknownOrUnusableCount;
+  const exactSiretCount = sections.reduce((sum, section) => sum + Number(section.with_exact_siret || 0), 0);
+  const nafCodeCount = sections.reduce((sum, section) => sum + Number(section.with_naf_code || 0), 0);
+
+  if (!available) {
+    return `
+      ${buildSectorAnalysisModeSwitchHtml("naf_aggregate")}
+      <section class="card sector-overview-card">
+        <div class="sector-overview-header">
+          <div>
+            <div class="stat-label">Nomenclature NAF</div>
+            <h2>Analyse NAF indisponible</h2>
+            <p>
+              La table d’enrichissement économique n’est pas disponible pour cette instance.
+              L’analyse sectorielle interne reste accessible.
+            </p>
+          </div>
+        </div>
+        <div class="sector-empty-state">
+          ${escapeHtml(payload?.reason || payload?.error || "Registre économique indisponible.")}
+        </div>
+      </section>
+    `;
+  }
+
+  return `
+    ${buildSectorAnalysisModeSwitchHtml("naf_aggregate")}
+
+    <section class="card sector-overview-card">
+      <div class="sector-overview-header">
+        <div>
+          <div class="stat-label">Typologie économique standard</div>
+          <h2>${formatSectorAnalysisInteger(sections.length)} sections NAF représentées</h2>
+          <p>
+            Cette vue classe les professionnels selon la nomenclature NAF issue de l’enrichissement SIRET / NAF.
+            Elle complète la typologie interne sans la remplacer.
+          </p>
+        </div>
+      </div>
+
+      <div class="sector-analysis-naf-summary">
+        <div class="sector-kpi">
+          <span>Pros classés NAF</span>
+          <strong>${formatSectorAnalysisInteger(classifiedCount)}</strong>
+        </div>
+        <div class="sector-kpi">
+          <span>Codes NAF exploitables</span>
+          <strong>${formatSectorAnalysisInteger(nafCodeCount)}</strong>
+        </div>
+        <div class="sector-kpi">
+          <span>SIRET exacts</span>
+          <strong>${formatSectorAnalysisInteger(exactSiretCount)}</strong>
+        </div>
+        <div class="sector-kpi">
+          <span>Non classés</span>
+          <strong>${formatSectorAnalysisInteger(unknownOrUnusableCount)}</strong>
+        </div>
+      </div>
+
+      ${buildNafSectionsTableHtml(sections, unknownOrUnusableCount)}
+
+      <p class="sector-analysis-naf-note">
+        Lecture prudente : les sections NAF sont une nomenclature économique standard.
+        Les SIRET exacts sont distingués des cas où seul le code NAF ou la section est exploitable.
+      </p>
+    </section>
+  `;
+}
+
+function installSectorAnalysisModeSwitchDelegation() {
+  if (window.__sectorAnalysisModeSwitchDelegationInstalled) return;
+  window.__sectorAnalysisModeSwitchDelegationInstalled = true;
+
+  document.addEventListener("click", async (event) => {
+    const button = event.target.closest(
+      "button[data-sector-analysis-mode], button[data-analysis-mode], button[data-mode], .sector-analysis-mode-option"
+    );
+
+    if (!button) return;
+
+    const mode = (
+      button.dataset.sectorAnalysisMode
+      || button.dataset.analysisMode
+      || button.dataset.mode
+      || ""
+    ).trim();
+
+    if (!["internal", "naf_aggregate", "naf_precise"].includes(mode)) return;
+
+    event.preventDefault();
+
+    setSectorAnalysisMode(mode);
+
+    const group = button.closest(".sector-analysis-mode-switch");
+    if (group) {
+      group.querySelectorAll("button").forEach((otherButton) => {
+        const otherMode = (
+          otherButton.dataset.sectorAnalysisMode
+          || otherButton.dataset.analysisMode
+          || otherButton.dataset.mode
+          || ""
+        ).trim();
+
+        const isActive = otherMode === mode;
+        otherButton.classList.toggle("active", isActive);
+        otherButton.classList.toggle("is-active", isActive);
+        otherButton.setAttribute("aria-selected", isActive ? "true" : "false");
+        otherButton.setAttribute("aria-pressed", isActive ? "true" : "false");
+      });
+    }
+
+    if (typeof window.syncSectorAnalysisSwitchVisualState === "function") {
+      window.syncSectorAnalysisSwitchVisualState();
+    }
+
+    try {
+      if (typeof renderProfessionalSectorAnalysisPanel === "function") {
+        await renderProfessionalSectorAnalysisPanel();
+      } else if (typeof renderSectorsView === "function") {
+        await renderSectorsView(true);
+      }
+    } catch (error) {
+      console.error("Erreur lors du changement de mode sectoriel", error);
+    }
+
+    if (typeof window.syncSectorAnalysisSwitchVisualState === "function") {
+      window.setTimeout(window.syncSectorAnalysisSwitchVisualState, 0);
+      window.setTimeout(window.syncSectorAnalysisSwitchVisualState, 80);
+    }
+  });
+}
+
+installSectorAnalysisModeSwitchDelegation();
+
+
 function buildSectorsTableHtml(sectors) {
   if (!sectors.length) {
     return `<div class="sector-empty-state">Aucun secteur exploitable sur la période.</div>`;
@@ -1487,7 +2286,20 @@ async function renderSectorsView(forceReload = false) {
   const summary = data.summary || {};
   const sectors = Array.isArray(data.sectors) ? data.sectors : [];
 
+  const sectorAnalysisMode = getSectorAnalysisMode();
+
+  if (sectorAnalysisMode === "naf_aggregate" || sectorAnalysisMode === "naf_precise") {
+    const apiSectorMode = getSectorActivityApiModeFromAnalysisMode(sectorAnalysisMode);
+    const sectorsData = await apiGet(
+      `/api/sectors/activity${getSectorActivityQueryParamForMode(apiSectorMode)}`
+    );
+    appState.sectors.data = sectorsData;
+    content.innerHTML = buildProfessionalSectorAnalysisPanelHtml(sectorsData);
+    return;
+  }
+
   content.innerHTML = `
+    ${buildSectorAnalysisModeSwitchHtml("internal")}
     <section class="card sector-overview-card">
       <div class="sector-overview-header">
         <div>
@@ -1539,25 +2351,29 @@ async function renderSectorsView(forceReload = false) {
       </div>
     </section>
 
+    ${buildSectorUnclassifiedSummaryHtml(getSectorUnclassifiedItem(sectors))}
+    ${buildSectorCategoriesCatalogHtml(getClassifiedSectorsForMainCharts(sectors))}
+    ${buildSectorTopProfessionalsHtml(getClassifiedSectorsForMainCharts(sectors))}
+
     <section class="card sector-ranking-card">
       <div class="sector-section-heading">
         <h3>Principaux secteurs par gonettes reçues</h3>
       </div>
-      ${buildSectorRankingHtml(sectors)}
+      ${buildSectorRankingHtml(getClassifiedSectorsForMainCharts(sectors))}
     </section>
 
     <section class="card sector-mix-card">
       <div class="sector-section-heading">
         <h3>Origine des recettes : C2B / B2B</h3>
       </div>
-      ${buildSectorReceiptsMixHtml(sectors)}
+      ${buildSectorReceiptsMixHtml(getClassifiedSectorsForMainCharts(sectors))}
     </section>
 
     <section class="card sector-table-card">
       <div class="sector-section-heading">
         <h3>Détail par secteur</h3>
       </div>
-      ${buildSectorsTableHtml(sectors)}
+      ${buildSectorsTableHtml(getSectorsWithUnclassifiedLast(sectors))}
     </section>
   `;
 }
@@ -4074,7 +4890,7 @@ function aggregateTable(rows, keyField, label) {
 
 function buildDetailSection(numProf, allTx, mode) {
   const filteredTx = getFilteredTransactionsByPeriod(allTx);
-  
+
   let title = "Transactions";
   let html = "";
 
@@ -4188,7 +5004,7 @@ function buildDetailSection(numProf, allTx, mode) {
     </div>
   `;
 }
-  
+
 const PERIOD_AUTO_APPLY_DELAY_MS = 260;
 let periodAutoApplyTimer = null;
 
@@ -16826,7 +17642,7 @@ async function renderMonetaryPilotageView(forceReload = false) {
             </div>
           </article>
 
-          
+
 
           <article class="card stats-chart-card stats-chart-card-full pilotage-chart-card">
             ${buildStatsChartHeader({
@@ -16841,7 +17657,7 @@ async function renderMonetaryPilotageView(forceReload = false) {
             </div>
           </article>
 
-          
+
 
             <div class="pilotage-holdings-story-step">
               <span>3</span>
@@ -16910,7 +17726,7 @@ async function renderMonetaryPilotageView(forceReload = false) {
           </article>
 
 
-          
+
 
             <div class="pilotage-holdings-story-step">
               <span>4</span>
@@ -16976,7 +17792,7 @@ async function renderMonetaryPilotageView(forceReload = false) {
           </article>
 
 
-          
+
 
             ${holdingsPartialMonthNote}
           </section>      </section>
@@ -19943,6 +20759,7 @@ function buildProfessionalSectorAnalysisPanelHtml(sectorsData = null) {
     : [];
 
   return `
+    ${buildSectorAnalysisModeSwitchHtml("internal")}
     <section class="card sector-overview-card">
       <div class="sector-overview-header">
         <div>
@@ -19994,25 +20811,29 @@ function buildProfessionalSectorAnalysisPanelHtml(sectorsData = null) {
       </div>
     </section>
 
+    ${buildSectorUnclassifiedSummaryHtml(getSectorUnclassifiedItem(sectors))}
+    ${buildSectorCategoriesCatalogHtml(getClassifiedSectorsForMainCharts(sectors))}
+    ${buildSectorTopProfessionalsHtml(getClassifiedSectorsForMainCharts(sectors))}
+
     <section class="card sector-ranking-card">
       <div class="sector-section-heading">
         <h3>Principaux secteurs par gonettes reçues</h3>
       </div>
-      ${buildSectorRankingHtml(sectors)}
+      ${buildSectorRankingHtml(getClassifiedSectorsForMainCharts(sectors))}
     </section>
 
     <section class="card sector-mix-card">
       <div class="sector-section-heading">
         <h3>Origine des recettes : C2B / B2B</h3>
       </div>
-      ${buildSectorReceiptsMixHtml(sectors)}
+      ${buildSectorReceiptsMixHtml(getClassifiedSectorsForMainCharts(sectors))}
     </section>
 
     <section class="card sector-table-card">
       <div class="sector-section-heading">
         <h3>Détail par secteur</h3>
       </div>
-      ${buildSectorsTableHtml(sectors)}
+      ${buildSectorsTableHtml(getSectorsWithUnclassifiedLast(sectors))}
     </section>
   `;
 }
@@ -20023,7 +20844,11 @@ async function renderProfessionalSectorAnalysisPanel(forceReload = false) {
     return;
   }
 
-  const periodKey = getPeriodQueryParam() || "__no_period__";
+  const sectorAnalysisMode = getSectorAnalysisMode();
+  const periodKey = [
+    getPeriodQueryParam() || "__no_period__",
+    `sector_mode=${sectorAnalysisMode}`
+  ].join("::");
   const alreadyHydrated = (
     panel.dataset.professionalSectorAnalysisHydrated === "true"
     && panel.dataset.professionalSectorAnalysisPeriodKey === periodKey
@@ -20038,8 +20863,9 @@ async function renderProfessionalSectorAnalysisPanel(forceReload = false) {
   panel.innerHTML = buildProfessionalSectorAnalysisLoadingHtml();
 
   try {
+    const apiSectorMode = getSectorActivityApiModeFromAnalysisMode(sectorAnalysisMode);
     const sectorsData = await apiGet(
-      `/api/sectors/activity${getPeriodQueryParam()}`
+      `/api/sectors/activity${getSectorActivityQueryParamForMode(apiSectorMode)}`
     );
 
     appState.sectors.data = sectorsData;
@@ -27575,7 +28401,7 @@ async function renderProDetail(numProf, detailMode = "all") {
   appState.currentView = "pro-detail";
   syncSidebarView("pro-detail");
   appState.currentPro = numProf;
-  
+
 
   // pour revenir automatiquement sur Données à chaque nouveau pro
   // appState.proTab = "data";
@@ -28132,6 +28958,493 @@ window.renderProDetail = renderProDetail;
 window.renderProsView = renderProsView;
 window.renderCartographyView = renderCartographyView;
 window.renderTerritoriesView = renderTerritoriesView;
+
+/* ECON_UI002A_PRO_ENRICHMENT_TOGGLE — fiche pro : enrichissement SIRET/NAF on/off */
+function ensureProfessionalEconomicEnrichmentState() {
+  if (!appState.professionalEconomicEnrichment) {
+    appState.professionalEconomicEnrichment = {
+      visible: false,
+      records: {}
+    };
+  }
+
+  if (!appState.professionalEconomicEnrichment.records) {
+    appState.professionalEconomicEnrichment.records = {};
+  }
+
+  return appState.professionalEconomicEnrichment;
+}
+
+function ensureProfessionalEconomicEnrichmentStyles() {
+  if (document.getElementById("professional-economic-enrichment-style")) return;
+
+  const style = document.createElement("style");
+  style.id = "professional-economic-enrichment-style";
+  style.textContent = `
+    .professional-economic-enrichment-card {
+      margin-bottom: 1rem;
+      border: 1px solid rgba(148, 163, 184, 0.24);
+    }
+
+    .professional-economic-enrichment-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    .professional-economic-enrichment-title {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .professional-economic-enrichment-title h3 {
+      margin: 0;
+    }
+
+    .professional-economic-enrichment-text {
+      margin: 0;
+      color: var(--text-muted, #667085);
+      line-height: 1.45;
+    }
+
+    .professional-economic-enrichment-toggle {
+      border: 0;
+      border-radius: 999px;
+      padding: 0.45rem 0.8rem;
+      font-weight: 800;
+      cursor: pointer;
+      background: rgba(148, 163, 184, 0.18);
+      color: inherit;
+      white-space: nowrap;
+    }
+
+    .professional-economic-enrichment-toggle.is-active {
+      background: var(--accent-color, #f97316);
+      color: #fff;
+      box-shadow: 0 8px 18px rgba(249, 115, 22, 0.22);
+    }
+
+    .professional-economic-enrichment-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+      gap: 0.75rem;
+      margin-top: 1rem;
+    }
+
+    .professional-economic-enrichment-item {
+      padding: 0.75rem;
+      border-radius: 14px;
+      background: rgba(148, 163, 184, 0.10);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+    }
+
+    .professional-economic-enrichment-item span {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--text-muted, #667085);
+      margin-bottom: 0.25rem;
+    }
+
+    .professional-economic-enrichment-item strong {
+      display: block;
+      font-size: 0.98rem;
+      word-break: break-word;
+    }
+
+    .professional-economic-enrichment-badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 0.16rem 0.48rem;
+      font-size: 0.74rem;
+      font-weight: 800;
+      background: rgba(34, 197, 94, 0.14);
+      color: #15803d;
+    }
+
+    .professional-economic-enrichment-badge.is-review {
+      background: rgba(245, 158, 11, 0.16);
+      color: #b45309;
+    }
+
+    .professional-economic-enrichment-badge.is-muted {
+      background: rgba(148, 163, 184, 0.18);
+      color: var(--text-muted, #667085);
+    }
+
+    .professional-economic-enrichment-note {
+      margin-top: 0.85rem;
+      color: var(--text-muted, #667085);
+      font-size: 0.9rem;
+      line-height: 1.45;
+    }
+
+    @media (max-width: 720px) {
+      .professional-economic-enrichment-head {
+        flex-direction: column;
+      }
+
+      .professional-economic-enrichment-toggle {
+        width: 100%;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function getProfessionalEconomicEnrichmentRoot() {
+  return (
+    document.getElementById("content")
+    || document.querySelector("main")
+    || document.querySelector(".main-content")
+    || document.body
+  );
+}
+
+function getProfessionalEconomicEnrichmentCacheKey(professionalRef) {
+  const mlcId = String(
+    window.__mlcFluxActiveMlcId
+    || appState?.activeMlcId
+    || appState?.currentMlcId
+    || ""
+  ).trim();
+
+  return `${mlcId || "active"}:${String(professionalRef || "").trim()}`;
+}
+
+async function loadProfessionalEconomicEnrichmentRecord(professionalRef, forceReload = false) {
+  const state = ensureProfessionalEconomicEnrichmentState();
+  const ref = normalizeProfessionalDetailRef(professionalRef);
+  const cacheKey = getProfessionalEconomicEnrichmentCacheKey(ref);
+
+  if (!forceReload && state.records[cacheKey]) {
+    return state.records[cacheKey];
+  }
+
+  try {
+    const payload = await apiGet(`/api/economic-registry/pro/${encodeURIComponent(ref)}`);
+    state.records[cacheKey] = payload;
+    return payload;
+  } catch (error) {
+    const payload = {
+      available: false,
+      found: false,
+      professional_ref: ref,
+      error: error?.message || String(error || "Erreur inconnue"),
+      record: null
+    };
+    state.records[cacheKey] = payload;
+    return payload;
+  }
+}
+
+function getProfessionalEconomicConfidenceLabel(record = {}) {
+  const confidence = String(record.confidence_level || "").trim();
+
+  if (confidence === "exact") return "SIRET exact";
+  if (confidence === "high") return "NAF haute confiance";
+  if (confidence === "medium") return "NAF confiance moyenne";
+  if (confidence === "manual_high") return "Revue manuelle prioritaire";
+  if (confidence === "manual_medium") return "Revue manuelle";
+  if (confidence === "directory_only") return "Annuaire uniquement";
+  if (confidence === "out_of_scope") return "Hors périmètre";
+  if (confidence === "none") return "Non trouvé";
+
+  return confidence || "Non qualifié";
+}
+
+function getProfessionalEconomicBadgeClass(record = {}) {
+  if (Number(record.manual_review_required || 0) === 1) {
+    return "professional-economic-enrichment-badge is-review";
+  }
+
+  const confidence = String(record.confidence_level || "").trim();
+
+  if (confidence === "exact" || confidence === "high") {
+    return "professional-economic-enrichment-badge";
+  }
+
+  return "professional-economic-enrichment-badge is-muted";
+}
+
+function formatProfessionalEconomicValue(value, fallback = "—") {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+}
+
+const PROFESSIONAL_ECONOMIC_NAF_LABELS = {
+  /* ECON_UI002B_NAF_SUBCLASS_LABELS — libellés de sous-classe NAF utiles aux fiches enrichies */
+  "43.22A": "Travaux d’installation d’eau et de gaz en tous locaux",
+  "47.61Z": "Commerce de détail de livres en magasin spécialisé"
+};
+
+function normalizeProfessionalEconomicNafCode(value) {
+  return String(value || "").trim().toUpperCase().replace(/\s+/g, "");
+}
+
+function getProfessionalEconomicNafLabel(record = {}) {
+  const existing = String(record.naf_label || "").trim();
+  if (existing) return existing;
+
+  const code = normalizeProfessionalEconomicNafCode(
+    record.naf_code || record.candidate_naf_code
+  );
+
+  return PROFESSIONAL_ECONOMIC_NAF_LABELS[code] || "";
+}
+
+function getProfessionalEconomicNafSubclassDisplay(record = {}) {
+  const code = formatProfessionalEconomicValue(record.naf_code || record.candidate_naf_code);
+  const label = getProfessionalEconomicNafLabel(record);
+
+  if (!code || code === "—") return "—";
+  return label ? `${code} — ${label}` : code;
+}
+
+function buildProfessionalEconomicEnrichmentGridHtml(record = {}) {
+  const sourceLayers = Array.isArray(record.source_layers) ? record.source_layers : [];
+  const evidence = record.evidence || {};
+  const sourceReason = evidence.d006c_reason || evidence.decision_source || sourceLayers.join(", ");
+
+  return `
+    <div class="professional-economic-enrichment-grid">
+      <div class="professional-economic-enrichment-item">
+        <span>SIRET exact</span>
+        <strong>${escapeHtml(formatProfessionalEconomicValue(record.siret))}</strong>
+      </div>
+      <div class="professional-economic-enrichment-item">
+        <span>SIREN</span>
+        <strong>${escapeHtml(formatProfessionalEconomicValue(record.siren))}</strong>
+      </div>
+      <div class="professional-economic-enrichment-item">
+        <span>NAF précis / APE</span>
+        <strong>${escapeHtml(getProfessionalEconomicNafSubclassDisplay(record))}</strong>
+      </div>
+      <div class="professional-economic-enrichment-item">
+        <span>NAF agrégé</span>
+        <strong>${escapeHtml([
+          record.naf_section,
+          record.naf_section_label
+        ].filter(Boolean).join(" — ") || "—")}</strong>
+      </div>
+      <div class="professional-economic-enrichment-item">
+        <span>Niveau de confiance</span>
+        <strong>${escapeHtml(getProfessionalEconomicConfidenceLabel(record))}</strong>
+      </div>
+      <div class="professional-economic-enrichment-item">
+        <span>Revue manuelle</span>
+        <strong>${Number(record.manual_review_required || 0) === 1 ? "Oui" : "Non"}</strong>
+      </div>
+    </div>
+
+    <p class="professional-economic-enrichment-note">
+      Source : ${escapeHtml(formatProfessionalEconomicValue(sourceReason, "Registre économique professionnel"))}.
+      ${record.candidate_name ? `Candidat : ${escapeHtml(record.candidate_name)}.` : ""}
+    </p>
+  `;
+}
+
+function buildProfessionalEconomicEnrichmentPanelHtml(professionalRef, payload = null) {
+  ensureProfessionalEconomicEnrichmentStyles();
+
+  const state = ensureProfessionalEconomicEnrichmentState();
+  const visible = state.visible === true;
+  const ref = normalizeProfessionalDetailRef(professionalRef);
+
+  if (!visible) {
+    return `
+      <section class="card professional-economic-enrichment-card" data-professional-economic-enrichment-panel>
+        <div class="professional-economic-enrichment-head">
+          <div>
+            <div class="stat-label">Enrichissement professionnel</div>
+            <div class="professional-economic-enrichment-title">
+              <h3>Fiche enrichie SIRET / NAF</h3>
+              <span class="professional-economic-enrichment-badge is-muted">OFF</span>
+            </div>
+            <p class="professional-economic-enrichment-text">
+              Affiche les informations économiques enrichies : SIRET, SIREN, code NAF,
+              section NAF et niveau de confiance.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            class="professional-economic-enrichment-toggle"
+            data-professional-economic-enrichment-toggle
+            data-professional-ref="${escapeHtml(ref)}"
+          >
+            Activer
+          </button>
+        </div>
+      </section>
+    `;
+  }
+
+  const available = payload && payload.available !== false;
+  const found = payload && payload.found !== false && payload.record;
+  const record = found ? payload.record : null;
+
+  if (!available || !found) {
+    return `
+      <section class="card professional-economic-enrichment-card" data-professional-economic-enrichment-panel>
+        <div class="professional-economic-enrichment-head">
+          <div>
+            <div class="stat-label">Enrichissement professionnel</div>
+            <div class="professional-economic-enrichment-title">
+              <h3>Fiche enrichie SIRET / NAF</h3>
+              <span class="professional-economic-enrichment-badge is-review">Indisponible</span>
+            </div>
+            <p class="professional-economic-enrichment-text">
+              Aucun enrichissement économique exploitable n’est disponible pour ${escapeHtml(ref)}
+              sur l’instance active.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            class="professional-economic-enrichment-toggle is-active"
+            data-professional-economic-enrichment-toggle
+            data-professional-ref="${escapeHtml(ref)}"
+          >
+            Désactiver
+          </button>
+        </div>
+
+        <p class="professional-economic-enrichment-note">
+          ${escapeHtml(payload?.reason || payload?.error || "Registre économique indisponible.")}
+        </p>
+      </section>
+    `;
+  }
+
+  return `
+    <section class="card professional-economic-enrichment-card" data-professional-economic-enrichment-panel>
+      <div class="professional-economic-enrichment-head">
+        <div>
+          <div class="stat-label">Enrichissement professionnel</div>
+          <div class="professional-economic-enrichment-title">
+            <h3>Fiche enrichie SIRET / NAF</h3>
+            <span class="${getProfessionalEconomicBadgeClass(record)}">
+              ${escapeHtml(getProfessionalEconomicConfidenceLabel(record))}
+            </span>
+          </div>
+          <p class="professional-economic-enrichment-text">
+            Informations issues du registre économique professionnel enrichi.
+            Elles complètent la fiche Cyclos sans remplacer la catégorisation interne MLC.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          class="professional-economic-enrichment-toggle is-active"
+          data-professional-economic-enrichment-toggle
+          data-professional-ref="${escapeHtml(ref)}"
+        >
+          Désactiver
+        </button>
+      </div>
+
+      ${buildProfessionalEconomicEnrichmentGridHtml(record)}
+    </section>
+  `;
+}
+
+function upsertProfessionalEconomicEnrichmentPanel(html) {
+  const root = getProfessionalEconomicEnrichmentRoot();
+  if (!root) return;
+
+  root
+    .querySelectorAll("[data-professional-economic-enrichment-panel]")
+    .forEach(node => node.remove());
+
+  root.insertAdjacentHTML("afterbegin", html);
+}
+
+async function refreshProfessionalEconomicEnrichmentPanel(professionalRef, options = {}) {
+  const ref = normalizeProfessionalDetailRef(professionalRef || appState.currentPro || "");
+  if (!ref) return;
+
+  const state = ensureProfessionalEconomicEnrichmentState();
+  const visible = state.visible === true;
+
+  if (!visible) {
+    upsertProfessionalEconomicEnrichmentPanel(
+      buildProfessionalEconomicEnrichmentPanelHtml(ref, null)
+    );
+    return;
+  }
+
+  upsertProfessionalEconomicEnrichmentPanel(`
+    <section class="card professional-economic-enrichment-card" data-professional-economic-enrichment-panel>
+      <div class="professional-economic-enrichment-head">
+        <div>
+          <div class="stat-label">Enrichissement professionnel</div>
+          <div class="professional-economic-enrichment-title">
+            <h3>Fiche enrichie SIRET / NAF</h3>
+            <span class="professional-economic-enrichment-badge is-muted">Chargement</span>
+          </div>
+          <p class="professional-economic-enrichment-text">Chargement du registre économique…</p>
+        </div>
+      </div>
+    </section>
+  `);
+
+  const payload = await loadProfessionalEconomicEnrichmentRecord(ref, options.forceReload === true);
+  upsertProfessionalEconomicEnrichmentPanel(
+    buildProfessionalEconomicEnrichmentPanelHtml(ref, payload)
+  );
+}
+
+function installProfessionalEconomicEnrichmentToggleDelegation() {
+  if (window.__mlcfluxProfessionalEconomicEnrichmentToggleInstalled) return;
+  window.__mlcfluxProfessionalEconomicEnrichmentToggleInstalled = true;
+
+  document.addEventListener("click", event => {
+    const button = event.target.closest("[data-professional-economic-enrichment-toggle]");
+    if (!button) return;
+
+    const state = ensureProfessionalEconomicEnrichmentState();
+    state.visible = state.visible !== true;
+
+    const ref = normalizeProfessionalDetailRef(
+      button.getAttribute("data-professional-ref")
+      || appState.currentPro
+      || ""
+    );
+
+    refreshProfessionalEconomicEnrichmentPanel(ref, { forceReload: false });
+  });
+}
+
+function installProfessionalEconomicEnrichmentRenderHook() {
+  if (window.__mlcfluxProfessionalEconomicEnrichmentRenderHookInstalled) return;
+  if (typeof renderProDetail !== "function") return;
+
+  window.__mlcfluxProfessionalEconomicEnrichmentRenderHookInstalled = true;
+
+  const baseRenderProDetail = renderProDetail;
+
+  renderProDetail = async function(...args) {
+    const result = await baseRenderProDetail.apply(this, args);
+    const ref = normalizeProfessionalDetailRef(args[0] || appState.currentPro || "");
+    if (ref) {
+      window.setTimeout(() => {
+        refreshProfessionalEconomicEnrichmentPanel(ref, { forceReload: false });
+      }, 0);
+    }
+    return result;
+  };
+}
+
+installProfessionalEconomicEnrichmentToggleDelegation();
+installProfessionalEconomicEnrichmentRenderHook();
+
+
 window.renderSectorsView = renderSectorsView;
 window.renderMonetaryPilotageView = renderMonetaryPilotageView;
 window.renderTicketsView = renderTicketsView;
@@ -30285,5 +31598,818 @@ function getProfessionalConsumptionMapLeanInitialQuery(baseQuery) {
   window.mlcfluxOpenAdministrationView = openAdministrationViewDirectly;
 
   installAdministrationNavigationGuard();
+})();
+
+
+/* ECON_UI008A_SECTOR_SWITCH_VISUAL_FIX — état visuel robuste du switch Interne / NAF */
+(function installSectorAnalysisSwitchVisualFix() {
+  const STYLE_ID = "sector-analysis-switch-visual-fix-style";
+
+  function ensureSectorAnalysisSwitchVisualStyle() {
+    if (document.getElementById(STYLE_ID)) return;
+
+    const style = document.createElement("style");
+    style.id = STYLE_ID;
+    style.textContent = `
+      .sector-analysis-mode-switch,
+      .sector-analysis-mode-toggle,
+      .sector-mode-switch {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.25rem;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.14);
+        border: 1px solid rgba(148, 163, 184, 0.24);
+      }
+
+      .sector-analysis-mode-switch button,
+      .sector-analysis-mode-toggle button,
+      .sector-mode-switch button,
+      button[data-sector-analysis-mode],
+      .sector-analysis-mode-option {
+        position: relative;
+        border: 0;
+        border-radius: 999px;
+        padding: 0.48rem 0.82rem;
+        cursor: pointer;
+        font-weight: 650;
+        font-size: 0.86rem;
+        line-height: 1.1;
+        background: transparent;
+        color: var(--muted-text, #64748b);
+        transition:
+          background 160ms ease,
+          color 160ms ease,
+          box-shadow 160ms ease,
+          transform 120ms ease;
+      }
+
+      .sector-analysis-mode-switch button:hover,
+      .sector-analysis-mode-toggle button:hover,
+      .sector-mode-switch button:hover,
+      button[data-sector-analysis-mode]:hover,
+      .sector-analysis-mode-option:hover {
+        background: rgba(148, 163, 184, 0.18);
+        color: var(--text-primary, #0f172a);
+      }
+
+      .sector-analysis-mode-switch button.active,
+      .sector-analysis-mode-switch button.is-active,
+      .sector-analysis-mode-switch button[aria-pressed="true"],
+      .sector-analysis-mode-toggle button.active,
+      .sector-analysis-mode-toggle button.is-active,
+      .sector-analysis-mode-toggle button[aria-pressed="true"],
+      .sector-mode-switch button.active,
+      .sector-mode-switch button.is-active,
+      .sector-mode-switch button[aria-pressed="true"],
+      button[data-sector-analysis-mode].active,
+      button[data-sector-analysis-mode].is-active,
+      button[data-sector-analysis-mode][aria-pressed="true"],
+      .sector-analysis-mode-option.active,
+      .sector-analysis-mode-option.is-active,
+      .sector-analysis-mode-option[aria-pressed="true"] {
+        background: var(--accent, var(--primary, #f97316));
+        color: #ffffff;
+        box-shadow: 0 8px 18px rgba(15, 23, 42, 0.18);
+      }
+
+      .sector-analysis-mode-switch button.active:hover,
+      .sector-analysis-mode-switch button.is-active:hover,
+      .sector-analysis-mode-switch button[aria-pressed="true"]:hover,
+      .sector-analysis-mode-toggle button.active:hover,
+      .sector-analysis-mode-toggle button.is-active:hover,
+      .sector-analysis-mode-toggle button[aria-pressed="true"]:hover,
+      .sector-mode-switch button.active:hover,
+      .sector-mode-switch button.is-active:hover,
+      .sector-mode-switch button[aria-pressed="true"]:hover,
+      button[data-sector-analysis-mode].active:hover,
+      button[data-sector-analysis-mode].is-active:hover,
+      button[data-sector-analysis-mode][aria-pressed="true"]:hover,
+      .sector-analysis-mode-option.active:hover,
+      .sector-analysis-mode-option.is-active:hover,
+      .sector-analysis-mode-option[aria-pressed="true"]:hover {
+        color: #ffffff;
+        transform: translateY(-1px);
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function getSectorModeFromButton(button) {
+    return (
+      button?.dataset?.sectorAnalysisMode
+      || button?.dataset?.analysisMode
+      || button?.dataset?.mode
+      || button?.value
+      || ""
+    ).trim();
+  }
+
+  function findSectorSwitchGroup(button) {
+    return (
+      button.closest(".sector-analysis-mode-switch")
+      || button.closest(".sector-analysis-mode-toggle")
+      || button.closest(".sector-mode-switch")
+      || button.parentElement
+    );
+  }
+
+  function syncSectorSwitchGroup(group, activeMode) {
+    if (!group || !activeMode) return;
+
+    const buttons = group.querySelectorAll(
+      "button[data-sector-analysis-mode], button[data-analysis-mode], button[data-mode], .sector-analysis-mode-option"
+    );
+
+    buttons.forEach((button) => {
+      const mode = getSectorModeFromButton(button);
+      const isActive = mode === activeMode;
+
+      button.classList.toggle("active", isActive);
+      button.classList.toggle("is-active", isActive);
+      button.setAttribute("aria-pressed", isActive ? "true" : "false");
+    });
+  }
+
+  function syncAllSectorSwitches() {
+    ensureSectorAnalysisSwitchVisualStyle();
+
+    document.querySelectorAll(
+      ".sector-analysis-mode-switch, .sector-analysis-mode-toggle, .sector-mode-switch"
+    ).forEach((group) => {
+      const explicitActive = group.querySelector(
+        "button.active, button.is-active, button[aria-pressed='true'], .sector-analysis-mode-option.active, .sector-analysis-mode-option.is-active, .sector-analysis-mode-option[aria-pressed='true']"
+      );
+
+      const activeMode = getSectorModeFromButton(explicitActive)
+        || getSectorModeFromButton(group.querySelector("button[data-sector-analysis-mode], button[data-analysis-mode], button[data-mode], .sector-analysis-mode-option"));
+
+      if (activeMode) {
+        syncSectorSwitchGroup(group, activeMode);
+      }
+    });
+  }
+
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest(
+      "button[data-sector-analysis-mode], button[data-analysis-mode], button[data-mode], .sector-analysis-mode-option"
+    );
+
+    if (!button) return;
+
+    const activeMode = getSectorModeFromButton(button);
+    const group = findSectorSwitchGroup(button);
+
+    syncSectorSwitchGroup(group, activeMode);
+
+    // Laisse le handler applicatif changer les données, puis resynchronise après re-render éventuel.
+    window.setTimeout(syncAllSectorSwitches, 0);
+    window.setTimeout(syncAllSectorSwitches, 80);
+    window.setTimeout(syncAllSectorSwitches, 250);
+  }, true);
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", syncAllSectorSwitches);
+  } else {
+    syncAllSectorSwitches();
+  }
+
+  const observer = new MutationObserver(() => {
+    window.requestAnimationFrame(syncAllSectorSwitches);
+  });
+
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+  });
+
+  window.syncSectorAnalysisSwitchVisualState = syncAllSectorSwitches;
+})();
+
+
+/* ECON_UI008B_SECTOR_SWITCH_ACTIVE_STATE — état actif explicite du switch sectoriel */
+(function ensureSectorAnalysisModeSwitchActiveCss() {
+  const styleId = "econ-ui008b-sector-switch-active-css";
+  if (document.getElementById(styleId)) return;
+
+  const style = document.createElement("style");
+  style.id = styleId;
+  style.textContent = `
+    .econ-ui008b-sector-switch {
+      display: inline-flex !important;
+      align-items: center !important;
+      gap: 0.35rem !important;
+      padding: 0.25rem !important;
+      border-radius: 999px !important;
+      background: rgba(148, 163, 184, 0.16) !important;
+      border: 1px solid rgba(148, 163, 184, 0.28) !important;
+    }
+
+    .econ-ui008b-sector-switch .sector-analysis-mode-option {
+      appearance: none !important;
+      border: 0 !important;
+      border-radius: 999px !important;
+      padding: 0.52rem 0.9rem !important;
+      background: transparent !important;
+      color: #64748b !important;
+      font-weight: 700 !important;
+      font-size: 0.86rem !important;
+      line-height: 1.1 !important;
+      cursor: pointer !important;
+      box-shadow: none !important;
+      transition: background 150ms ease, color 150ms ease, box-shadow 150ms ease, transform 120ms ease !important;
+    }
+
+    .econ-ui008b-sector-switch .sector-analysis-mode-option:hover {
+      background: rgba(148, 163, 184, 0.22) !important;
+      color: #0f172a !important;
+    }
+
+    .econ-ui008b-sector-switch .sector-analysis-mode-option.active,
+    .econ-ui008b-sector-switch .sector-analysis-mode-option.is-active,
+    .econ-ui008b-sector-switch .sector-analysis-mode-option[aria-pressed="true"],
+    .econ-ui008b-sector-switch .sector-analysis-mode-option[aria-selected="true"] {
+      background: #f97316 !important;
+      color: #ffffff !important;
+      box-shadow: 0 8px 20px rgba(249, 115, 22, 0.34) !important;
+    }
+
+    .econ-ui008b-sector-switch .sector-analysis-mode-option.active:hover,
+    .econ-ui008b-sector-switch .sector-analysis-mode-option.is-active:hover,
+    .econ-ui008b-sector-switch .sector-analysis-mode-option[aria-pressed="true"]:hover,
+    .econ-ui008b-sector-switch .sector-analysis-mode-option[aria-selected="true"]:hover {
+      color: #ffffff !important;
+      transform: translateY(-1px) !important;
+    }
+  `;
+
+  document.head.appendChild(style);
+})();
+
+
+/* ECON_UI009A_SECTOR_COMPACT_COCKPIT — analyse sectorielle plus compacte, graphes plus hauts */
+(function installSectorCompactCockpit() {
+  const STYLE_ID = "econ-ui009a-sector-compact-cockpit-css";
+
+  function ensureSectorCompactCockpitCss() {
+    if (document.getElementById(STYLE_ID)) return;
+
+    const style = document.createElement("style");
+    style.id = STYLE_ID;
+    style.textContent = `
+      .sector-compact-cockpit {
+        display: grid;
+        gap: 1rem;
+      }
+
+      .sector-compact-header {
+        display: grid;
+        gap: 0.9rem;
+        padding: 1rem 1.05rem !important;
+      }
+
+      .sector-compact-header-main {
+        display: grid;
+        grid-template-columns: minmax(280px, 1fr) auto;
+        gap: 1rem;
+        align-items: start;
+      }
+
+      .sector-compact-title-block {
+        display: grid;
+        gap: 0.45rem;
+      }
+
+      .sector-compact-eyebrow {
+        font-size: 0.78rem;
+        color: var(--muted-text, #64748b);
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+
+      .sector-compact-title-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.7rem;
+        align-items: center;
+      }
+
+      .sector-compact-title-row h2 {
+        margin: 0;
+        font-size: 1.35rem;
+        line-height: 1.15;
+      }
+
+      .sector-compact-subtitle {
+        max-width: 780px;
+        margin: 0;
+        color: var(--muted-text, #475569);
+        font-size: 0.92rem;
+        line-height: 1.45;
+      }
+
+      .sector-compact-kpis {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(110px, 1fr));
+        gap: 0.55rem;
+      }
+
+      .sector-compact-kpi {
+        min-width: 110px;
+        padding: 0.65rem 0.75rem;
+        border-radius: 0.9rem;
+        background: rgba(148, 163, 184, 0.10);
+        border: 1px solid rgba(148, 163, 184, 0.22);
+      }
+
+      .sector-compact-kpi span {
+        display: block;
+        font-size: 0.72rem;
+        color: var(--muted-text, #64748b);
+      }
+
+      .sector-compact-kpi strong {
+        display: block;
+        margin-top: 0.16rem;
+        font-size: 1.08rem;
+        line-height: 1.1;
+      }
+
+      .sector-quality-strip {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(130px, 1fr));
+        gap: 0.55rem;
+        padding-top: 0.75rem;
+        border-top: 1px solid rgba(148, 163, 184, 0.18);
+      }
+
+      .sector-quality-item {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0.55rem;
+        align-items: start;
+        padding: 0.55rem 0.65rem;
+        border-radius: 0.85rem;
+        background: rgba(255, 255, 255, 0.58);
+        border: 1px solid rgba(148, 163, 184, 0.16);
+      }
+
+      .sector-quality-dot {
+        width: 0.68rem;
+        height: 0.68rem;
+        border-radius: 999px;
+        margin-top: 0.24rem;
+        box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.12);
+      }
+
+      .sector-quality-dot.green { background: #22c55e; box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.16); }
+      .sector-quality-dot.yellow { background: #eab308; box-shadow: 0 0 0 3px rgba(234, 179, 8, 0.18); }
+      .sector-quality-dot.orange { background: #f97316; box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.18); }
+      .sector-quality-dot.red { background: #ef4444; box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.18); }
+
+      .sector-quality-label {
+        display: flex;
+        gap: 0.35rem;
+        align-items: baseline;
+        justify-content: space-between;
+        font-size: 0.78rem;
+        color: var(--muted-text, #64748b);
+        font-weight: 700;
+      }
+
+      .sector-quality-value {
+        font-size: 1rem;
+        color: var(--text-primary, #0f172a);
+        font-weight: 850;
+      }
+
+      .sector-quality-detail {
+        margin-top: 0.12rem;
+        font-size: 0.73rem;
+        color: var(--muted-text, #64748b);
+        line-height: 1.25;
+      }
+
+      .sector-compact-details-row {
+        display: grid;
+        gap: 0.65rem;
+      }
+
+      .sector-compact-details-row > .card,
+      .sector-compact-details-row details.card {
+        padding: 0.75rem 1rem !important;
+      }
+
+      .sector-compact-details-row summary {
+        cursor: pointer;
+        font-weight: 700;
+      }
+
+      .sector-compact-graphs {
+        display: grid;
+        gap: 1.15rem;
+      }
+
+      .sector-compact-graphs .card {
+        margin-top: 0 !important;
+      }
+
+      /* ECON_UI009B_SECTOR_GRAPH_CARDS — séparation nette des graphes compactés */
+      .sector-compact-graph-card {
+        padding: 1rem 1.05rem !important;
+        border-radius: 1rem;
+        background: rgba(255, 255, 255, 0.94);
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+        overflow: hidden;
+      }
+
+      .sector-compact-graph-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        align-items: flex-start;
+        margin-bottom: 0.85rem;
+        padding-bottom: 0.65rem;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+      }
+
+      .sector-compact-graph-header h3 {
+        margin: 0;
+        font-size: 1.03rem;
+        line-height: 1.2;
+      }
+
+      .sector-compact-graph-header p {
+        margin: 0.28rem 0 0;
+        color: var(--muted-text, #64748b);
+        font-size: 0.82rem;
+        line-height: 1.35;
+      }
+
+      .sector-compact-graph-body {
+        display: grid;
+        gap: 0.55rem;
+      }
+
+      .sector-compact-graph-body > .card {
+        padding: 0 !important;
+        margin: 0 !important;
+        border: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+      }
+
+      .sector-compact-graph-body > .card > h3:first-child,
+      .sector-compact-graph-body > h3:first-child {
+        display: none;
+      }
+
+      .sector-compact-graph-card + .sector-compact-graph-card {
+        margin-top: 0.15rem;
+      }
+
+      @media (max-width: 1100px) {
+        .sector-compact-header-main {
+          grid-template-columns: 1fr;
+        }
+
+        .sector-compact-kpis,
+        .sector-quality-strip {
+          grid-template-columns: repeat(2, minmax(130px, 1fr));
+        }
+      }
+
+      @media (max-width: 680px) {
+        .sector-compact-kpis,
+        .sector-quality-strip {
+          grid-template-columns: 1fr;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function compactSectorStatusLabel(status) {
+    if (status === "green") return "Bon";
+    if (status === "yellow") return "Correct";
+    if (status === "orange") return "À surveiller";
+    if (status === "red") return "Fragile";
+    return "À vérifier";
+  }
+
+  function compactSectorNumber(value, decimals = 0) {
+    const numeric = Number(value || 0);
+    return numeric.toLocaleString("fr-FR", {
+      maximumFractionDigits: decimals,
+      minimumFractionDigits: decimals,
+    });
+  }
+
+  function compactSectorMoney(value) {
+    if (typeof formatSectorAnalysisMoney === "function") {
+      return formatSectorAnalysisMoney(value);
+    }
+    return `${compactSectorNumber(value, 0)} G`;
+  }
+
+  function compactSectorPercent(value) {
+    const numeric = Number(value || 0);
+    return `${numeric.toLocaleString("fr-FR", {
+      maximumFractionDigits: 1,
+    })} %`;
+  }
+
+  function compactSectorModeLabel(mode) {
+    if (mode === "naf_aggregate" || mode === "naf_section") return "NAF agrégé";
+    if (mode === "naf_precise" || mode === "naf_code") return "NAF précis";
+    return "Catégories internes";
+  }
+
+  function compactSectorApiModeFromUiMode(mode) {
+    if (mode === "naf_aggregate") return "naf_section";
+    if (mode === "naf_precise") return "naf_code";
+    return "internal";
+  }
+
+  function compactSectorQualityFallback(data) {
+    const summary = data?.summary || {};
+    const total = Number(summary.professional_count || 0);
+    const classified = Number(summary.professionals_with_sector || 0);
+    const active = Number(summary.active_professional_count || 0);
+    const activeClassified = Number(summary.active_professionals_with_sector || 0);
+    const without = Number(summary.professionals_without_sector || Math.max(total - classified, 0));
+
+    const coverage = total ? classified / total * 100 : 0;
+    const activeCoverage = active ? activeClassified / active * 100 : 0;
+    const unclassifiedShare = total ? without / total * 100 : 0;
+
+    const statusFor = (value) => {
+      if (value >= 85) return "green";
+      if (value >= 70) return "yellow";
+      if (value >= 50) return "orange";
+      return "red";
+    };
+
+    const inverseStatusFor = (value) => {
+      if (value <= 5) return "green";
+      if (value <= 15) return "yellow";
+      if (value <= 30) return "orange";
+      return "red";
+    };
+
+    return [
+      {
+        key: "coverage",
+        label: "Couverture",
+        value: coverage,
+        unit: "%",
+        status: statusFor(coverage),
+        detail: `${classified}/${total} pros classés`,
+      },
+      {
+        key: "active_coverage",
+        label: "Actifs classés",
+        value: activeCoverage,
+        unit: "%",
+        status: statusFor(activeCoverage),
+        detail: `${activeClassified}/${active} pros actifs`,
+      },
+      {
+        key: "confidence",
+        label: "Confiance",
+        value: coverage,
+        unit: "%",
+        status: statusFor(coverage),
+        detail: "Estimation depuis la couverture disponible",
+      },
+      {
+        key: "unclassified",
+        label: "Non classé",
+        value: unclassifiedShare,
+        unit: "%",
+        status: inverseStatusFor(unclassifiedShare),
+        detail: `${without} pros sans rattachement`,
+      },
+    ];
+  }
+
+  function compactSectorQualityIndicators(data) {
+    const indicators = data?.quality?.indicators;
+    if (Array.isArray(indicators) && indicators.length) {
+      return indicators;
+    }
+    return compactSectorQualityFallback(data);
+  }
+
+  function buildCompactSectorGraphCardHtml(title, subtitle, bodyHtml) {
+    if (!bodyHtml) return "";
+
+    return `
+      <section class="card sector-compact-graph-card">
+        <div class="sector-compact-graph-header">
+          <div>
+            <h3>${escapeHtml(title)}</h3>
+            ${subtitle ? `<p>${escapeHtml(subtitle)}</p>` : ""}
+          </div>
+        </div>
+        <div class="sector-compact-graph-body">
+          ${bodyHtml}
+        </div>
+      </section>
+    `;
+  }
+
+  function buildCompactSectorQualityStripHtml(data) {
+    const indicators = compactSectorQualityIndicators(data);
+
+    return `
+      <div class="sector-quality-strip" aria-label="Qualité des données sectorielles">
+        ${indicators.map((indicator) => {
+          const status = indicator.status || "orange";
+          const value = indicator.value === null || indicator.value === undefined
+            ? "—"
+            : `${compactSectorNumber(indicator.value, indicator.unit === "%" ? 1 : 0)}${indicator.unit ? ` ${indicator.unit}` : ""}`;
+
+          return `
+            <div class="sector-quality-item" title="${escapeHtml(compactSectorStatusLabel(status))}">
+              <span class="sector-quality-dot ${escapeHtml(status)}" aria-hidden="true"></span>
+              <div>
+                <div class="sector-quality-label">
+                  <span>${escapeHtml(indicator.label || "Qualité")}</span>
+                  <strong class="sector-quality-value">${escapeHtml(value)}</strong>
+                </div>
+                <div class="sector-quality-detail">${escapeHtml(indicator.detail || compactSectorStatusLabel(status))}</div>
+              </div>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    `;
+  }
+
+  function buildCompactSectorCockpitHtml(data = {}) {
+    ensureSectorCompactCockpitCss();
+
+    const summary = data.summary || {};
+    const sectors = Array.isArray(data.sectors) ? data.sectors : [];
+    const mode = typeof getSectorAnalysisMode === "function"
+      ? getSectorAnalysisMode()
+      : "internal";
+    const apiMode = compactSectorApiModeFromUiMode(mode);
+
+    const classifiedSectors = typeof getClassifiedSectorsForMainCharts === "function"
+      ? getClassifiedSectorsForMainCharts(sectors)
+      : sectors;
+
+    const sectorsWithUnclassifiedLast = typeof getSectorsWithUnclassifiedLast === "function"
+      ? getSectorsWithUnclassifiedLast(sectors)
+      : sectors;
+
+    const modeLabel = compactSectorModeLabel(mode);
+    const unitLabel = (
+      typeof getSectorClassificationUnitLabel === "function"
+        ? getSectorClassificationUnitLabel(data)
+        : "secteurs"
+    );
+
+    const unclassifiedPros = Number(summary.professionals_without_sector || 0);
+    const classifiedPros = Number(summary.professionals_with_sector || 0);
+    const activeClassifiedPros = Number(summary.active_professionals_with_sector || 0);
+    const sectorCount = Number(summary.sector_count || classifiedSectors.length || 0);
+
+    const reuse = summary.overall_reuse_rate === null || summary.overall_reuse_rate === undefined
+      ? "—"
+      : compactSectorPercent(summary.overall_reuse_rate);
+
+    const switchHtml = typeof buildSectorAnalysisModeSwitchHtml === "function"
+      ? buildSectorAnalysisModeSwitchHtml()
+      : "";
+
+    // ECON_UI009C_HIDE_SECTOR_CATEGORIES_CATALOG
+    // Le catalogue des regroupements sectoriels est masqué dans la vue compacte :
+    // il doublonne les graphes et ralentit l'accès à la lecture principale.
+    const categoriesHtml = "";
+
+    const topProfessionalsHtml = typeof buildSectorTopProfessionalsHtml === "function"
+      ? buildSectorTopProfessionalsHtml(classifiedSectors)
+      : "";
+
+    const rankingInnerHtml = typeof buildSectorRankingHtml === "function"
+      ? buildSectorRankingHtml(classifiedSectors)
+      : "";
+
+    const receiptsInnerHtml = typeof buildSectorReceiptsMixHtml === "function"
+      ? buildSectorReceiptsMixHtml(classifiedSectors)
+      : "";
+
+    const rankingHtml = buildCompactSectorGraphCardHtml(
+      "Principaux secteurs par Graine reçues",
+      "Classement des regroupements sectoriels selon les volumes reçus par les professionnels.",
+      rankingInnerHtml
+    );
+
+    const receiptsHtml = buildCompactSectorGraphCardHtml(
+      "Origine des recettes : particuliers / professionnels",
+      "Part des recettes venant des particuliers vers les pros et des pros vers les pros.",
+      receiptsInnerHtml
+    );
+
+    const tableHtml = typeof buildSectorsTableHtml === "function"
+      ? buildSectorsTableHtml(sectorsWithUnclassifiedLast)
+      : "";
+
+    return `
+      <div class="sector-compact-cockpit">
+        <section class="card sector-compact-header">
+          <div class="sector-compact-header-main">
+            <div class="sector-compact-title-block">
+              <div class="sector-compact-eyebrow">Analyse sectorielle · ${escapeHtml(modeLabel)}</div>
+              <div class="sector-compact-title-row">
+                <h2>${compactSectorNumber(sectorCount)} ${escapeHtml(unitLabel)} analysés</h2>
+                ${switchHtml}
+              </div>
+              <p class="sector-compact-subtitle">
+                Lecture sectorielle des flux professionnels : volumes reçus, volumes émis,
+                origine C2B/B2B et réemploi. Les contrôles qualité restent visibles,
+                mais les graphes remontent en premier niveau de lecture.
+              </p>
+            </div>
+
+            <div class="sector-compact-kpis">
+              <div class="sector-compact-kpi">
+                <span>Pros classés</span>
+                <strong>${compactSectorNumber(classifiedPros)}</strong>
+              </div>
+              <div class="sector-compact-kpi">
+                <span>Pros actifs classés</span>
+                <strong>${compactSectorNumber(activeClassifiedPros)}</strong>
+              </div>
+              <div class="sector-compact-kpi">
+                <span>Graine reçues</span>
+                <strong>${compactSectorMoney(summary.total_received_volume)}</strong>
+              </div>
+              <div class="sector-compact-kpi">
+                <span>Réutilisation</span>
+                <strong>${escapeHtml(reuse)}</strong>
+              </div>
+            </div>
+          </div>
+
+          ${buildCompactSectorQualityStripHtml(data)}
+
+          <div class="sector-compact-subtitle">
+            ${unclassifiedPros
+              ? `${compactSectorNumber(unclassifiedPros)} professionnel(s) restent hors typologie active.`
+              : "Tous les professionnels exploitables sont rattachés à la typologie active."}
+            Mode API : ${escapeHtml(apiMode)}.
+          </div>
+        </section>
+
+        <div class="sector-compact-graphs">
+          ${rankingHtml}
+          ${receiptsHtml}
+        </div>
+
+        <div class="sector-compact-details-row">
+          ${topProfessionalsHtml}
+          ${categoriesHtml}
+          ${tableHtml}
+        </div>
+      </div>
+    `;
+  }
+
+  function installCompactSectorPanelOverride() {
+    if (typeof buildProfessionalSectorAnalysisPanelHtml !== "function") {
+      console.warn("ECON_UI009A: buildProfessionalSectorAnalysisPanelHtml introuvable.");
+      return;
+    }
+
+    if (buildProfessionalSectorAnalysisPanelHtml.__econUi009aCompact) return;
+
+    const previousBuilder = buildProfessionalSectorAnalysisPanelHtml;
+
+    buildProfessionalSectorAnalysisPanelHtml = function compactProfessionalSectorAnalysisPanel(data = {}) {
+      try {
+        return buildCompactSectorCockpitHtml(data);
+      } catch (error) {
+        console.error("ECON_UI009A compact sector panel failed, fallback to previous builder.", error);
+        return previousBuilder(data);
+      }
+    };
+
+    buildProfessionalSectorAnalysisPanelHtml.__econUi009aCompact = true;
+  }
+
+  installCompactSectorPanelOverride();
+
+  if (typeof window.syncSectorAnalysisSwitchVisualState === "function") {
+    window.setTimeout(window.syncSectorAnalysisSwitchVisualState, 0);
+    window.setTimeout(window.syncSectorAnalysisSwitchVisualState, 80);
+  }
 })();
 

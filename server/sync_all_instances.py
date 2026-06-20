@@ -49,6 +49,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--skip-balance-reconstruction", action="store_true")
     parser.add_argument("--skip-professional-chain-fate", action="store_true")
     parser.add_argument("--skip-actor-links", action="store_true")
+    parser.add_argument("--skip-cyclos-professional-profiles", action="store_true")
     parser.add_argument("--skip-caches", action="store_true")
     parser.add_argument("--skip-integrity", action="store_true")
     parser.add_argument("--skip-odoo", action="store_true")
@@ -59,6 +60,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser.add_argument("--limit-users", type=int)
     parser.add_argument("--limit-professionals", type=int)
+    parser.add_argument("--professional-profile-days", type=int, default=3650)
+    parser.add_argument("--professional-profile-limit", default="none")
     parser.add_argument("--max-windows-per-user", type=int)
     parser.add_argument("--max-windows-per-professional", type=int)
     parser.add_argument("--request-pause-seconds", type=float)
@@ -96,6 +99,7 @@ def child_command(args: argparse.Namespace, mlc_id: str, child_json: Path) -> li
         "skip_balance_reconstruction",
         "skip_professional_chain_fate",
         "skip_actor_links",
+        "skip_cyclos_professional_profiles",
         "skip_caches",
         "skip_integrity",
         "skip_odoo",
@@ -109,6 +113,8 @@ def child_command(args: argparse.Namespace, mlc_id: str, child_json: Path) -> li
     for option in [
         "limit_users",
         "limit_professionals",
+        "professional_profile_days",
+        "professional_profile_limit",
         "max_windows_per_user",
         "max_windows_per_professional",
         "request_pause_seconds",
