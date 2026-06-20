@@ -1,10 +1,317 @@
-/* VERSION_105_MLCFLUX_MULTI */
+/* VERSION_106_MLCFLUX_MULTI */
 window.MLCFLUX_VERSION = {
-  number: "v1.0.5",
-  label: "MLCFlux bêta v1.0.5 multi — juin 2026",
-  meta: "MLCFlux beta v1.0.5 multi - juin 2026"
+  number: "v1.0.6",
+  label: "MLCFlux bêta v1.0.6 multi — juin 2026",
+  meta: "MLCFlux beta v1.0.6 multi - juin 2026"
 };
-document.documentElement.setAttribute("data-mlcflux-version", "v1.0.5");
+document.documentElement.setAttribute("data-mlcflux-version", "v1.0.6");
+
+
+/* VERSION_UI001_RELEASE_NOTES_MODAL */
+function mlcFluxReleaseEscapeHtml(value) {
+  return String(value == null ? "" : value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function renderMlcFluxReleaseInlineMarkdown(value) {
+  return mlcFluxReleaseEscapeHtml(value).replace(/`([^`]+)`/g, "<code>$1</code>");
+}
+
+function renderMlcFluxReleaseMarkdown(markdown) {
+  const lines = String(markdown || "").replace(/\r\n/g, "\n").split("\n");
+  const html = [];
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+
+    if (!line) {
+      html.push('<div class="mlc-release-note-gap"></div>');
+      continue;
+    }
+
+    if (line.startsWith("### ")) {
+      html.push(`<h3>${renderMlcFluxReleaseInlineMarkdown(line.slice(4))}</h3>`);
+      continue;
+    }
+
+    if (line.startsWith("## ")) {
+      html.push(`<h2>${renderMlcFluxReleaseInlineMarkdown(line.slice(3))}</h2>`);
+      continue;
+    }
+
+    if (line.startsWith("# ")) {
+      html.push(`<h1>${renderMlcFluxReleaseInlineMarkdown(line.slice(2))}</h1>`);
+      continue;
+    }
+
+    if (line.startsWith("- ")) {
+      html.push(`<div class="mlc-release-note-bullet">• ${renderMlcFluxReleaseInlineMarkdown(line.slice(2))}</div>`);
+      continue;
+    }
+
+    html.push(`<p>${renderMlcFluxReleaseInlineMarkdown(line)}</p>`);
+  }
+
+  return html.join("");
+}
+
+function ensureMlcFluxReleaseNotesStyles() {
+  if (document.getElementById("mlc-release-notes-style")) return;
+
+  const style = document.createElement("style");
+  style.id = "mlc-release-notes-style";
+  style.textContent = `
+    .mlcflux-version-trigger {
+      cursor: pointer !important;
+      text-decoration: underline;
+      text-decoration-style: dotted;
+      text-underline-offset: 0.18em;
+    }
+
+    .mlcflux-version-trigger:hover {
+      filter: brightness(1.08);
+    }
+
+    .mlc-release-notes-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 100000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.25rem;
+      background: rgba(15, 23, 42, 0.54);
+      backdrop-filter: blur(4px);
+    }
+
+    .mlc-release-notes-modal {
+      width: min(760px, calc(100vw - 2rem));
+      max-height: min(760px, calc(100vh - 2rem));
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      border-radius: 24px;
+      background: #fffaf3;
+      color: #1f2933;
+      border: 1px solid rgba(15, 23, 42, 0.12);
+      box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+    }
+
+    .mlc-release-notes-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 1.15rem 1.25rem 0.85rem;
+      border-bottom: 1px solid rgba(15, 23, 42, 0.10);
+    }
+
+    .mlc-release-notes-header h2 {
+      margin: 0.1rem 0 0;
+      font-size: 1.18rem;
+      line-height: 1.25;
+    }
+
+    .mlc-release-notes-kicker {
+      font-size: 0.76rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(232, 73, 38, 0.95);
+    }
+
+    .mlc-release-notes-close {
+      border: 0;
+      border-radius: 999px;
+      width: 2rem;
+      height: 2rem;
+      cursor: pointer;
+      font-size: 1.2rem;
+      line-height: 1;
+      background: rgba(15, 23, 42, 0.08);
+      color: #1f2933;
+    }
+
+    .mlc-release-notes-body {
+      padding: 1rem 1.25rem 1.25rem;
+      overflow: auto;
+      line-height: 1.55;
+    }
+
+    .mlc-release-notes-body h1,
+    .mlc-release-notes-body h2,
+    .mlc-release-notes-body h3 {
+      margin: 0.9rem 0 0.45rem;
+      line-height: 1.25;
+    }
+
+    .mlc-release-notes-body h2 {
+      font-size: 1.08rem;
+    }
+
+    .mlc-release-notes-body h3 {
+      font-size: 0.98rem;
+      color: #374151;
+    }
+
+    .mlc-release-notes-body p {
+      margin: 0.35rem 0;
+    }
+
+    .mlc-release-note-bullet {
+      margin: 0.25rem 0 0.2rem;
+    }
+
+    .mlc-release-note-gap {
+      height: 0.45rem;
+    }
+
+    .mlc-release-notes-body code {
+      padding: 0.08rem 0.28rem;
+      border-radius: 0.35rem;
+      background: rgba(15, 23, 42, 0.08);
+      font-size: 0.92em;
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+async function fetchMlcFluxVersionPayload() {
+  const response = await fetch("/api/version", {
+    method: "GET",
+    credentials: "same-origin",
+    headers: { "Accept": "application/json" }
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+
+  return response.json();
+}
+
+function closeMlcFluxReleaseNotesModal() {
+  const overlay = document.querySelector(".mlc-release-notes-overlay");
+  if (overlay) overlay.remove();
+}
+
+async function openMlcFluxReleaseNotesModal() {
+  ensureMlcFluxReleaseNotesStyles();
+  closeMlcFluxReleaseNotesModal();
+
+  const overlay = document.createElement("div");
+  overlay.className = "mlc-release-notes-overlay";
+  overlay.innerHTML = `
+    <section class="mlc-release-notes-modal" role="dialog" aria-modal="true" aria-labelledby="mlc-release-notes-title">
+      <header class="mlc-release-notes-header">
+        <div>
+          <div class="mlc-release-notes-kicker">Notes de version</div>
+          <h2 id="mlc-release-notes-title">${mlcFluxReleaseEscapeHtml((window.MLCFLUX_VERSION || {}).label || "MLCFlux")}</h2>
+        </div>
+        <button type="button" class="mlc-release-notes-close" aria-label="Fermer">×</button>
+      </header>
+      <div class="mlc-release-notes-body">
+        <p>Chargement des notes de version…</p>
+      </div>
+    </section>
+  `;
+
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) closeMlcFluxReleaseNotesModal();
+  });
+
+  overlay.querySelector(".mlc-release-notes-close").addEventListener("click", closeMlcFluxReleaseNotesModal);
+
+  document.body.appendChild(overlay);
+
+  try {
+    const payload = await fetchMlcFluxVersionPayload();
+    const sections = Array.isArray(payload.sections) ? payload.sections : [];
+    const current = payload.current || {};
+    const markdown = sections.length
+      ? sections.map((section) => section && section.markdown ? section.markdown : "").filter(Boolean).join("\n\n")
+      : current.markdown || "";
+    const body = overlay.querySelector(".mlc-release-notes-body");
+
+    overlay.querySelector("#mlc-release-notes-title").textContent = "Notes de version";
+
+    body.innerHTML = markdown
+      ? renderMlcFluxReleaseMarkdown(markdown)
+      : "<p>Aucune note de version disponible.</p>";
+  } catch (error) {
+    const body = overlay.querySelector(".mlc-release-notes-body");
+    body.innerHTML = `<p>Impossible de charger les notes de version : ${mlcFluxReleaseEscapeHtml(error.message || error)}</p>`;
+  }
+}
+
+function isMlcFluxVersionTextElement(element) {
+  if (!element || !document.body || !document.body.contains(element)) return false;
+
+  const version = String((window.MLCFLUX_VERSION || {}).number || "");
+  const label = String((window.MLCFLUX_VERSION || {}).label || "");
+  const text = String(element.textContent || "").replace(/\s+/g, " ").trim();
+
+  if (!text || text.length > 180) return false;
+
+  return (
+    (version && text.includes(version))
+    || (label && text.includes(label))
+  );
+}
+
+function enhanceMlcFluxVersionTriggers() {
+  if (!document.body) return;
+
+  ensureMlcFluxReleaseNotesStyles();
+
+  const candidates = Array.from(document.body.querySelectorAll("*")).filter(isMlcFluxVersionTextElement);
+
+  candidates.forEach((element) => {
+    if (element.dataset.mlcfluxVersionTrigger === "1") return;
+
+    element.dataset.mlcfluxVersionTrigger = "1";
+    element.classList.add("mlcflux-version-trigger");
+    element.setAttribute("role", "button");
+    element.setAttribute("tabindex", "0");
+    element.setAttribute("title", "Voir les notes de version");
+
+    element.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openMlcFluxReleaseNotesModal();
+    });
+
+    element.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      openMlcFluxReleaseNotesModal();
+    });
+  });
+}
+
+function initMlcFluxReleaseNotesUi() {
+  enhanceMlcFluxVersionTriggers();
+
+  [250, 750, 1500, 3000, 5000].forEach((delay) => {
+    window.setTimeout(enhanceMlcFluxVersionTriggers, delay);
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeMlcFluxReleaseNotesModal();
+  });
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initMlcFluxReleaseNotesUi, { once: true });
+} else {
+  initMlcFluxReleaseNotesUi();
+}
+
 
 
 const MLCFLUX_MLC_CONTEXT = {

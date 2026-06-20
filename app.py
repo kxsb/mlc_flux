@@ -11,6 +11,7 @@ PUBLIC_AUTH_PATH_PREFIXES = (
     "/api/mlc-instances",
     "/api/current-mlc",
     "/api/mlc/current",
+    "/api/version",
 )
 
 def is_public_auth_path(path):
@@ -68,6 +69,70 @@ def api_monetary_indicators():
             "warnings": [str(exc)],
         }), 500
 
+
+
+# VERSION_UI001_RELEASE_NOTES_API
+MLCFLUX_APP_VERSION = "v1.0.6"
+MLCFLUX_RELEASE_LABEL = "MLCFlux bêta v1.0.6 multi — juin 2026"
+
+
+def _extract_changelog_sections(markdown_text):
+    import re
+
+    text = str(markdown_text or "").replace("\r\n", "\n")
+    matches = list(re.finditer(r"^##\s+(.+?)\s*$", text, flags=re.MULTILINE))
+    sections = []
+
+    for index, match in enumerate(matches):
+        title = match.group(1).strip()
+        start = match.start()
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        markdown = text[start:end].strip()
+
+        version_match = re.search(r"\b[vV]?(\d+\.\d+\.\d+)\b", title)
+        version = f"v{version_match.group(1)}" if version_match else None
+
+        sections.append({
+            "title": title,
+            "version": version,
+            "markdown": markdown,
+        })
+
+    return sections
+
+
+@app.route("/api/version")
+def api_version():
+    """Expose la version courante et les notes de version lues depuis CHANGELOG.md."""
+    from pathlib import Path
+
+    changelog_path = Path(__file__).resolve().parent / "CHANGELOG.md"
+
+    try:
+        changelog_markdown = changelog_path.read_text(encoding="utf-8")
+    except Exception:
+        changelog_markdown = ""
+
+    sections = _extract_changelog_sections(changelog_markdown)
+    current_section = next(
+        (
+            section for section in sections
+            if section.get("version") == MLCFLUX_APP_VERSION
+        ),
+        sections[0] if sections else {
+            "title": MLCFLUX_APP_VERSION,
+            "version": MLCFLUX_APP_VERSION,
+            "markdown": "",
+        },
+    )
+
+    return jsonify({
+        "version": MLCFLUX_APP_VERSION,
+        "label": MLCFLUX_RELEASE_LABEL,
+        "current": current_section,
+        "sections": sections,
+        "changelog_available": bool(changelog_markdown.strip()),
+    })
 
 
 # MLC_SELECT_MASS002_BACKEND_PUBLIC_SUMMARY

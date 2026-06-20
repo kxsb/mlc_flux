@@ -14,6 +14,7 @@ PUBLIC_PATHS = {
     "/api/mlc-instances",
     "/api/current-mlc",
     "/api/mlc/current",
+    "/api/version",
     "/api/select-mlc",
     "/api/account-requests",
     "/favicon.ico",
