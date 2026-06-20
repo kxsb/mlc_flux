@@ -1,0 +1,78 @@
+/* LANDING_LOADING001 — loader visuel des cartes instances */
+
+.mlcflux-instance-loading {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem;
+  margin: 0 0 1.25rem;
+}
+
+.mlcflux-instance-loading-card {
+  min-height: 225px;
+  border: 1px solid rgba(120, 92, 77, 0.16);
+  border-radius: 1.25rem;
+  background:
+    linear-gradient(
+      100deg,
+      rgba(255, 255, 255, 0.62) 0%,
+      rgba(255, 245, 238, 0.95) 42%,
+      rgba(255, 255, 255, 0.62) 72%
+    );
+  background-size: 220% 100%;
+  box-shadow: 0 0.7rem 1.7rem rgba(58, 41, 32, 0.06);
+  animation: mlcfluxInstanceLoading 1.25s ease-in-out infinite;
+  padding: 1.25rem;
+}
+
+.mlcflux-instance-loading-line {
+  display: block;
+  height: 0.75rem;
+  margin-bottom: 0.85rem;
+  border-radius: 999px;
+  background: rgba(120, 92, 77, 0.13);
+}
+
+.mlcflux-instance-loading-line.title {
+  width: 42%;
+  height: 1.25rem;
+  margin-bottom: 1.1rem;
+}
+
+.mlcflux-instance-loading-line.short {
+  width: 34%;
+}
+
+.mlcflux-instance-loading-line.medium {
+  width: 58%;
+}
+
+.mlcflux-instance-loading-line.long {
+  width: 82%;
+}
+
+.mlcflux-instance-loading-caption {
+  grid-column: 1 / -1;
+  margin: -0.25rem 0 0.2rem;
+  color: rgba(76, 62, 56, 0.76);
+  font-size: 0.92rem;
+}
+
+@keyframes mlcfluxInstanceLoading {
+  0% {
+    background-position: 120% 0;
+  }
+  100% {
+    background-position: -120% 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .mlcflux-instance-loading {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* LANDING_LOADING002 — loader placé directement après l’introduction */
+.mlcflux-intro-card + .mlcflux-instance-loading {
+  margin-top: 1.45rem;
+}

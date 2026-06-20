@@ -1185,6 +1185,9 @@
     }
 
   </style>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/release_notes.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/landing_polish.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/landing_loading.css') }}">
 </head>
 
 <body>
@@ -1337,7 +1340,7 @@
     <section class="hero">
       <div class="project-heading">
         <h1>#MLCFlux</h1>
-        <div class="version-badge">version : MLCFlux bêta v1.0.3 multi — juin 2026</div>
+        <div class="version-badge">version : MLCFlux bêta v1.0.4 multi — juin 2026</div>
       </div>
 
       <div class="intro-panel">
@@ -2225,5 +2228,8 @@
 
 
 
+  <script defer src="{{ url_for('static', filename='js/release_notes.js') }}"></script>
+  <script defer src="{{ url_for('static', filename='js/landing_polish.js') }}"></script>
+  <script defer src="{{ url_for('static', filename='js/landing_loading.js') }}"></script>
 </body>
 </html>
