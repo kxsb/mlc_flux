@@ -844,6 +844,8 @@ const appState = {
 
   network: {
     minEdgeWeight: 500,
+    thresholdScale: [],
+    thresholdIndex: 0,
     includeOperators: false,
     searchTerm: "",
     cy: null,
@@ -2555,6 +2557,463 @@ async function renderCartographyView(forceReload = false) {
 }
 
 
+
+function ensureNetworkConstellationStyles() {
+  if (document.getElementById("networkConstellationStyles")) {
+    return;
+  }
+
+  const style = document.createElement("style");
+  style.id = "networkConstellationStyles";
+  style.textContent = `
+    .network-graph-shell {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .network-constellation-layer {
+      display: none;
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .network-graph-shell #networkGraph,
+    .network-graph-shell .network-floating-label {
+      position: relative;
+      z-index: 1;
+    }
+
+    body.dark-mode .network-atlas-hero,
+    body.dark-mode .network-atlas-workbench {
+      border-color: rgba(148, 163, 184, 0.22);
+      background:
+        radial-gradient(circle at 18% 12%, rgba(249, 115, 22, 0.12), transparent 28%),
+        radial-gradient(circle at 82% 10%, rgba(96, 165, 250, 0.10), transparent 30%),
+        linear-gradient(145deg, rgba(15, 23, 42, 0.98), rgba(2, 6, 23, 0.96));
+    }
+
+    body.dark-mode .network-graph-shell {
+      background:
+        radial-gradient(circle at 50% 42%, rgba(59, 130, 246, 0.14), transparent 38%),
+        radial-gradient(circle at 12% 18%, rgba(251, 191, 36, 0.12), transparent 24%),
+        radial-gradient(circle at 86% 82%, rgba(249, 115, 22, 0.10), transparent 24%),
+        linear-gradient(180deg, #020617 0%, #0f172a 100%);
+      box-shadow:
+        inset 0 0 0 1px rgba(148, 163, 184, 0.15),
+        inset 0 0 90px rgba(15, 23, 42, 0.94),
+        0 22px 70px rgba(2, 6, 23, 0.38);
+    }
+
+    body.dark-mode .network-constellation-layer {
+      display: block;
+      opacity: 0.95;
+      background-image:
+        radial-gradient(circle, rgba(248, 250, 252, 0.92) 0 1px, transparent 1.6px),
+        radial-gradient(circle, rgba(251, 191, 36, 0.72) 0 1px, transparent 1.8px),
+        radial-gradient(circle, rgba(96, 165, 250, 0.54) 0 1px, transparent 1.7px);
+      background-size: 88px 88px, 132px 132px, 184px 184px;
+      background-position: 8px 14px, 48px 60px, 110px 24px;
+      filter: drop-shadow(0 0 6px rgba(248, 250, 252, 0.22));
+    }
+
+    body.dark-mode .network-constellation-layer::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(110deg, transparent 0 18%, rgba(148, 163, 184, 0.09) 18.2% 18.6%, transparent 18.8% 100%),
+        linear-gradient(36deg, transparent 0 58%, rgba(251, 191, 36, 0.08) 58.2% 58.55%, transparent 58.7% 100%),
+        linear-gradient(153deg, transparent 0 38%, rgba(96, 165, 250, 0.075) 38.2% 38.55%, transparent 38.7% 100%);
+      opacity: 0.65;
+    }
+
+    body.dark-mode .network-floating-label {
+      border-color: rgba(251, 191, 36, 0.40);
+      background: rgba(15, 23, 42, 0.92);
+      color: #f8fafc;
+      box-shadow: 0 14px 36px rgba(2, 6, 23, 0.42), 0 0 24px rgba(251, 191, 36, 0.14);
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function getNetworkGraphThemePalette() {
+  const isDark = document.body.classList.contains("dark-mode");
+
+  if (isDark) {
+    return {
+      nodeStart: "#fef3c7",
+      nodeEnd: "#f97316",
+      nodeBorder: "rgba(255, 247, 237, 0.86)",
+      edge: "rgba(148, 163, 184, 0.42)",
+      highlighted: "#fbbf24",
+      selectedNode: "#f8fafc",
+      searchMatch: "#38bdf8"
+    };
+  }
+
+  return {
+    nodeStart: "#bfdbfe",
+    nodeEnd: "#1d4ed8",
+    nodeBorder: "#eff6ff",
+    edge: "#94a3b8",
+    highlighted: "#f97316",
+    selectedNode: "#0f172a",
+    searchMatch: "#eab308"
+  };
+}
+
+function buildNetworkCytoscapeStyles() {
+  const palette = getNetworkGraphThemePalette();
+
+  return [
+    {
+      selector: "node",
+      style: {
+        "label": "",
+        "background-color": `mapData(volume, 0, 60000, ${palette.nodeStart}, ${palette.nodeEnd})`,
+        "width": "mapData(volume, 0, 60000, 18, 68)",
+        "height": "mapData(volume, 0, 60000, 18, 68)",
+        "border-width": 3,
+        "border-color": palette.nodeBorder,
+        "overlay-padding": 12,
+        "overlay-opacity": 0,
+        "z-index": 10
+      }
+    },
+    {
+      selector: "edge",
+      style: {
+        "width": "mapData(weight, 0, 60000, 1.1, 8)",
+        "line-color": palette.edge,
+        "target-arrow-color": palette.edge,
+        "target-arrow-shape": "triangle",
+        "arrow-scale": 0.72,
+        "curve-style": "bezier",
+        "control-point-step-size": 28,
+        "opacity": 0.34
+      }
+    },
+    {
+      selector: ".faded",
+      style: {
+        "opacity": 0.045
+      }
+    },
+    {
+      selector: ".highlighted",
+      style: {
+        "line-color": palette.highlighted,
+        "target-arrow-color": palette.highlighted,
+        "opacity": 0.98,
+        "z-index": 30
+      }
+    },
+    {
+      selector: ".selected-node",
+      style: {
+        "background-color": palette.selectedNode,
+        "border-color": palette.highlighted,
+        "border-width": 5
+      }
+    },
+    {
+      selector: ".search-match",
+      style: {
+        "border-color": palette.searchMatch,
+        "border-width": 5
+      }
+    }
+  ];
+}
+
+function refreshNetworkGraphTheme() {
+  const cy = appState.network.cy;
+
+  if (!cy || typeof cy.style !== "function") {
+    return;
+  }
+
+  cy.style()
+    .fromJson(buildNetworkCytoscapeStyles())
+    .update();
+
+  updateNetworkFloatingLabel();
+}
+
+
+function ensureNetworkCompactStyles() {
+  if (document.getElementById("networkCompactStyles")) {
+    return;
+  }
+
+  const style = document.createElement("style");
+  style.id = "networkCompactStyles";
+  style.textContent = `
+    .network-atlas-compact {
+      padding: clamp(14px, 1.6vw, 20px);
+    }
+
+    .network-compact-header {
+      display: grid;
+      grid-template-columns: minmax(280px, 1fr) minmax(480px, 1.15fr);
+      gap: 14px;
+      align-items: start;
+    }
+
+    .network-compact-title .stat-label {
+      margin-bottom: 4px;
+    }
+
+    .network-compact-title h2 {
+      margin: 0 0 6px;
+      font-size: clamp(1.2rem, 1.9vw, 1.75rem);
+      line-height: 1.08;
+    }
+
+    .network-compact-title p {
+      margin: 0;
+      max-width: 720px;
+      color: var(--muted-text, #64748b);
+      font-size: 0.92rem;
+      line-height: 1.38;
+    }
+
+    .network-atlas-compact .network-atlas-kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .network-atlas-compact .network-atlas-kpi {
+      padding: 9px 11px;
+      min-height: 0;
+      border-radius: 16px;
+    }
+
+    .network-atlas-compact .network-atlas-kpi span {
+      font-size: 0.72rem;
+      line-height: 1.1;
+      opacity: 0.86;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
+    .network-atlas-compact .network-atlas-kpi strong {
+      margin-top: 4px;
+      font-size: clamp(0.98rem, 1.45vw, 1.24rem);
+      line-height: 1.02;
+    }
+
+    .network-atlas-compact .network-atlas-kpi small {
+      display: none;
+    }
+
+    .network-switch-row {
+      display: flex;
+      justify-content: flex-start;
+      margin-top: 10px;
+      margin-bottom: 10px;
+    }
+
+    .network-switch {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: 16px;
+      border: 1px solid rgba(249, 115, 22, 0.28);
+      background: linear-gradient(135deg, rgba(249, 115, 22, 0.10), rgba(15, 23, 42, 0.20));
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .network-switch input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .network-switch-control {
+      position: relative;
+      width: 46px;
+      height: 26px;
+      border-radius: 999px;
+      background: rgba(100, 116, 139, 0.45);
+      box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.22);
+      transition: background 0.2s ease;
+      flex: 0 0 auto;
+    }
+
+    .network-switch-control::after {
+      content: "";
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #ffffff;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.24);
+      transition: transform 0.2s ease;
+    }
+
+    .network-switch input:checked + .network-switch-control {
+      background: linear-gradient(90deg, #2563eb, #f97316);
+    }
+
+    .network-switch input:checked + .network-switch-control::after {
+      transform: translateX(20px);
+    }
+
+    .network-switch-copy {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .network-switch-copy strong {
+      font-size: 0.95rem;
+      line-height: 1.2;
+    }
+
+    .network-switch-copy small {
+      font-size: 0.8rem;
+      line-height: 1.25;
+      opacity: 0.78;
+    }
+
+    .network-compact-toolbar {
+      display: grid;
+      grid-template-columns: minmax(320px, 1.3fr) minmax(260px, 0.75fr);
+      gap: 12px;
+      align-items: end;
+      margin-top: 0;
+      margin-bottom: 10px;
+    }
+
+    .network-compact-toolbar .network-search-box input {
+      min-height: 40px;
+    }
+
+    .network-compact-toolbar .network-slider-group label {
+      font-size: 0.88rem;
+      line-height: 1.2;
+    }
+
+    .network-compact-toolbar .network-slider-group small {
+      display: none;
+    }
+
+    .network-compact-legend {
+      margin: 8px 0 8px;
+      padding: 0;
+      gap: 10px;
+      font-size: 0.82rem;
+      background: transparent;
+      border: 0;
+      box-shadow: none;
+    }
+
+    .network-atlas-compact .network-atlas-layout {
+      margin-top: 6px;
+    }
+
+    .network-atlas-compact .network-graph-shell {
+      min-height: min(64vh, 660px);
+      position: relative;
+      overflow: hidden;
+      border-radius: 18px;
+    }
+
+    .network-map-controls {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      z-index: 3;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .network-map-controls .secondary-btn {
+      min-height: 34px;
+      padding: 0 12px;
+      font-size: 0.82rem;
+      border-radius: 999px;
+      backdrop-filter: blur(6px);
+      background: rgba(255, 255, 255, 0.92);
+      color: #0f172a;
+      border: 1px solid rgba(148, 163, 184, 0.34);
+      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.10);
+    }
+
+    .network-map-controls .secondary-btn:hover {
+      background: #ffffff;
+      border-color: rgba(249, 115, 22, 0.42);
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+    }
+
+    body.dark-mode .network-map-controls .secondary-btn {
+      background: rgba(15, 23, 42, 0.72);
+      color: #f8fafc;
+      border-color: rgba(148, 163, 184, 0.22);
+      box-shadow: 0 10px 28px rgba(2, 6, 23, 0.32);
+    }
+
+    body.dark-mode .network-map-controls .secondary-btn:hover {
+      background: rgba(30, 41, 59, 0.88);
+      border-color: rgba(251, 191, 36, 0.38);
+    }
+
+    .network-atlas-compact .network-sidepanel {
+      min-width: 260px;
+    }
+
+    @media (max-width: 1180px) {
+      .network-compact-header {
+        grid-template-columns: 1fr;
+      }
+
+      .network-atlas-compact .network-atlas-kpi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 900px) {
+      .network-compact-toolbar {
+        grid-template-columns: 1fr;
+      }
+
+      .network-map-controls {
+        top: 10px;
+        right: 10px;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .network-atlas-compact .network-atlas-kpi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .network-switch {
+        width: 100%;
+      }
+
+      .network-map-controls {
+        position: static;
+        margin: 8px 8px 0 auto;
+        justify-content: flex-end;
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+
 function buildNetworkApiUrl() {
   const periodQuery = getPeriodQueryParam();
   const includeOperators = Boolean(appState.network.includeOperators);
@@ -2567,15 +3026,14 @@ function buildNetworkApiUrl() {
   return `/api/network${periodQuery}${connector}include_operators=1`;
 }
 
-
 function buildProfessionalNetworkPanelLoadingHtml() {
   return `
     <section class="card professional-analysis-roadmap-card">
       <div class="professional-analysis-section-heading">
-        <div class="stat-label">Réseau interprofessionnel</div>
-        <h3>Chargement de l’atlas relationnel…</h3>
+        <div class="stat-label">Constellations interpro</div>
+        <h3>Chargement de la cartographie…</h3>
         <p>
-          Les relations P→P sont recalculées pour la période et le périmètre actuellement sélectionnés.
+          Les relations P→P sont recalculées pour la période et le périmètre sélectionnés.
         </p>
       </div>
     </section>
@@ -2586,8 +3044,8 @@ function buildProfessionalNetworkPanelErrorHtml() {
   return `
     <section class="card professional-analysis-roadmap-card">
       <div class="professional-analysis-section-heading">
-        <div class="stat-label">Réseau interprofessionnel</div>
-        <h3>Le graphe relationnel n’est pas disponible</h3>
+        <div class="stat-label">Constellations interpro</div>
+        <h3>La cartographie relationnelle n’est pas disponible</h3>
         <p>
           Les données réseau n’ont pas pu être chargées pour cette période.
           Les autres onglets restent utilisables.
@@ -2597,75 +3055,1618 @@ function buildProfessionalNetworkPanelErrorHtml() {
   `;
 }
 
+
+function ensureNetworkZoomInDelegate() {
+  if (window.__mlcfluxNetworkZoomInDelegateInstalled) {
+    return;
+  }
+
+  window.__mlcfluxNetworkZoomInDelegateInstalled = true;
+
+  document.addEventListener("click", (event) => {
+    const target = event.target;
+    const button = target && target.closest
+      ? target.closest("#networkZoomInBtn")
+      : null;
+
+    if (!button) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (typeof event.stopImmediatePropagation === "function") {
+      event.stopImmediatePropagation();
+    }
+
+    const cy = appState && appState.network
+      ? appState.network.cy
+      : null;
+
+    if (!cy || typeof cy.zoom !== "function") {
+      return;
+    }
+
+    try {
+      if (typeof cy.maxZoom === "function" && Number(cy.maxZoom()) < 8) {
+        cy.maxZoom(8);
+      }
+    } catch (_error) {
+      // Fallback silencieux : certains builds Cytoscape peuvent ne pas exposer le setter.
+    }
+
+    const currentZoom = Number(cy.zoom()) || 1;
+
+    let maxZoom = 8;
+    try {
+      if (typeof cy.maxZoom === "function") {
+        maxZoom = Number(cy.maxZoom()) || 8;
+      }
+    } catch (_error) {
+      maxZoom = 8;
+    }
+
+    const nextZoom = Math.min(maxZoom, currentZoom * 1.25);
+
+    cy.zoom({
+      level: nextZoom,
+      renderedPosition: {
+        x: cy.width() / 2,
+        y: cy.height() / 2
+      }
+    });
+  }, true);
+}
+
+
+function ensureNetworkCosmosStyles() {
+  if (document.getElementById("networkCosmosStyles")) {
+    return;
+  }
+
+  const style = document.createElement("style");
+  style.id = "networkCosmosStyles";
+  style.textContent = `
+    .network-cosmos-video {
+      display: block;
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      min-width: 100%;
+      min-height: 100%;
+      object-fit: cover;
+      object-position: center center;
+      z-index: 0;
+      opacity: 0;
+      visibility: hidden;
+      filter: saturate(1.08) contrast(1.08) brightness(0.64);
+      transition: opacity 0.8s ease;
+      pointer-events: none;
+      transform: translateZ(0);
+      backface-visibility: hidden;
+      will-change: opacity;
+      contain: strict;
+    }
+
+    body.dark-mode .network-cosmos-active .network-cosmos-video {
+      opacity: 0.42;
+      visibility: visible;
+    }
+
+    body.dark-mode .network-cosmos-active .network-constellation-layer {
+      opacity: 0.42;
+      mix-blend-mode: screen;
+    }
+
+    body.dark-mode .network-cosmos-active #networkGraph {
+      pointer-events: none;
+    }
+
+
+    body.dark-mode .network-cosmos-active #networkGraph {
+      mix-blend-mode: screen;
+    }
+
+
+    .network-graph-shell {
+      isolation: isolate;
+      contain: layout paint;
+    }
+
+    .network-graph-shell #networkGraph {
+      position: relative;
+      z-index: 1;
+      min-height: inherit;
+      transform: translateZ(0);
+    }
+
+    .network-floating-label {
+      z-index: 4;
+      transform: translateZ(0);
+    }
+
+    .network-cosmos-play {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 34px;
+      padding: 0 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(251, 191, 36, 0.55);
+      background: linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(249, 115, 22, 0.72));
+      color: #fff7ed;
+      font-weight: 800;
+      letter-spacing: 0.01em;
+      cursor: pointer;
+      box-shadow: 0 10px 30px rgba(249, 115, 22, 0.22);
+      animation: network-cosmos-pulse 1.2s ease-in-out infinite;
+    }
+
+    .network-cosmos-play.hidden {
+      display: none;
+    }
+
+    @keyframes network-cosmos-pulse {
+      0%, 100% {
+        transform: translateY(0);
+        box-shadow: 0 10px 30px rgba(249, 115, 22, 0.18);
+      }
+      50% {
+        transform: translateY(-1px);
+        box-shadow: 0 14px 38px rgba(251, 191, 36, 0.30);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .network-cosmos-play {
+        animation: none;
+      }
+
+      .network-cosmos-video {
+        transition: none;
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+function ensureNetworkCosmosEasterEgg() {
+  if (window.__mlcfluxNetworkCosmosEasterEggInstalled) {
+    return;
+  }
+
+  window.__mlcfluxNetworkCosmosEasterEggInstalled = true;
+  window.__mlcfluxNetworkCosmosRecenterClicks = [];
+  window.__mlcfluxNetworkCosmosPlayTimeout = null;
+  window.__mlcfluxNetworkCosmosReverseFrame = null;
+  window.__mlcfluxNetworkCosmosLastTick = null;
+
+  const isDarkMode = () => document.body.classList.contains("dark-mode");
+
+  const hidePlayButton = () => {
+    const playButton = document.getElementById("networkCosmosPlayBtn");
+    if (playButton) {
+      playButton.classList.add("hidden");
+    }
+  };
+
+  const showPlayButton = () => {
+    const playButton = document.getElementById("networkCosmosPlayBtn");
+
+    if (!playButton || !isDarkMode()) {
+      return;
+    }
+
+    playButton.classList.remove("hidden");
+
+    if (window.__mlcfluxNetworkCosmosPlayTimeout) {
+      clearTimeout(window.__mlcfluxNetworkCosmosPlayTimeout);
+    }
+
+    window.__mlcfluxNetworkCosmosPlayTimeout = setTimeout(() => {
+      hidePlayButton();
+    }, 3000);
+  };
+
+  const syncCosmosFrameWithThreshold = () => {
+    const shell = document.querySelector(".network-graph-shell");
+    const video = document.getElementById("networkCosmosVideo");
+
+    if (!shell || !video) {
+      return;
+    }
+
+    if (!shell.classList.contains("network-cosmos-active")) {
+      return;
+    }
+
+    if (!Number.isFinite(video.duration) || video.duration <= 0) {
+      return;
+    }
+
+    const progress = Math.max(0, Math.min(1, getNetworkThresholdProgress()));
+
+    const targetTime = Math.max(
+      0,
+      Math.min(video.duration - 0.05, progress * video.duration)
+    );
+
+    try {
+      video.currentTime = targetTime;
+    } catch (_error) {
+      // Certains navigateurs peuvent refuser le seek avant initialisation complète.
+    }
+  };
+
+  const activateCosmos = () => {
+    if (!isDarkMode()) {
+      return;
+    }
+
+    const shell = document.querySelector(".network-graph-shell");
+    const video = document.getElementById("networkCosmosVideo");
+
+    if (!shell || !video) {
+      return;
+    }
+
+    if (!video.getAttribute("src")) {
+      video.setAttribute("src", "/static/media/constellations/cosmos-traveling-reversed.mp4");
+      video.load();
+    }
+
+    shell.classList.add("network-cosmos-active");
+    hidePlayButton();
+
+    const reducedMotion = window.matchMedia
+      ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      : false;
+
+    const start = () => {
+      syncCosmosFrameWithThreshold();
+
+      if (!reducedMotion && typeof video.play === "function") {
+        const playPromise = video.play();
+
+        if (playPromise && typeof playPromise.catch === "function") {
+          playPromise.catch(() => {
+            // La vidéo reste visible même si le navigateur bloque play().
+          });
+        }
+      }
+    };
+
+    if (Number.isFinite(video.duration) && video.duration > 0) {
+      start();
+    } else {
+      video.addEventListener("loadedmetadata", start, { once: true });
+    }
+  };
+
+  document.addEventListener("click", (event) => {
+    const target = event.target;
+    const recenterButton = target && target.closest
+      ? target.closest("#networkFitBtn")
+      : null;
+
+    if (recenterButton && isDarkMode()) {
+      const now = Date.now();
+      window.__mlcfluxNetworkCosmosRecenterClicks = (
+        window.__mlcfluxNetworkCosmosRecenterClicks || []
+      ).filter((timestamp) => now - timestamp <= 1200);
+
+      window.__mlcfluxNetworkCosmosRecenterClicks.push(now);
+
+      if (window.__mlcfluxNetworkCosmosRecenterClicks.length >= 3) {
+        window.__mlcfluxNetworkCosmosRecenterClicks = [];
+        showPlayButton();
+      }
+    }
+
+    const playButton = target && target.closest
+      ? target.closest("#networkCosmosPlayBtn")
+      : null;
+
+    if (playButton) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (typeof event.stopImmediatePropagation === "function") {
+        event.stopImmediatePropagation();
+      }
+
+      activateCosmos();
+    }
+  }, true);
+
+  document.addEventListener("input", (event) => {
+    if (event.target && event.target.id === "networkThreshold") {
+      syncCosmosFrameWithThreshold();
+    }
+  }, true);
+
+  if (window.MutationObserver) {
+    const observer = new MutationObserver(() => {
+      if (!isDarkMode()) {
+        const shell = document.querySelector(".network-graph-shell");
+        const video = document.getElementById("networkCosmosVideo");
+
+        hidePlayButton();
+
+        if (shell) {
+          shell.classList.remove("network-cosmos-active");
+        }
+
+        if (video && typeof video.pause === "function") {
+          video.pause();
+        }
+      }
+    });
+
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ["class"]
+    });
+  }
+}
+
+
+
+function ensureNetworkRetroRoadGameStyles() {
+  if (document.getElementById("networkRetroRoadGameStyles")) {
+    return;
+  }
+
+  const style = document.createElement("style");
+  style.id = "networkRetroRoadGameStyles";
+  style.textContent = `
+    .network-retro-play {
+      position: absolute;
+      left: 16px;
+      bottom: 16px;
+      z-index: 8;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 42px;
+      height: 34px;
+      border-radius: 9px;
+      border: 2px solid rgba(251, 191, 36, 0.82);
+      background:
+        linear-gradient(180deg, rgba(15, 23, 42, 0.94), rgba(30, 41, 59, 0.96));
+      color: #fde68a;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-weight: 900;
+      font-size: 15px;
+      letter-spacing: -0.04em;
+      cursor: pointer;
+      box-shadow:
+        0 0 0 2px rgba(2, 6, 23, 0.76),
+        0 8px 0 rgba(120, 53, 15, 0.72),
+        0 16px 28px rgba(0, 0, 0, 0.34);
+      text-shadow: 0 0 8px rgba(251, 191, 36, 0.72);
+    }
+
+    .network-retro-play.hidden {
+      display: none;
+    }
+
+    .network-retro-play::after {
+      content: "";
+      position: absolute;
+      inset: 3px;
+      border-radius: 6px;
+      background:
+        repeating-linear-gradient(
+          180deg,
+          rgba(255, 255, 255, 0.08) 0 1px,
+          transparent 1px 4px
+        );
+      pointer-events: none;
+      opacity: 0.6;
+    }
+
+    .network-retro-game-canvas {
+      display: none;
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 2;
+      border-radius: inherit;
+      background: #020617;
+      cursor: crosshair;
+    }
+
+    body.dark-mode .network-retro-game-active .network-retro-game-canvas {
+      display: block;
+    }
+
+    body.dark-mode .network-retro-game-active #networkGraph,
+    body.dark-mode .network-retro-game-active .network-cosmos-video,
+    body.dark-mode .network-retro-game-active .network-constellation-layer {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .network-retro-hud {
+      display: none;
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      z-index: 9;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(251, 191, 36, 0.35);
+      background: rgba(2, 6, 23, 0.72);
+      color: #fde68a;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px;
+      letter-spacing: 0.02em;
+      pointer-events: none;
+    }
+
+    body.dark-mode .network-retro-game-active .network-retro-hud {
+      display: block;
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+function ensureNetworkRetroRoadGame() {
+  if (window.__mlcfluxNetworkRetroRoadGameInstalled) {
+    return;
+  }
+
+  window.__mlcfluxNetworkRetroRoadGameInstalled = true;
+  window.__mlcfluxNetworkRetroZoomClicks = [];
+  window.__mlcfluxNetworkRetroPlayTimeout = null;
+  window.__mlcfluxNetworkRetroGame = {
+    active: false,
+    frame: null,
+    roads: null,
+    roadsLayer: null,
+    roadsLayerKey: "",
+    professionalPayload: null,
+    assetsLoading: false,
+    assetsReady: false,
+    assetsError: null,
+    professionals: [],
+    graineLogoManifest: null,
+    graineLogoImage: null,
+    graineDrop: {
+      active: true,
+      landed: false,
+      hovered: false,
+      triggered: false,
+      triggerTime: null,
+      x: 0.5,
+      y: -0.18,
+      vx: 0,
+      vy: 0,
+      radius: 0.075
+    },
+    particles: [],
+    avatar: { x: 0.5, y: 0.5, vx: 0, vy: 0 },
+    pointer: { x: 0.5, y: 0.5, active: false },
+    lastTick: null
+  };
+
+  const isDarkMode = () => document.body.classList.contains("dark-mode");
+
+  const getThresholdAtMax = () => {
+    const input = document.getElementById("networkThreshold");
+
+    if (!input) {
+      return false;
+    }
+
+    const current = Math.round(Number(input.value || 0));
+    const max = Math.round(Number(input.max || 0));
+
+    return Number.isFinite(current) && Number.isFinite(max) && max > 0 && current >= max;
+  };
+
+  const hideRetroPlay = () => {
+    const button = document.getElementById("networkRetroPlayBtn");
+
+    if (button) {
+      button.classList.add("hidden");
+    }
+  };
+
+  const showRetroPlay = () => {
+    const button = document.getElementById("networkRetroPlayBtn");
+
+    if (!button || !isDarkMode() || !getThresholdAtMax()) {
+      return;
+    }
+
+    button.classList.remove("hidden");
+
+    if (window.__mlcfluxNetworkRetroPlayTimeout) {
+      clearTimeout(window.__mlcfluxNetworkRetroPlayTimeout);
+    }
+
+    window.__mlcfluxNetworkRetroPlayTimeout = setTimeout(hideRetroPlay, 3000);
+  };
+
+  const resizeCanvas = (canvas) => {
+    const rect = canvas.getBoundingClientRect();
+    const ratio = Math.max(1, window.devicePixelRatio || 1);
+
+    const width = Math.max(1, Math.floor(rect.width * ratio));
+    const height = Math.max(1, Math.floor(rect.height * ratio));
+
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
+    }
+
+    return { width, height, ratio };
+  };
+
+  const projectLonLat = (lon, lat, bbox) => {
+    const x = (lon - bbox.west) / Math.max(0.000001, bbox.east - bbox.west);
+    const y = 1 - ((lat - bbox.south) / Math.max(0.000001, bbox.north - bbox.south));
+
+    return {
+      x: Math.max(-0.2, Math.min(1.2, x)),
+      y: Math.max(-0.2, Math.min(1.2, y))
+    };
+  };
+
+  const loadRoads = async () => {
+    if (window.__mlcfluxNetworkRetroGame.roads) {
+      return window.__mlcfluxNetworkRetroGame.roads;
+    }
+
+    try {
+      const response = await fetch("/static/media/constellations/montpellier_roads_proto.json", {
+        cache: "force-cache"
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      window.__mlcfluxNetworkRetroGame.roads = data;
+      return data;
+    } catch (_error) {
+      const fallback = {
+        bbox: { west: 3.80, east: 3.96, south: 43.56, north: 43.66 },
+        ways: []
+      };
+
+      window.__mlcfluxNetworkRetroGame.roads = fallback;
+      return fallback;
+    }
+  };
+
+  const loadGraineLogo = async () => {
+    const game = window.__mlcfluxNetworkRetroGame;
+
+    if (game.graineLogoManifest) {
+      return game.graineLogoImage;
+    }
+
+    try {
+      const response = await fetch("/static/media/constellations/graine_logo_manifest.json", {
+        cache: "force-cache"
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const manifest = await response.json();
+      game.graineLogoManifest = manifest;
+
+      if (manifest.asset_url) {
+        const image = new Image();
+        image.decoding = "async";
+        image.src = manifest.asset_url;
+        game.graineLogoImage = image;
+      }
+    } catch (_error) {
+      game.graineLogoManifest = { asset_url: "" };
+      game.graineLogoImage = null;
+    }
+
+    return game.graineLogoImage;
+  };
+
+  const resetGraineDrop = () => {
+    const game = window.__mlcfluxNetworkRetroGame;
+
+    game.graineDrop = {
+      active: true,
+      landed: false,
+      hovered: false,
+      triggered: false,
+      triggerTime: null,
+      x: 0.5,
+      y: -0.18,
+      vx: 0,
+      vy: 0,
+      radius: 0.075
+    };
+
+    game.professionals.forEach((professional) => {
+      professional.graineProgress = 0;
+    });
+  };
+
+
+  const loadProfessionalPoints = async () => {
+    const game = window.__mlcfluxNetworkRetroGame;
+
+    if (game.professionalPayload) {
+      return game.professionalPayload;
+    }
+
+    try {
+      const response = await fetch("/static/media/constellations/montpellier_professional_game_points.json", {
+        cache: "force-cache"
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const payload = await response.json();
+      game.professionalPayload = payload;
+      return payload;
+    } catch (_error) {
+      const fallback = {
+        bbox: { west: 3.80, east: 3.96, south: 43.56, north: 43.66 },
+        professionals: []
+      };
+
+      game.professionalPayload = fallback;
+      return fallback;
+    }
+  };
+
+  const prepareProfessionalParticles = (payload, roads) => {
+    const game = window.__mlcfluxNetworkRetroGame;
+
+    if (game.professionals.length) {
+      return;
+    }
+
+    const professionals = Array.isArray(payload?.professionals)
+      ? payload.professionals
+      : [];
+
+    const bbox = roads?.bbox || payload?.bbox || {
+      west: 3.80,
+      east: 3.96,
+      south: 43.56,
+      north: 43.66
+    };
+
+    game.professionals = professionals
+      .map((professional) => {
+        if (typeof projectLonLat !== "function") {
+          return null;
+        }
+
+        const p = projectLonLat(Number(professional.lon), Number(professional.lat), bbox);
+
+        if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) {
+          return null;
+        }
+
+        const heatRadius = Math.max(0.018, Number(professional.heat_radius) || 0.02);
+        const particleRadius = Math.max(0.003, Number(professional.particle_radius) || 0.004);
+
+        return {
+          ...professional,
+          anchorX: p.x,
+          anchorY: p.y,
+          x: p.x + (Math.random() - 0.5) * heatRadius * 0.10,
+          y: p.y + (Math.random() - 0.5) * heatRadius * 0.10,
+          vx: (Math.random() - 0.5) * 0.004,
+          vy: (Math.random() - 0.5) * 0.004,
+          heatRadius,
+          particleRadius,
+          driftLimit: Math.max(0.006, heatRadius * 0.34),
+          jitterSeed: Math.random() * Math.PI * 2
+        };
+      })
+      .filter((professional) =>
+        professional
+        && Number.isFinite(professional.anchorX)
+        && Number.isFinite(professional.anchorY)
+        && professional.anchorX >= -0.15
+        && professional.anchorX <= 1.15
+        && professional.anchorY >= -0.15
+        && professional.anchorY <= 1.15
+      );
+  };
+
+
+  const preloadRetroGameAssets = async () => {
+    const game = window.__mlcfluxNetworkRetroGame;
+
+    if (game.assetsLoading || game.assetsReady) {
+      return;
+    }
+
+    game.assetsLoading = true;
+    game.assetsError = null;
+
+    try {
+      const [roads, professionalPayload] = await Promise.all([
+        loadRoads(),
+        loadProfessionalPoints(),
+        loadGraineLogo()
+      ]).then(([roadsPayload, professionalsPayload]) => [roadsPayload, professionalsPayload]);
+
+      prepareProfessionalParticles(professionalPayload, roads);
+
+      game.assetsReady = true;
+    } catch (error) {
+      game.assetsError = error && error.message ? error.message : String(error || "unknown");
+      console.error("MLCFlux retro-road asset preload failed", error);
+    } finally {
+      game.assetsLoading = false;
+    }
+  };
+
+  const getRetroFallbackRoads = () => ({
+    bbox: { west: 3.80, east: 3.96, south: 43.56, north: 43.66 },
+    ways: []
+  });
+
+  const drawRetroBootStatus = (ctx, width, height, label) => {
+    ctx.save();
+    ctx.fillStyle = "rgba(251, 191, 36, 0.86)";
+    ctx.font = "12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText(label, 18, 48);
+    ctx.restore();
+  };
+
+
+  const seedParticles = () => {
+    const game = window.__mlcfluxNetworkRetroGame;
+
+    if (game.particles.length) {
+      return;
+    }
+
+    for (let i = 0; i < 90; i += 1) {
+      game.particles.push({
+        x: Math.random(),
+        y: Math.random(),
+        vx: (Math.random() - 0.5) * 0.10,
+        vy: (Math.random() - 0.5) * 0.10,
+        r: 0.0025 + Math.random() * 0.0045
+      });
+    }
+  };
+
+  const drawRoads = (ctx, roads, width, height) => {
+    const bbox = roads?.bbox || { west: 3.80, east: 3.96, south: 43.56, north: 43.66 };
+    const ways = Array.isArray(roads?.ways) ? roads.ways : [];
+
+    ctx.save();
+
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    const styles = {
+      primary: [4.2, "rgba(251, 191, 36, 0.62)"],
+      secondary: [3.2, "rgba(96, 165, 250, 0.48)"],
+      tertiary: [2.4, "rgba(148, 163, 184, 0.48)"],
+      residential: [1.15, "rgba(203, 213, 225, 0.30)"],
+      living_street: [1.05, "rgba(203, 213, 225, 0.26)"],
+      unclassified: [1.15, "rgba(203, 213, 225, 0.26)"],
+      service: [0.8, "rgba(148, 163, 184, 0.18)"],
+      pedestrian: [1.0, "rgba(45, 212, 191, 0.28)"],
+      cycleway: [0.8, "rgba(74, 222, 128, 0.24)"]
+    };
+
+    const shouldDrawWay = (way, index) => {
+      if (ways.length <= 7000) {
+        return true;
+      }
+
+      const highway = way.highway || "";
+
+      if (["primary", "secondary", "tertiary", "pedestrian", "cycleway"].includes(highway)) {
+        return true;
+      }
+
+      if (highway === "residential" || highway === "living_street") {
+        return index % 5 === 0;
+      }
+
+      if (highway === "service") {
+        return index % 14 === 0;
+      }
+
+      return index % 7 === 0;
+    };
+
+    ways.forEach((way, wayIndex) => {
+      if (!shouldDrawWay(way, wayIndex)) {
+        return;
+      }
+
+      const coords = Array.isArray(way.coords) ? way.coords : [];
+
+      if (coords.length < 2) {
+        return;
+      }
+
+      const style = styles[way.highway] || [1.0, "rgba(148, 163, 184, 0.22)"];
+
+      ctx.beginPath();
+      coords.forEach(([lon, lat], index) => {
+        const p = projectLonLat(Number(lon), Number(lat), bbox);
+        const x = p.x * width;
+        const y = p.y * height;
+
+        if (index === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      });
+
+      ctx.lineWidth = style[0];
+      ctx.strokeStyle = style[1];
+      ctx.stroke();
+    });
+
+    ctx.restore();
+  };
+
+  const getRoadsLayer = (roads, width, height) => {
+    const game = window.__mlcfluxNetworkRetroGame;
+    const safeRoads = roads || getRetroFallbackRoads();
+    const wayCount = Array.isArray(safeRoads?.ways) ? safeRoads.ways.length : 0;
+    const key = `${width}x${height}:${wayCount}`;
+
+    if (game.roadsLayer && game.roadsLayerKey === key) {
+      return game.roadsLayer;
+    }
+
+    const layer = document.createElement("canvas");
+    layer.width = Math.max(1, width);
+    layer.height = Math.max(1, height);
+
+    const layerCtx = layer.getContext("2d");
+
+    if (typeof drawRoads === "function") {
+      drawRoads(layerCtx, safeRoads, width, height);
+    }
+
+    game.roadsLayer = layer;
+    game.roadsLayerKey = key;
+
+    return layer;
+  };
+
+  const drawHeatZones = (ctx, roads, width, height, time) => {
+    if (!ctx || !Number.isFinite(width) || !Number.isFinite(height)) {
+      return;
+    }
+
+    const bbox = roads?.bbox || {
+      west: 3.80,
+      east: 3.96,
+      south: 43.56,
+      north: 43.66
+    };
+
+    const zones = [
+      { lon: 3.8767, lat: 43.6117, r: 0.115, color: "249, 115, 22", w: 0.85 },
+      { lon: 3.8890, lat: 43.6080, r: 0.085, color: "96, 165, 250", w: 0.62 },
+      { lon: 3.8700, lat: 43.6030, r: 0.075, color: "45, 212, 191", w: 0.48 },
+      { lon: 3.9140, lat: 43.6200, r: 0.065, color: "251, 191, 36", w: 0.38 }
+    ];
+
+    zones.forEach((zone, index) => {
+      if (typeof projectLonLat !== "function") {
+        return;
+      }
+
+      const p = projectLonLat(zone.lon, zone.lat, bbox);
+
+      if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) {
+        return;
+      }
+
+      const pulse = 0.88 + Math.sin(time * 0.0015 + index) * 0.08;
+      const radius = Math.min(width, height) * zone.r * 2.6 * pulse;
+
+      const x = p.x * width;
+      const y = p.y * height;
+
+      const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
+
+      gradient.addColorStop(0, `rgba(${zone.color}, ${0.24 * zone.w})`);
+      gradient.addColorStop(0.45, `rgba(${zone.color}, ${0.10 * zone.w})`);
+      gradient.addColorStop(1, "rgba(15, 23, 42, 0)");
+
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  };
+
+  const drawProfessionalHeatZones = (ctx, width, height, time) => {
+    const game = window.__mlcfluxNetworkRetroGame;
+    const professionals = Array.isArray(game.professionals) ? game.professionals : [];
+
+    professionals.forEach((professional, index) => {
+      const x = professional.anchorX * width;
+      const y = professional.anchorY * height;
+
+      if (!Number.isFinite(x) || !Number.isFinite(y)) {
+        return;
+      }
+
+      const sectorScore = Math.max(0.2, Number(professional.sector_game_score) || 0.5);
+      const gameScore = Math.max(0.08, Number(professional.game_score) || 0.1);
+      const pulse = 0.94 + Math.sin(time * 0.0012 + professional.jitterSeed + index * 0.13) * 0.06;
+
+      // x3 demandé : heat_radius reste stocké en coordonnée normalisée,
+      // le multiplicateur visuel est appliqué ici.
+      const radius = Math.min(width, height)
+        * Math.max(0.018, professional.heatRadius || 0.02)
+        * 3.0
+        * pulse;
+
+      const alpha = Math.min(0.42, 0.06 + gameScore * 0.13 + sectorScore * 0.025);
+
+      const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
+
+      gradient.addColorStop(0, `rgba(251, 191, 36, ${alpha})`);
+      gradient.addColorStop(0.28, `rgba(249, 115, 22, ${alpha * 0.62})`);
+      gradient.addColorStop(0.68, `rgba(96, 165, 250, ${alpha * 0.22})`);
+      gradient.addColorStop(1, "rgba(15, 23, 42, 0)");
+
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  };
+
+  const drawGraineLogoFallback = (ctx, x, y, radius, alpha = 1) => {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+
+    ctx.translate(x, y);
+
+    const gradient = ctx.createRadialGradient(0, 0, radius * 0.12, 0, 0, radius);
+    gradient.addColorStop(0, "rgba(220, 252, 231, 0.96)");
+    gradient.addColorStop(0.55, "rgba(34, 197, 94, 0.88)");
+    gradient.addColorStop(1, "rgba(21, 128, 61, 0.72)");
+
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, radius * 0.82, radius * 0.58, -0.35, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = "rgba(240, 253, 244, 0.86)";
+    ctx.lineWidth = Math.max(1.5, radius * 0.055);
+    ctx.beginPath();
+    ctx.moveTo(-radius * 0.42, radius * 0.15);
+    ctx.quadraticCurveTo(0, -radius * 0.18, radius * 0.46, -radius * 0.02);
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(240, 253, 244, 0.95)";
+    ctx.font = `${Math.max(8, radius * 0.34)}px ui-monospace, monospace`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("G", 0, radius * 0.02);
+
+    ctx.restore();
+  };
+
+  const drawGraineLogo = (ctx, image, x, y, radius, alpha = 1) => {
+    if (!ctx || !Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(radius)) {
+      return;
+    }
+
+    if (image && image.complete && image.naturalWidth > 0) {
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.drawImage(image, x - radius, y - radius, radius * 2, radius * 2);
+      ctx.restore();
+      return;
+    }
+
+    drawGraineLogoFallback(ctx, x, y, radius, alpha);
+  };
+
+  const updateAndDrawFallingGraineLogo = (ctx, width, height, elapsed, time) => {
+    const game = window.__mlcfluxNetworkRetroGame;
+    const drop = game.graineDrop;
+    const image = game.graineLogoImage;
+    const pointer = game.pointer;
+
+    if (!drop || !drop.active) {
+      return;
+    }
+
+    const radiusPx = Math.max(34, Math.min(width, height) * drop.radius);
+    const groundY = height - radiusPx * 1.12;
+
+    if (!drop.landed) {
+      drop.vy += 1.35 * elapsed;
+      drop.vx += Math.sin(time * 0.0011) * 0.000018;
+
+      drop.x += drop.vx * elapsed * 60;
+      drop.y += drop.vy * elapsed * 60;
+
+      const currentY = drop.y * height;
+
+      if (currentY >= groundY) {
+        drop.y = groundY / height;
+        drop.vy = -Math.abs(drop.vy) * 0.20;
+
+        if (Math.abs(drop.vy) < 0.012) {
+          drop.vy = 0;
+          drop.landed = true;
+        }
+      }
+    } else {
+      drop.y = groundY / height;
+      drop.x += Math.sin(time * 0.0017) * 0.000018;
+      drop.x = Math.max(0.12, Math.min(0.88, drop.x));
+    }
+
+    const x = drop.x * width;
+    const y = drop.y * height;
+
+    if (drop.landed && pointer.active) {
+      const px = pointer.x * width;
+      const py = pointer.y * height;
+      const dx = px - x;
+      const dy = py - y;
+      const hovered = Math.sqrt(dx * dx + dy * dy) <= radiusPx * 1.15;
+
+      drop.hovered = hovered;
+
+      if (hovered && !drop.triggered) {
+        drop.triggered = true;
+        drop.triggerTime = time;
+      }
+    }
+
+    const shadowAlpha = drop.landed ? 0.28 : 0.14;
+    ctx.save();
+    ctx.fillStyle = `rgba(0, 0, 0, ${shadowAlpha})`;
+    ctx.beginPath();
+    ctx.ellipse(x, groundY + radiusPx * 0.72, radiusPx * 0.74, radiusPx * 0.18, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    const glow = drop.hovered || drop.triggered ? 0.58 : 0.22;
+
+    ctx.save();
+    const halo = ctx.createRadialGradient(x, y, 0, x, y, radiusPx * 1.6);
+    halo.addColorStop(0, `rgba(134, 239, 172, ${glow})`);
+    halo.addColorStop(1, "rgba(134, 239, 172, 0)");
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(x, y, radiusPx * 1.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    drawGraineLogo(ctx, image, x, y, radiusPx, 0.95);
+  };
+
+  const computeGraineTransformProgress = (professional, time) => {
+    const game = window.__mlcfluxNetworkRetroGame;
+    const drop = game.graineDrop;
+
+    if (!drop || !drop.triggered || !Number.isFinite(drop.triggerTime)) {
+      return 0;
+    }
+
+    const delay = Math.max(0, Number(professional.graine_transform_delay) || 0);
+    const duration = Math.max(0.6, Number(professional.graine_transform_duration) || 1.8);
+    const elapsed = Math.max(0, (time - drop.triggerTime) / 1000);
+    const raw = Math.max(0, Math.min(1, (elapsed - delay) / duration));
+
+    return raw * raw * (3 - 2 * raw);
+  };
+
+
+  const drawParticles = (ctx, width, height, elapsed) => {
+    if (!ctx || !Number.isFinite(width) || !Number.isFinite(height)) {
+      return;
+    }
+
+    const game = window.__mlcfluxNetworkRetroGame;
+
+    if (!game || !Array.isArray(game.particles)) {
+      return;
+    }
+
+    const avatar = game.avatar || { x: 0.5, y: 0.5 };
+
+    game.particles.forEach((particle) => {
+      if (!particle) {
+        return;
+      }
+
+      particle.x = Number.isFinite(particle.x) ? particle.x : Math.random();
+      particle.y = Number.isFinite(particle.y) ? particle.y : Math.random();
+      particle.vx = Number.isFinite(particle.vx) ? particle.vx : 0;
+      particle.vy = Number.isFinite(particle.vy) ? particle.vy : 0;
+      particle.r = Number.isFinite(particle.r) ? particle.r : 0.004;
+
+      particle.x += particle.vx * elapsed;
+      particle.y += particle.vy * elapsed;
+
+      if (particle.x <= 0 || particle.x >= 1) {
+        particle.vx *= -1;
+        particle.x = Math.max(0, Math.min(1, particle.x));
+      }
+
+      if (particle.y <= 0 || particle.y >= 1) {
+        particle.vy *= -1;
+        particle.y = Math.max(0, Math.min(1, particle.y));
+      }
+
+      const dx = particle.x - avatar.x;
+      const dy = particle.y - avatar.y;
+      const d2 = dx * dx + dy * dy;
+
+      if (d2 < 0.0032) {
+        particle.vx += dx * 0.045;
+        particle.vy += dy * 0.045;
+      }
+
+      ctx.beginPath();
+      ctx.fillStyle = "rgba(251, 191, 36, 0.38)";
+      ctx.arc(
+        particle.x * width,
+        particle.y * height,
+        Math.max(1.4, particle.r * Math.min(width, height)),
+        0,
+        Math.PI * 2
+      );
+      ctx.fill();
+    });
+  };
+
+  const drawProfessionalParticles = (ctx, width, height, elapsed, time) => {
+    const game = window.__mlcfluxNetworkRetroGame;
+    const professionals = Array.isArray(game.professionals) ? game.professionals : [];
+    const image = game.graineLogoImage;
+
+    professionals.forEach((professional, index) => {
+      const wanderX = Math.sin(time * 0.0007 + professional.jitterSeed + index) * 0.000030;
+      const wanderY = Math.cos(time * 0.0009 + professional.jitterSeed * 1.7 + index) * 0.000030;
+
+      const spring = 18.0;
+      const damping = Math.exp(-9.0 * elapsed);
+
+      professional.vx += (professional.anchorX - professional.x) * spring * elapsed + wanderX;
+      professional.vy += (professional.anchorY - professional.y) * spring * elapsed + wanderY;
+
+      professional.vx *= damping;
+      professional.vy *= damping;
+
+      professional.x += professional.vx * elapsed * 60;
+      professional.y += professional.vy * elapsed * 60;
+
+      const dx = professional.x - professional.anchorX;
+      const dy = professional.y - professional.anchorY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      const limit = professional.driftLimit || 0.01;
+
+      if (distance > limit) {
+        const ratio = limit / Math.max(0.000001, distance);
+        professional.x = professional.anchorX + dx * ratio;
+        professional.y = professional.anchorY + dy * ratio;
+        professional.vx *= -0.18;
+        professional.vy *= -0.18;
+      }
+
+      const x = professional.x * width;
+      const y = professional.y * height;
+      const baseRadius = Math.max(2.2, professional.particleRadius * Math.min(width, height));
+      const progress = computeGraineTransformProgress(professional, time);
+
+      professional.graineProgress = progress;
+
+      if (progress < 0.98) {
+        ctx.save();
+        ctx.globalAlpha = 1 - progress * 0.82;
+        ctx.beginPath();
+        ctx.fillStyle = "rgba(254, 243, 199, 0.82)";
+        ctx.arc(x, y, baseRadius, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.strokeStyle = "rgba(251, 191, 36, 0.38)";
+        ctx.lineWidth = 1;
+        ctx.arc(x, y, baseRadius * 1.85, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      if (progress > 0.02) {
+        const logoRadius = baseRadius * (1.25 + progress * 1.45);
+        drawGraineLogo(ctx, image, x, y, logoRadius, Math.min(1, progress));
+      }
+    });
+  };
+
+  const drawAvatar = (ctx, width, height) => {
+    const avatar = window.__mlcfluxNetworkRetroGame.avatar;
+    const x = avatar.x * width;
+    const y = avatar.y * height;
+    const radius = Math.max(8, Math.min(width, height) * 0.014);
+
+    ctx.save();
+    ctx.translate(x, y);
+
+    ctx.fillStyle = "rgba(15, 23, 42, 0.88)";
+    ctx.strokeStyle = "rgba(251, 191, 36, 0.95)";
+    ctx.lineWidth = 3;
+
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0.22 * Math.PI, 1.78 * Math.PI);
+    ctx.lineTo(0, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.fillStyle = "#fef3c7";
+    ctx.arc(radius * 0.22, -radius * 0.42, radius * 0.14, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  };
+
+  const tick = (timestamp) => {
+    try {
+    const game = window.__mlcfluxNetworkRetroGame;
+    const shell = document.querySelector(".network-graph-shell");
+    const canvas = document.getElementById("networkRetroGameCanvas");
+
+    if (!game.active || !shell || !canvas || !shell.classList.contains("network-retro-game-active")) {
+      game.frame = null;
+      game.lastTick = null;
+      return;
+    }
+
+    const ctx = canvas.getContext("2d");
+    const size = resizeCanvas(canvas);
+    const width = size.width;
+    const height = size.height;
+    const elapsed = game.lastTick === null ? 0.016 : Math.min(0.05, (timestamp - game.lastTick) / 1000);
+    game.lastTick = timestamp;
+
+    const roads = game.roads || getRetroFallbackRoads();
+
+    if (!game.assetsLoading && !game.assetsReady) {
+      preloadRetroGameAssets();
+    }
+
+    if (game.professionalPayload && game.roads) {
+      prepareProfessionalParticles(game.professionalPayload, game.roads);
+    }
+
+    seedParticles();
+
+    const avatar = game.avatar;
+    const pointer = game.pointer;
+    const targetX = pointer.active ? pointer.x : 0.5;
+    const targetY = pointer.active ? pointer.y : 0.5;
+
+    const previousX = avatar.x;
+    const previousY = avatar.y;
+
+    // Suivi flottant plus réactif : faible latence, mais pas de téléportation.
+    const follow = 1 - Math.exp(-30 * elapsed);
+
+    avatar.x += (targetX - avatar.x) * follow;
+    avatar.y += (targetY - avatar.y) * follow;
+
+    avatar.vx = elapsed > 0 ? (avatar.x - previousX) / elapsed : 0;
+    avatar.vy = elapsed > 0 ? (avatar.y - previousY) / elapsed : 0;
+
+    avatar.x = Math.max(0.01, Math.min(0.99, avatar.x));
+    avatar.y = Math.max(0.01, Math.min(0.99, avatar.y));
+
+    ctx.clearRect(0, 0, width, height);
+
+    const bg = ctx.createLinearGradient(0, 0, width, height);
+    bg.addColorStop(0, "#020617");
+    bg.addColorStop(0.55, "#0f172a");
+    bg.addColorStop(1, "#111827");
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, width, height);
+
+    if (!game.assetsReady) {
+      drawRetroBootStatus(
+        ctx,
+        width,
+        height,
+        game.assetsError ? `PROTO DATA ERROR · ${game.assetsError}` : "PROTO DATA LOADING..."
+      );
+    }
+
+    drawHeatZones(ctx, roads, width, height, timestamp);
+    drawProfessionalHeatZones(ctx, width, height, timestamp);
+
+    const roadsLayer = getRoadsLayer(roads, width, height);
+    ctx.drawImage(roadsLayer, 0, 0);
+
+    drawParticles(ctx, width, height, elapsed);
+    drawProfessionalParticles(ctx, width, height, elapsed, timestamp);
+    drawAvatar(ctx, width, height);
+    updateAndDrawFallingGraineLogo(ctx, width, height, elapsed, timestamp);
+
+    game.frame = requestAnimationFrame(tick);
+    } catch (error) {
+      console.error("MLCFlux retro-road tick failed", error);
+
+      const fallbackCanvas = document.getElementById("networkRetroGameCanvas");
+
+      if (fallbackCanvas) {
+        const fallbackCtx = fallbackCanvas.getContext("2d");
+        const size = resizeCanvas(fallbackCanvas);
+
+        fallbackCtx.fillStyle = "#020617";
+        fallbackCtx.fillRect(0, 0, size.width, size.height);
+        fallbackCtx.fillStyle = "rgba(251, 191, 36, 0.88)";
+        fallbackCtx.font = "12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+        fallbackCtx.textAlign = "left";
+        fallbackCtx.textBaseline = "top";
+        const message = error && error.message ? error.message : String(error || "unknown");
+        fallbackCtx.fillText("PROTO RENDER ERROR", 18, 48);
+        fallbackCtx.fillText(message.slice(0, 110), 18, 66);
+
+        if (error && error.stack) {
+          fallbackCtx.fillText(String(error.stack).split("\n")[1]?.trim()?.slice(0, 110) || "", 18, 84);
+        }
+      }
+
+      const currentGame = window.__mlcfluxNetworkRetroGame;
+
+      if (currentGame && currentGame.active) {
+        currentGame.frame = requestAnimationFrame(tick);
+      }
+    }
+  };
+
+  const startGame = async () => {
+    if (!isDarkMode() || !getThresholdAtMax()) {
+      return;
+    }
+
+    const shell = document.querySelector(".network-graph-shell");
+    const video = document.getElementById("networkCosmosVideo");
+
+    if (!shell) {
+      return;
+    }
+
+    if (video && typeof video.pause === "function") {
+      try {
+        video.pause();
+      } catch (_error) {
+        // Pas bloquant.
+      }
+    }
+
+    shell.classList.remove("network-cosmos-active");
+    shell.classList.add("network-retro-game-active");
+    hideRetroPlay();
+
+    const game = window.__mlcfluxNetworkRetroGame;
+    game.active = true;
+    game.lastTick = null;
+    resetGraineDrop();
+    preloadRetroGameAssets();
+
+    console.info("MLCFlux retro-road started", {
+      roadsReady: Boolean(game.roads),
+      professionals: Array.isArray(game.professionals) ? game.professionals.length : 0,
+      assetsReady: game.assetsReady,
+      assetsLoading: game.assetsLoading
+    });
+
+    if (!game.frame) {
+      game.frame = requestAnimationFrame(tick);
+    }
+  };
+
+  const stopGame = () => {
+    const shell = document.querySelector(".network-graph-shell");
+    const game = window.__mlcfluxNetworkRetroGame;
+
+    game.active = false;
+
+    if (game.frame) {
+      cancelAnimationFrame(game.frame);
+      game.frame = null;
+    }
+
+    game.lastTick = null;
+
+    if (shell) {
+      shell.classList.remove("network-retro-game-active");
+    }
+  };
+
+  document.addEventListener("click", (event) => {
+    const target = event.target;
+    const zoomInButton = target && target.closest
+      ? target.closest("#networkZoomInBtn")
+      : null;
+
+    if (zoomInButton && isDarkMode() && getThresholdAtMax()) {
+      const now = Date.now();
+
+      window.__mlcfluxNetworkRetroZoomClicks = (
+        window.__mlcfluxNetworkRetroZoomClicks || []
+      ).filter((timestamp) => now - timestamp <= 1800);
+
+      window.__mlcfluxNetworkRetroZoomClicks.push(now);
+
+      if (window.__mlcfluxNetworkRetroZoomClicks.length >= 5) {
+        window.__mlcfluxNetworkRetroZoomClicks = [];
+        showRetroPlay();
+      }
+    }
+
+    const playButton = target && target.closest
+      ? target.closest("#networkRetroPlayBtn")
+      : null;
+
+    if (playButton) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (typeof event.stopImmediatePropagation === "function") {
+        event.stopImmediatePropagation();
+      }
+
+      startGame();
+    }
+  }, true);
+
+  document.addEventListener("pointermove", (event) => {
+    const canvas = document.getElementById("networkRetroGameCanvas");
+    const game = window.__mlcfluxNetworkRetroGame;
+
+    if (!canvas || !game.active) {
+      return;
+    }
+
+    const rect = canvas.getBoundingClientRect();
+
+    if (!rect.width || !rect.height) {
+      return;
+    }
+
+    game.pointer.x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+    game.pointer.y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
+    game.pointer.active = true;
+  }, true);
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      stopGame();
+    }
+  }, true);
+
+  if (window.MutationObserver) {
+    const observer = new MutationObserver(() => {
+      if (!isDarkMode()) {
+        hideRetroPlay();
+        stopGame();
+      }
+    });
+
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ["class"]
+    });
+  }
+}
+
+
 function buildProfessionalNetworkPanelHtml() {
+  if (typeof ensureNetworkConstellationStyles === "function") {
+    ensureNetworkConstellationStyles();
+  }
+  ensureNetworkCompactStyles();
+  ensureNetworkCosmosStyles();
+  ensureNetworkCosmosEasterEgg();
+  ensureNetworkRetroRoadGameStyles();
+  ensureNetworkRetroRoadGame();
+  ensureNetworkZoomInDelegate();
+
   return `
-    <section class="card network-atlas-hero">
-      <div class="network-atlas-hero-main">
-        <div class="stat-label">Réseau interprofessionnel · flux P→P</div>
-        <h2>Atlas relationnel de la circulation entre professionnels</h2>
-        <p>
-          Ce graphe représente les relations monétaires <strong>professionnel → professionnel</strong>
-          observées sur la période sélectionnée. Chaque nœud correspond à un professionnel relié
-          au moins une fois à un autre professionnel ; chaque lien cumule le volume des paiements
-          orientés entre deux acteurs.
-        </p>
-
-        <div class="network-atlas-method-note">
-          <strong>Périmètre actuel.</strong>
-          Cette première lecture porte sur le cœur <strong>P→P</strong> du réseau.
-          Les comptes association / opérateurs sont
-          <strong>exclus par défaut</strong> afin de ne pas confondre l’infrastructure associative
-          avec le tissu d’échanges interprofessionnels. Ils peuvent être réintégrés via l’option
-          d’exploration ci-dessous.
-        </div>
-      </div>
-
-      <div class="network-atlas-kpi-grid">
-        <article class="network-atlas-kpi">
-          <span>Acteurs visibles</span>
-          <strong id="networkVisibleNodeCount">—</strong>
-          <small>Professionnels conservés après seuil.</small>
-        </article>
-
-        <article class="network-atlas-kpi">
-          <span>Relations visibles</span>
-          <strong id="networkVisibleEdgeCount">—</strong>
-          <small>Liens P→P au-dessus du seuil.</small>
-        </article>
-
-        <article class="network-atlas-kpi">
-          <span>Volume relationnel visible</span>
-          <strong id="networkVisibleVolume">—</strong>
-          <small>Somme des liens actuellement affichés.</small>
-        </article>
-
-        <article class="network-atlas-kpi">
-          <span>Seuil de relation</span>
-          <strong id="networkVisibleThreshold">—</strong>
-          <small>Filtre appliqué au volume cumulé.</small>
-        </article>
-      </div>
-    </section>
-
-    <section class="card network-atlas-workbench">
-      <div class="network-atlas-workbench-header">
-        <div>
-          <div class="stat-label">Exploration navigable</div>
-          <h3>Filtrer, chercher, isoler un voisinage</h3>
+    <section class="card network-atlas-workbench network-atlas-compact">
+      <div class="network-compact-header">
+        <div class="network-compact-title">
+          <div class="stat-label">Constellations interpro · flux P→P</div>
+          <h2>Cartographie des relations entre professionnels</h2>
           <p>
-            Ajuste le seuil pour faire émerger les relations structurantes, recherche un acteur,
-            puis clique sur un nœud pour isoler son voisinage visible et lire ses flux entrants
-            et sortants.
+            Flux cumulés entre professionnels sur la période sélectionnée.
+            Les comptes opérateurs sont exclus par défaut.
           </p>
         </div>
+
+        <div class="network-atlas-kpi-grid network-compact-kpis">
+          <article class="network-atlas-kpi">
+            <span>Acteurs</span>
+            <strong id="networkVisibleNodeCount">—</strong>
+            <small>Acteurs visibles</small>
+          </article>
+
+          <article class="network-atlas-kpi">
+            <span>Relations</span>
+            <strong id="networkVisibleEdgeCount">—</strong>
+            <small>Relations visibles</small>
+          </article>
+
+          <article class="network-atlas-kpi">
+            <span>Volume</span>
+            <strong id="networkVisibleVolume">—</strong>
+            <small>Volume visible</small>
+          </article>
+
+          <article class="network-atlas-kpi">
+            <span>Seuil</span>
+            <strong id="networkVisibleThreshold">—</strong>
+            <small>Seuil appliqué</small>
+          </article>
+        </div>
       </div>
 
-      <div class="network-toolbar network-atlas-toolbar">
+      <div class="network-switch-row">
+        <label class="network-switch" for="networkIncludeOperators">
+          <input
+            id="networkIncludeOperators"
+            type="checkbox"
+            ${appState.network.includeOperators ? "checked" : ""}
+          />
+          <span class="network-switch-control" aria-hidden="true"></span>
+          <span class="network-switch-copy">
+            <strong>Inclure les comptes techniques / associatifs</strong>
+            <small>Afficher aussi les comptes d’infrastructure et de support.</small>
+          </span>
+        </label>
+        <button
+          id="networkCosmosPlayBtn"
+          class="network-cosmos-play hidden"
+          type="button"
+          title="Activer le fond cosmique"
+        >Play</button>
+      </div>
+
+      <div class="network-toolbar network-atlas-toolbar network-compact-toolbar">
         <div class="network-search-box">
           <input
             id="networkSearch"
             type="text"
-            placeholder="Rechercher un professionnel : P0512, Biocoop, Melting..."
+            placeholder="Rechercher : P0512, Biocoop, Melting..."
             value="${escapeHtml(appState.network.searchTerm)}"
           />
           <div id="networkSearchPreview" class="network-search-preview hidden"></div>
@@ -2673,7 +4674,7 @@ function buildProfessionalNetworkPanelHtml() {
 
         <div class="network-slider-group">
           <label for="networkThreshold">
-            Seuil minimal des relations :
+            Seuil minimal :
             <strong id="networkThresholdValue">${appState.network.minEdgeWeight} €</strong>
           </label>
           <input
@@ -2684,39 +4685,44 @@ function buildProfessionalNetworkPanelHtml() {
             step="100"
             value="${appState.network.minEdgeWeight}"
           />
-          <small>Les liens dont le volume cumulé est inférieur au seuil sont masqués.</small>
-        </div>
-
-        <div class="network-actions">
-          <button id="networkFitBtn" class="secondary-btn" type="button">Recentrer</button>
-          <button id="networkZoomInBtn" class="secondary-btn" type="button">Zoom +</button>
-          <button id="networkZoomOutBtn" class="secondary-btn" type="button">Zoom -</button>
+          <small>Les liens inférieurs au seuil sont masqués.</small>
         </div>
       </div>
 
-      <label class="network-operator-toggle" for="networkIncludeOperators">
-        <input
-          id="networkIncludeOperators"
-          type="checkbox"
-          ${appState.network.includeOperators ? "checked" : ""}
-        />
-        <span>
-          <strong>Inclure les comptes association / opérateurs</strong>
-          <small>
-            Désactivé par défaut pour lire le réseau interprofessionnel hors comptes associatifs, opérateurs ou d’infrastructure.
-          </small>
-        </span>
-      </label>
-
-      <div class="network-atlas-legend">
-        <span><span class="legend-dot legend-dot-blue"></span> Taille du nœud : volume relationnel cumulé</span>
+      <div class="network-atlas-legend network-compact-legend">
+        <span><span class="legend-dot legend-dot-blue"></span> Taille : volume cumulé</span>
         <span><span class="legend-dot legend-dot-dark"></span> Acteur sélectionné</span>
-        <span><span class="legend-line legend-line-red"></span> Relations du voisinage isolé</span>
+        <span><span class="legend-line legend-line-red"></span> Voisinage isolé</span>
       </div>
 
       <div class="network-layout network-atlas-layout">
         <div class="network-main network-atlas-main">
           <div class="network-graph-shell">
+            <video
+              id="networkCosmosVideo"
+              class="network-cosmos-video"
+              muted
+              playsinline
+              preload="metadata"
+            ></video>
+            <button
+              id="networkRetroPlayBtn"
+              class="network-retro-play hidden"
+              type="button"
+              title="Prototype rétro-cartographique"
+            >▶</button>
+            <canvas
+              id="networkRetroGameCanvas"
+              class="network-retro-game-canvas"
+              aria-hidden="true"
+            ></canvas>
+            <div class="network-retro-hud">MTP-ROAD PROTO · ESC pour sortir</div>
+            <div class="network-map-controls">
+              <button id="networkFitBtn" class="secondary-btn" type="button">Recentrer</button>
+              <button id="networkZoomInBtn" class="secondary-btn" type="button">Zoom +</button>
+              <button id="networkZoomOutBtn" class="secondary-btn" type="button">Zoom -</button>
+            </div>
+            <div class="network-constellation-layer" aria-hidden="true"></div>
             <div id="networkGraph"></div>
             <div id="networkFloatingLabel" class="network-floating-label hidden"></div>
           </div>
@@ -2725,10 +4731,7 @@ function buildProfessionalNetworkPanelHtml() {
         <aside id="networkSidePanel" class="network-sidepanel">
           <div class="network-sidepanel-empty">
             <strong>Sélectionner un professionnel</strong>
-            <span>
-              Clique sur un nœud pour isoler son voisinage visible, lire son volume relationnel
-              et ouvrir sa fiche détaillée.
-            </span>
+            <span>Clique sur un nœud pour isoler son voisinage et ouvrir sa fiche détaillée.</span>
           </div>
         </aside>
       </div>
@@ -2791,16 +4794,18 @@ async function renderProfessionalNetworkPanel(forceReload = false) {
     const data = await apiGet(buildNetworkApiUrl());
     appState.network.rawData = data;
     appState.network.enrichedData = enrichNetworkData(data);
+    initializeNetworkThresholdScale(appState.network.enrichedData);
 
     panel.innerHTML = buildProfessionalNetworkPanelHtml();
     panel.dataset.professionalNetworkHydrated = "true";
 
+    configureNetworkThresholdControl();
     renderNetworkGraph(data);
     bindNetworkControls();
     updateNetworkOverviewMetrics();
   } catch (error) {
     console.warn(
-      "Réseau interprofessionnel indisponible dans la vue Professionnels & particuliers.",
+      "Constellations interpro indisponibles dans la vue Professionnels & particuliers.",
       error
     );
 
@@ -2963,8 +4968,8 @@ function bindNetworkControls() {
 
   if (thresholdInput) {
     thresholdInput.addEventListener("input", (e) => {
-      appState.network.minEdgeWeight = Number(e.target.value || 0);
-      thresholdValue.textContent = `${appState.network.minEdgeWeight} €`;
+      appState.network.minEdgeWeight = getNetworkThresholdFromControl(e.target);
+      updateNetworkThresholdControlLabel();
       updateNetworkGraphVisibility();
     });
   }
@@ -3027,6 +5032,170 @@ function enrichNetworkData(data) {
 
   return data;
 }
+
+
+function buildNetworkThresholdScale(data, maxSteps = 600) {
+  const edges = Array.isArray(data?.edges) ? data.edges : [];
+
+  const uniqueWeights = Array.from(new Set(
+    edges
+      .map(edge => Math.round(Number(edge?.data?.weight || 0) * 100) / 100)
+      .filter(value => Number.isFinite(value) && value > 0)
+  )).sort((a, b) => a - b);
+
+  if (!uniqueWeights.length) {
+    return [0];
+  }
+
+  const scale = [0];
+
+  if (uniqueWeights.length <= maxSteps) {
+    scale.push(...uniqueWeights);
+  } else {
+    for (let i = 0; i < maxSteps; i += 1) {
+      const ratio = maxSteps <= 1 ? 0 : i / (maxSteps - 1);
+
+      // Léger biais vers les faibles seuils, où le réseau change souvent le plus.
+      const shapedRatio = Math.pow(ratio, 1.12);
+      const index = Math.max(
+        0,
+        Math.min(uniqueWeights.length - 1, Math.round(shapedRatio * (uniqueWeights.length - 1)))
+      );
+
+      scale.push(uniqueWeights[index]);
+    }
+  }
+
+  return Array.from(new Set(scale)).sort((a, b) => a - b);
+}
+
+function getClosestNetworkThresholdIndex(scale, threshold) {
+  if (!Array.isArray(scale) || !scale.length) {
+    return 0;
+  }
+
+  const value = Math.max(0, Number(threshold) || 0);
+
+  let bestIndex = 0;
+  let bestDistance = Infinity;
+
+  scale.forEach((candidate, index) => {
+    const distance = Math.abs(Number(candidate || 0) - value);
+
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index;
+    }
+  });
+
+  return bestIndex;
+}
+
+function initializeNetworkThresholdScale(data) {
+  const previousThreshold = Number(appState.network.minEdgeWeight || 0);
+  const scale = buildNetworkThresholdScale(data);
+
+  const index = getClosestNetworkThresholdIndex(scale, previousThreshold);
+  const threshold = Number(scale[index] || 0);
+
+  appState.network.thresholdScale = scale;
+  appState.network.thresholdIndex = index;
+  appState.network.minEdgeWeight = threshold;
+}
+
+function formatNetworkThresholdLabel(value, index = appState.network.thresholdIndex) {
+  const scale = Array.isArray(appState.network.thresholdScale)
+    ? appState.network.thresholdScale
+    : [];
+
+  if (!scale.length || scale.length === 1) {
+    return euro(value || 0);
+  }
+
+  return `${euro(value || 0)} · palier ${Number(index || 0) + 1}/${scale.length}`;
+}
+
+function configureNetworkThresholdControl() {
+  const input = document.getElementById("networkThreshold");
+  const label = document.getElementById("networkThresholdValue");
+
+  const scale = Array.isArray(appState.network.thresholdScale)
+    ? appState.network.thresholdScale
+    : [];
+
+  if (!input || !scale.length) {
+    return;
+  }
+
+  const index = getClosestNetworkThresholdIndex(scale, appState.network.minEdgeWeight || 0);
+  const threshold = Number(scale[index] || 0);
+
+  appState.network.thresholdIndex = index;
+  appState.network.minEdgeWeight = threshold;
+
+  input.dataset.scaleMode = "observed";
+  input.min = "0";
+  input.max = String(Math.max(0, scale.length - 1));
+  input.step = "1";
+  input.value = String(index);
+
+  if (label) {
+    label.textContent = formatNetworkThresholdLabel(threshold, index);
+  }
+}
+
+function getNetworkThresholdFromControl(input) {
+  const scale = Array.isArray(appState.network.thresholdScale)
+    ? appState.network.thresholdScale
+    : [];
+
+  if (!input || input.dataset.scaleMode !== "observed" || !scale.length) {
+    return Number(input?.value || 0);
+  }
+
+  const rawIndex = Number(input.value || 0);
+  const index = Math.max(0, Math.min(scale.length - 1, Math.round(rawIndex)));
+  const threshold = Number(scale[index] || 0);
+
+  appState.network.thresholdIndex = index;
+  return threshold;
+}
+
+function updateNetworkThresholdControlLabel() {
+  const label = document.getElementById("networkThresholdValue");
+
+  if (!label) {
+    return;
+  }
+
+  label.textContent = formatNetworkThresholdLabel(
+    appState.network.minEdgeWeight || 0,
+    appState.network.thresholdIndex || 0
+  );
+}
+
+function getNetworkThresholdProgress() {
+  const scale = Array.isArray(appState.network.thresholdScale)
+    ? appState.network.thresholdScale
+    : [];
+
+  const input = document.getElementById("networkThreshold");
+
+  if (scale.length > 1) {
+    const rawIndex = input && input.dataset.scaleMode === "observed"
+      ? Number(input.value || 0)
+      : Number(appState.network.thresholdIndex || 0);
+
+    const index = Math.max(0, Math.min(scale.length - 1, Math.round(rawIndex)));
+    return index / (scale.length - 1);
+  }
+
+  const threshold = Math.max(0, Number(appState.network.minEdgeWeight || 0));
+  const maxThreshold = input ? Math.max(1, Number(input.max) || 5000) : 5000;
+
+  return Math.log1p(threshold) / Math.log1p(maxThreshold);
+}
+
 
 function getFilteredNetworkElements(data, minWeight) {
   const filteredEdges = data.edges.filter(
@@ -3591,65 +5760,7 @@ function renderNetworkGraph(data) {
         ...enriched.nodes,
         ...enriched.edges
       ],
-      style: [
-        {
-          selector: "node",
-          style: {
-            "label": "",
-            "background-color": "mapData(volume, 0, 60000, #bfdbfe, #1d4ed8)",
-            "width": "mapData(volume, 0, 60000, 18, 68)",
-            "height": "mapData(volume, 0, 60000, 18, 68)",
-            "border-width": 3,
-            "border-color": "#eff6ff",
-            "overlay-padding": 12,
-            "overlay-opacity": 0,
-            "z-index": 10
-          }
-        },
-        {
-          selector: "edge",
-          style: {
-            "width": "mapData(weight, 0, 60000, 1.1, 8)",
-            "line-color": "#94a3b8",
-            "target-arrow-color": "#94a3b8",
-            "target-arrow-shape": "triangle",
-            "arrow-scale": 0.72,
-            "curve-style": "bezier",
-            "control-point-step-size": 28,
-            "opacity": 0.30
-          }
-        },
-        {
-          selector: ".faded",
-          style: {
-            "opacity": 0.045
-          }
-        },
-        {
-          selector: ".highlighted",
-          style: {
-            "line-color": "#f97316",
-            "target-arrow-color": "#f97316",
-            "opacity": 0.98,
-            "z-index": 30
-          }
-        },
-        {
-          selector: ".selected-node",
-          style: {
-            "background-color": "#0f172a",
-            "border-color": "#f97316",
-            "border-width": 5
-          }
-        },
-        {
-          selector: ".search-match",
-          style: {
-            "border-color": "#eab308",
-            "border-width": 5
-          }
-        }
-      ],
+      style: buildNetworkCytoscapeStyles(),
       layout: {
         name: "cose",
         animate: false,
@@ -7424,11 +9535,11 @@ const PROGRESSIVE_VIEW_SHELLS = {
     eyebrow: "Utilisateurs de la Gonette",
     heading: "La vue des communautés d’usage s’ouvre immédiatement.",
     description:
-      "Les espaces de lecture sont disponibles dès l’entrée dans la page. Les synthèses, flux, réseau interprofessionnel, cartographies de clusters et classements sont ensuite hydratés.",
+      "Les espaces de lecture sont disponibles dès l’entrée dans la page. Les synthèses, flux, constellations interpro, cartographies de clusters et classements sont ensuite hydratés.",
     sections: [
       "Vue d’ensemble U / P",
       "Circulation et multiplicateur",
-      "Réseau interprofessionnel",
+      "Constellations interpro",
       "Cartographie des clusters",
       "Classements et détails"
     ]
@@ -7593,7 +9704,7 @@ async function openViewProgressively(viewKey) {
     await runProgressiveViewHydration({
       viewKey: "pros",
       hydrate: () => renderProsView(false),
-      message: "Chargement du réseau interprofessionnel…"
+      message: "Chargement des constellations interpro…"
     });
     return;
   }
@@ -19308,9 +21419,9 @@ function getProfessionalAnalysisHeroCopy(tabName) {
       note: "Les indicateurs de réemploi et de multiplicateur portent sur les professionnels visibles et les flux observés sur la période sélectionnée."
     },
     network: {
-      eyebrow: "Réseau interprofessionnel · échanges entre professionnels",
+      eyebrow: "Constellations interpro · échanges entre professionnels",
       title: "Comment les professionnels structurent-ils la circulation interprofessionnelle ?",
-      body: "Cette vue analyse les échanges entre professionnels : qui reçoit, qui réémet, quels liens P→P se forment, et quels acteurs semblent structurer le réseau interprofessionnel sur la période sélectionnée.",
+      body: "Cette vue analyse les échanges entre professionnels : qui reçoit, qui réémet, quels liens P→P se forment, et quels acteurs semblent structurer le constellations interpro sur la période sélectionnée.",
       note: "Cet onglet présente le réseau P→P. Les particuliers ne sont pas inclus dans ce graphe ; ils restent analysés dans les autres lectures de la vue."
     },
     clusters: {
@@ -19368,7 +21479,7 @@ function buildProfessionalAnalysisShell(flowSummary = null, holdingsSummary = nu
       tabs: [
         { key: "summary", label: "Synthèse" },
         { key: "circulation", label: "Circulation & multiplicateur" },
-        { key: "network", label: "Réseau interprofessionnel" },
+        { key: "network", label: "Constellations interpro" },
         { key: "clusters", label: "Circulation des clusters" },
         { key: "structures", label: "Analyse sectorielle" },
         { key: "directory", label: "Liste & fiches" }
@@ -19420,7 +21531,7 @@ function buildProfessionalAnalysisShell(flowSummary = null, holdingsSummary = nu
     >
       <section class="card professional-analysis-roadmap-card">
         <div class="professional-analysis-section-heading">
-          <div class="stat-label">Onglet 3 · Réseau interprofessionnel</div>
+          <div class="stat-label">Onglet 3 · Constellations interpro</div>
           <h3>Explorer la structure relationnelle des échanges P→P</h3>
           <p>
             Cet onglet cartographie les relations monétaires entre professionnels :
@@ -28788,6 +30899,7 @@ function applyTheme(theme, persist = true) {
   }
 
   refreshProfessionalConsumptionMapThemeRendering();
+  refreshNetworkGraphTheme();
 }
 
 function initThemeToggle() {
