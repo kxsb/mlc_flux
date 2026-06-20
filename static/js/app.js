@@ -1,10 +1,10 @@
-/* VERSION_102_MLCFLUX_MULTI */
+/* VERSION_105_MLCFLUX_MULTI */
 window.MLCFLUX_VERSION = {
-  number: "v1.0.4",
-  label: "MLCFlux bêta v1.0.4 multi — juin 2026",
-  meta: "MLCFlux beta v1.0.4 multi - juin 2026"
+  number: "v1.0.5",
+  label: "MLCFlux bêta v1.0.5 multi — juin 2026",
+  meta: "MLCFlux beta v1.0.5 multi - juin 2026"
 };
-document.documentElement.setAttribute("data-mlcflux-version", "v1.0.4");
+document.documentElement.setAttribute("data-mlcflux-version", "v1.0.5");
 
 
 const MLCFLUX_MLC_CONTEXT = {
@@ -45,8 +45,10 @@ function syncMlcInstanceThemeAttribute(mlcIdOverride = null) {
   if (mlcId) {
     window.__mlcFluxActiveMlcId = mlcId;
     document.documentElement.setAttribute("data-mlc-instance", mlcId);
+    refreshMlcInstanceLogo();
   } else {
     document.documentElement.removeAttribute("data-mlc-instance");
+    refreshMlcInstanceLogo();
   }
 }
 
@@ -113,6 +115,246 @@ function getCurrencyName() {
 function getCurrencySymbol() {
   return MLCFLUX_MLC_CONTEXT.currencySymbol || "ML";
 }
+
+/* MLC_INSTANCE_LOGO001B — logo persistant de l'instance MLC ouverte */
+const MLCFLUX_MLC_LOGOS = {
+  gonette: "/static/img/mlc/gonette.png",
+  graine: "/static/img/mlc/graine.png",
+};
+
+function getMlcInstanceLogoId() {
+  const candidates = [
+    window.__mlcFluxActiveMlcId,
+    document.documentElement.getAttribute("data-mlc-instance"),
+    MLCFLUX_MLC_CONTEXT.id,
+    MLCFLUX_MLC_CONTEXT.shortName,
+    MLCFLUX_MLC_CONTEXT.name,
+  ];
+
+  const raw = candidates
+    .map((value) => String(value || "").trim().toLowerCase())
+    .find((value) => value && value !== "undefined" && value !== "null");
+
+  if (!raw) return null;
+  if (raw.includes("graine")) return "graine";
+  if (raw.includes("gonette")) return "gonette";
+  return raw;
+}
+
+function getMlcInstanceLogoUrl() {
+  const logoId = getMlcInstanceLogoId();
+  return logoId ? MLCFLUX_MLC_LOGOS[logoId] || null : null;
+}
+
+function ensureMlcInstanceLogoStyles() {
+  if (document.getElementById("mlc-instance-logo-style")) return;
+
+  const style = document.createElement("style");
+  style.id = "mlc-instance-logo-style";
+  style.textContent = `
+    .mlc-sidebar-brand-with-logo {
+      display: inline-flex !important;
+      align-items: center !important;
+      gap: 0.65rem !important;
+      min-width: 0;
+    }
+
+    .mlc-sidebar-instance-logo-shell {
+      flex: 0 0 auto;
+      width: 34px;
+      height: 34px;
+      border-radius: 11px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid rgba(15, 23, 42, 0.12);
+      box-shadow: 0 6px 16px rgba(15, 23, 42, 0.10);
+      overflow: hidden;
+    }
+
+    .mlc-sidebar-instance-logo {
+      max-width: 27px;
+      max-height: 27px;
+      object-fit: contain;
+      display: block;
+    }
+
+    html[data-mlc-instance="gonette"] .mlc-sidebar-instance-logo-shell {
+      border-color: rgba(232, 73, 38, 0.34);
+    }
+
+    html[data-mlc-instance="graine"] .mlc-sidebar-instance-logo-shell {
+      border-color: rgba(118, 185, 45, 0.36);
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+function findMlcFluxSidebarBrandElement() {
+  const selectors = [
+    ".sidebar h1",
+    ".sidebar h2",
+    ".sidebar .brand",
+    ".sidebar .app-title",
+    ".sidebar .sidebar-title",
+    "aside h1",
+    "aside h2",
+  ];
+
+  for (const selector of selectors) {
+    const nodes = Array.from(document.querySelectorAll(selector));
+    const found = nodes.find((node) => {
+      const text = String(node.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+      return text === "mlc flux" || text.includes("mlc flux");
+    });
+
+    if (found) return found;
+  }
+
+  return null;
+}
+
+function updateMlcInstanceFavicon() {
+  const logoUrl = getMlcInstanceLogoUrl();
+  if (!logoUrl) return;
+
+  const href = `${logoUrl}?mlc=${encodeURIComponent(getMlcInstanceLogoId() || "mlc")}`;
+
+  document
+    .querySelectorAll('link[rel~="icon"], link[rel="shortcut icon"]')
+    .forEach((node) => node.remove());
+
+  const icon = document.createElement("link");
+  icon.rel = "icon";
+  icon.type = "image/png";
+  icon.href = href;
+  document.head.appendChild(icon);
+
+  const shortcut = document.createElement("link");
+  shortcut.rel = "shortcut icon";
+  shortcut.type = "image/png";
+  shortcut.href = href;
+  document.head.appendChild(shortcut);
+}
+
+function refreshMlcInstanceLogo() {
+  ensureMlcInstanceLogoStyles();
+  updateMlcInstanceFavicon();
+
+  const logoUrl = getMlcInstanceLogoUrl();
+  const brand = findMlcFluxSidebarBrandElement();
+
+  if (!brand) {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", refreshMlcInstanceLogo, { once: true });
+    } else {
+      window.requestAnimationFrame(() => {
+        const retryBrand = findMlcFluxSidebarBrandElement();
+        if (retryBrand) refreshMlcInstanceLogo();
+      });
+    }
+    return;
+  }
+
+  brand.classList.add("mlc-sidebar-brand-with-logo");
+
+  let shell = brand.querySelector(".mlc-sidebar-instance-logo-shell");
+
+  if (!logoUrl) {
+    if (shell) shell.remove();
+    return;
+  }
+
+  if (!shell) {
+    shell = document.createElement("span");
+    shell.className = "mlc-sidebar-instance-logo-shell";
+    shell.setAttribute("aria-hidden", "true");
+    brand.prepend(shell);
+  }
+
+  shell.innerHTML = `<img class="mlc-sidebar-instance-logo" src="${logoUrl}" alt="">`;
+  refreshMlcFluxDevBadge();
+}
+
+
+
+
+/* MLC_DEV_BADGE001 — mention DEV uniquement sur les environnements de développement */
+function isMlcFluxDevEnvironment() {
+  const host = String(window.location.hostname || "").toLowerCase();
+  const port = String(window.location.port || "");
+
+  return (
+    host.startsWith("dev.")
+    || host.includes(".dev.")
+    || host.includes("-dev")
+    || host === "localhost"
+    || host === "127.0.0.1"
+    || port === "8002"
+  );
+}
+
+function ensureMlcFluxDevBadgeStyles() {
+  if (document.getElementById("mlc-dev-badge-style")) return;
+
+  const style = document.createElement("style");
+  style.id = "mlc-dev-badge-style";
+  style.textContent = `
+    .mlc-dev-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-left: 0.45rem;
+      padding: 0.14rem 0.42rem;
+      border-radius: 999px;
+      font-size: 0.68rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      line-height: 1;
+      color: #b42318;
+      background: rgba(254, 228, 226, 0.95);
+      border: 1px solid rgba(240, 68, 56, 0.38);
+      vertical-align: middle;
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+function refreshMlcFluxDevBadge() {
+  if (!isMlcFluxDevEnvironment()) return;
+
+  ensureMlcFluxDevBadgeStyles();
+
+  if (!document.title.includes("DEV")) {
+    document.title = `${document.title || "MLC Flux"} · DEV`;
+  }
+
+  const brand = typeof findMlcFluxSidebarBrandElement === "function"
+    ? findMlcFluxSidebarBrandElement()
+    : null;
+
+  if (!brand) {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", refreshMlcFluxDevBadge, { once: true });
+    } else {
+      window.requestAnimationFrame(refreshMlcFluxDevBadge);
+    }
+    return;
+  }
+
+  if (brand.querySelector(".mlc-dev-badge")) return;
+
+  const badge = document.createElement("span");
+  badge.className = "mlc-dev-badge";
+  badge.textContent = "DEV";
+  badge.title = "Environnement de développement";
+
+  brand.appendChild(badge);
+}
+
 
 function replaceMlcTokens(text) {
   if (text === null || text === undefined) return "";
@@ -5266,6 +5508,8 @@ function ensurePeriodPickerPanel() {
     panel.appendChild(customFields);
   }
 
+  ensureCustomPeriodDateLabels();
+
   hideOrphanPeriodPresetLabels(block, panel, activeSummary);
 
   activeSummary.setAttribute("aria-controls", "periodPickerPanel");
@@ -5276,6 +5520,14 @@ function ensurePeriodPickerPanel() {
 
   if (activeSummary.dataset.periodPickerBound !== "true") {
     activeSummary.addEventListener("click", (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+
+      if (target?.closest(".period-mini-timeline")) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
+
       event.preventDefault();
       event.stopImmediatePropagation();
       togglePeriodPickerPanel();
@@ -5399,6 +5651,7 @@ function ensurePeriodMiniTimelineMount() {
     }
   }
 
+  bindPeriodMiniTimelineDrag(mount);
   return mount;
 }
 
@@ -5437,6 +5690,349 @@ function renderPeriodMiniTimeline(selectedStart, selectedEnd) {
   mount.querySelector(".period-mini-timeline-bound-end").textContent = formatIsoDateForSidebar(totalEnd);
 
   mount.classList.remove("hidden");
+}
+
+
+
+/* PERIOD_SLIDER001 — déplacement d'une période équivalente depuis la mini timeline */
+function ensurePeriodSliderStyles() {
+  if (document.getElementById("period-slider-style")) return;
+
+  const style = document.createElement("style");
+  style.id = "period-slider-style";
+  style.textContent = `
+    .period-mini-timeline {
+      position: relative;
+      cursor: grab;
+      user-select: none;
+      padding-top: 0.08rem;
+      padding-bottom: 0.95rem;
+    }
+
+    .period-mini-timeline::after {
+      content: "↔ glisser";
+      position: absolute;
+      right: 0;
+      bottom: 0.04rem;
+      font-size: 0.62rem;
+      font-weight: 750;
+      letter-spacing: 0.01em;
+      color: rgba(232, 73, 38, 0.68);
+      opacity: 0.82;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+
+    .period-mini-timeline-track {
+      position: relative;
+      height: 9px !important;
+      min-height: 9px !important;
+      border-radius: 999px;
+      cursor: grab;
+      touch-action: none;
+      background: rgba(15, 23, 42, 0.13) !important;
+      box-shadow:
+        inset 0 1px 2px rgba(15, 23, 42, 0.13),
+        0 1px 0 rgba(255, 255, 255, 0.72);
+      overflow: visible !important;
+    }
+
+    .period-mini-timeline-selection {
+      top: 50% !important;
+      height: 9px !important;
+      min-height: 9px !important;
+      min-width: 8px;
+      transform: translateY(-50%);
+      border-radius: 999px;
+      cursor: grab;
+      touch-action: none;
+      background: rgba(232, 73, 38, 0.86) !important;
+      box-shadow:
+        0 0 0 1.5px rgba(255, 255, 255, 0.9),
+        0 2px 7px rgba(232, 73, 38, 0.24);
+    }
+
+    .period-mini-timeline-handle {
+      width: 12px !important;
+      height: 17px !important;
+      min-width: 12px !important;
+      border-radius: 999px !important;
+      cursor: grab;
+      touch-action: none;
+      background:
+        linear-gradient(
+          90deg,
+          rgba(255, 255, 255, 0.9) 0,
+          rgba(255, 255, 255, 0.9) 1px,
+          transparent 1px,
+          transparent 4px
+        ),
+        linear-gradient(
+          180deg,
+          rgba(255, 146, 79, 0.96),
+          rgba(232, 73, 38, 0.96)
+        ) !important;
+      border: 1.5px solid rgba(255, 255, 255, 0.95) !important;
+      box-shadow:
+        0 0 0 1px rgba(232, 73, 38, 0.35),
+        0 3px 8px rgba(232, 73, 38, 0.26);
+    }
+
+    .period-mini-timeline-handle::after {
+      content: "";
+      position: absolute;
+      inset: -7px;
+      border-radius: 999px;
+    }
+
+    .period-mini-timeline:hover::after {
+      color: rgba(232, 73, 38, 0.88);
+      opacity: 1;
+    }
+
+    .period-mini-timeline:hover .period-mini-timeline-track {
+      background: rgba(15, 23, 42, 0.17) !important;
+    }
+
+    .period-mini-timeline:hover .period-mini-timeline-selection {
+      background: rgba(232, 73, 38, 0.95) !important;
+      box-shadow:
+        0 0 0 1.5px rgba(255, 255, 255, 0.96),
+        0 4px 10px rgba(232, 73, 38, 0.30);
+    }
+
+    .period-mini-timeline-track.period-mini-timeline-dragging,
+    .period-mini-timeline-track.period-mini-timeline-dragging .period-mini-timeline-selection,
+    .period-mini-timeline-track.period-mini-timeline-dragging .period-mini-timeline-handle {
+      cursor: grabbing !important;
+    }
+
+    .period-mini-timeline-track.period-mini-timeline-dragging .period-mini-timeline-selection {
+      background: rgba(232, 73, 38, 1) !important;
+      box-shadow:
+        0 0 0 2px rgba(255, 255, 255, 0.98),
+        0 5px 12px rgba(232, 73, 38, 0.34);
+    }
+
+    .period-active-value-draft {
+      color: rgba(232, 73, 38, 0.98) !important;
+      transition: color 0.12s ease;
+    }
+
+    .period-custom-fields-labelled {
+      display: grid;
+      gap: 0.6rem;
+    }
+
+    .period-custom-date-field {
+      display: grid;
+      gap: 0.25rem;
+      padding: 0.45rem 0.55rem;
+      border-radius: 0.85rem;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid rgba(15, 23, 42, 0.08);
+    }
+
+    .period-custom-date-label {
+      font-size: 0.72rem;
+      font-weight: 800;
+      color: rgba(15, 23, 42, 0.68);
+    }
+
+    .period-custom-date-field input {
+      width: 100%;
+    }
+
+    .period-custom-help {
+      margin: 0.25rem 0 0;
+      font-size: 0.72rem;
+      line-height: 1.25;
+      color: rgba(15, 23, 42, 0.62);
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+function sidebarAddDays(dateString, days) {
+  if (!dateString) return null;
+
+  const parts = String(dateString).split("-").map((part) => Number(part));
+  if (parts.length !== 3 || parts.some((part) => Number.isNaN(part))) {
+    return null;
+  }
+
+  const [year, month, day] = parts;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + Number(days || 0));
+  return date.toISOString().slice(0, 10);
+}
+
+function ensureCustomPeriodDateLabels() {
+  ensurePeriodSliderStyles();
+
+  const customFields = document.getElementById("customPeriodFields");
+  const startEl = document.getElementById("periodStart");
+  const endEl = document.getElementById("periodEnd");
+
+  if (!customFields || !startEl || !endEl) return;
+
+  customFields.classList.add("period-custom-fields-labelled");
+
+  const decorate = (input, labelText) => {
+    input.setAttribute("aria-label", labelText);
+
+    let wrapper = input.closest(".period-custom-date-field");
+    if (!wrapper) {
+      wrapper = document.createElement("label");
+      wrapper.className = "period-custom-date-field";
+
+      const parent = input.parentElement;
+      if (parent) {
+        parent.insertBefore(wrapper, input);
+      }
+
+      const label = document.createElement("span");
+      label.className = "period-custom-date-label";
+      wrapper.appendChild(label);
+      wrapper.appendChild(input);
+    }
+
+    const label = wrapper.querySelector(".period-custom-date-label");
+    if (label) label.textContent = labelText;
+  };
+
+  decorate(startEl, "Date de début");
+  decorate(endEl, "Date de fin");
+
+  if (!customFields.querySelector(".period-custom-help")) {
+    const help = document.createElement("p");
+    help.className = "period-custom-help";
+    help.textContent = "Les dates sont incluses. Le curseur orange peut aussi être glissé pour déplacer une période de même durée.";
+    customFields.appendChild(help);
+  }
+}
+
+
+function renderPeriodDraftDisplay(start, end) {
+  const hint = document.getElementById("periodFilterHint");
+
+  if (hint && start && end) {
+    hint.textContent = `${formatIsoDateForSidebar(start)}→${formatIsoDateForSidebar(end)}`;
+    hint.classList.add("period-active-value-draft");
+  }
+
+  renderPeriodMiniTimeline(start, end);
+}
+
+function clearPeriodDraftDisplayState() {
+  const hint = document.getElementById("periodFilterHint");
+  if (hint) {
+    hint.classList.remove("period-active-value-draft");
+  }
+}
+
+function bindPeriodMiniTimelineDrag(mount) {
+  ensurePeriodSliderStyles();
+
+  if (!mount || mount.dataset.periodTimelineDragBound === "true") return;
+
+  const track = mount.querySelector(".period-mini-timeline-track");
+  if (!track) return;
+
+  mount.title = "Glisser pour déplacer la période en conservant sa durée.";
+
+  track.addEventListener("pointerdown", (event) => {
+    if (event.button !== undefined && event.button !== 0) return;
+
+    const bounds = appState.periodBounds || {};
+    const totalStart = bounds.min || bounds.start || bounds.min_date;
+    const totalEnd = bounds.max || bounds.end || bounds.max_date;
+    const currentStart = appState.analysisPeriod?.start;
+    const currentEnd = appState.analysisPeriod?.end;
+
+    const totalDays = sidebarDiffDays(totalStart, totalEnd);
+    const currentStartOffset = sidebarDiffDays(totalStart, currentStart);
+    const currentDurationDays = sidebarDiffDays(currentStart, currentEnd);
+
+    if (
+      totalDays === null
+      || currentStartOffset === null
+      || currentDurationDays === null
+      || totalDays <= 0
+    ) {
+      return;
+    }
+
+    const rect = track.getBoundingClientRect();
+    if (!rect.width) return;
+
+    const pointerToDayOffset = (clientX) => {
+      const pct = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+      return pct * totalDays;
+    };
+
+    const target = event.target instanceof Element ? event.target : null;
+    const isSelectionDrag = Boolean(
+      target?.closest(".period-mini-timeline-selection, .period-mini-timeline-handle")
+    );
+
+    const pointerDayOffset = pointerToDayOffset(event.clientX);
+    const grabOffset = isSelectionDrag
+      ? pointerDayOffset - currentStartOffset
+      : currentDurationDays / 2;
+
+    const applyPointerPosition = (clientX) => {
+      const maxStartOffset = Math.max(0, totalDays - currentDurationDays);
+      const rawStartOffset = pointerToDayOffset(clientX) - grabOffset;
+      const startOffset = Math.round(Math.min(maxStartOffset, Math.max(0, rawStartOffset)));
+
+      const nextStart = sidebarAddDays(totalStart, startOffset);
+      const nextEnd = sidebarAddDays(nextStart, currentDurationDays);
+
+      if (!nextStart || !nextEnd) return;
+
+      syncPeriodInputsFromValues("custom", nextStart, nextEnd);
+      setCustomPeriodFieldsExpanded(true);
+      updatePeriodQuickPresetButtons();
+
+      // Mise à jour visuelle immédiate seulement.
+      // Les données ne sont rechargées qu'au relâchement du curseur.
+      renderPeriodDraftDisplay(nextStart, nextEnd);
+    };
+
+    const onPointerMove = (moveEvent) => {
+      moveEvent.preventDefault();
+      applyPointerPosition(moveEvent.clientX);
+    };
+
+    const onPointerUp = async (upEvent) => {
+      track.classList.remove("period-mini-timeline-dragging");
+      track.releasePointerCapture?.(event.pointerId);
+
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+
+      applyPointerPosition(upEvent.clientX);
+      clearPeriodDraftDisplayState();
+      await applyAnalysisPeriod();
+    };
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    track.classList.add("period-mini-timeline-dragging");
+    track.setPointerCapture?.(event.pointerId);
+
+    applyPointerPosition(event.clientX);
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
+  });
+
+  mount.dataset.periodTimelineDragBound = "true";
 }
 
 
@@ -5487,6 +6083,7 @@ function syncPeriodInputsFromValues(preset, start, end) {
     endEl.max = appState.periodBounds.max;
   }
 
+  ensureCustomPeriodDateLabels();
 }
 
 function updatePeriodDraftFromPreset(preset) {
@@ -17572,10 +18169,69 @@ function renderProfessionalCirculationPanel(
   `;
 }
 
+
+function getProfessionalAnalysisHeroCopy(tabName) {
+  const copies = {
+    summary: {
+      eyebrow: "Professionnels & particuliers · synthèse des usages et de la circulation",
+      title: "Comment les particuliers et les professionnels structurent-ils les usages de la monnaie locale ?",
+      body: "Cette vue croise les flux, les soldes, les cartes, les secteurs et les trajectoires historiques pour analyser ensemble les usages : qui alimente la circulation, qui la capte, quels clusters se forment et quels leviers peuvent renforcer l’ancrage territorial.",
+      note: "Le classement professionnel existant reste disponible dans l’onglet <strong>Liste &amp; fiches</strong> pendant la refonte de cette vue élargie aux usages des particuliers et des professionnels."
+    },
+    circulation: {
+      eyebrow: "Circulation & multiplicateur · trajectoires professionnelles",
+      title: "Comment les professionnels captent, réémettent et prolongent-ils la circulation ?",
+      body: "Cette vue analyse les volumes reçus, les volumes réémis, les soldes et les trajectoires historiques afin de comprendre le rôle des professionnels dans la circulation de la monnaie locale.",
+      note: "Les indicateurs de réemploi et de multiplicateur portent sur les professionnels visibles et les flux observés sur la période sélectionnée."
+    },
+    network: {
+      eyebrow: "Réseau interprofessionnel · échanges entre professionnels",
+      title: "Comment les professionnels structurent-ils la circulation interprofessionnelle ?",
+      body: "Cette vue analyse les échanges entre professionnels : qui reçoit, qui réémet, quels liens P→P se forment, et quels acteurs semblent structurer le réseau interprofessionnel sur la période sélectionnée.",
+      note: "Cet onglet présente le réseau P→P. Les particuliers ne sont pas inclus dans ce graphe ; ils restent analysés dans les autres lectures de la vue."
+    },
+    clusters: {
+      eyebrow: "Circulation des clusters · pôles d’usage et territoires",
+      title: "Quels pôles d’usage et communautés d’échange apparaissent dans la circulation ?",
+      body: "Cette vue cartographique met en relation les lieux d’activité, les territoires d’usage et les communautés de circulation afin d’identifier les concentrations et les liaisons structurantes.",
+      note: "La lecture des clusters vise des dynamiques agrégées. Elle ne doit pas être utilisée comme outil de traçabilité individuelle."
+    },
+    structures: {
+      eyebrow: "Analyse sectorielle · familles d’activité",
+      title: "Quels secteurs reçoivent, réémettent et concentrent les flux ?",
+      body: "Cette vue compare les secteurs d’activité selon les volumes reçus, les volumes émis, les profils de réemploi et les rôles possibles de débouché ou de redistribution.",
+      note: "Les résultats dépendent de la qualité des rattachements sectoriels disponibles dans les données d’enrichissement."
+    },
+    directory: {
+      eyebrow: "Liste & fiches · exploration acteur par acteur",
+      title: "Explorer les professionnels, leurs volumes et leurs profils d’activité",
+      body: "Cette vue conserve le classement détaillé des professionnels et permet d’ouvrir les fiches individuelles pour examiner les flux reçus, les émissions, les secteurs et les éléments de localisation disponibles.",
+      note: "Les fiches individuelles restent centrées sur les professionnels ; les particuliers demeurent pseudonymisés dans les transactions et analyses agrégées."
+    }
+  };
+
+  return copies[tabName] || copies.summary;
+}
+
+function syncProfessionalAnalysisHeroCopy() {
+  const heroCopy = getProfessionalAnalysisHeroCopy(appState.professionalsViewTab || "summary");
+  const eyebrow = document.querySelector("[data-professional-analysis-hero-eyebrow]");
+  const title = document.querySelector("[data-professional-analysis-hero-title]");
+  const body = document.querySelector("[data-professional-analysis-hero-body]");
+  const note = document.querySelector("[data-professional-analysis-hero-note]");
+
+  if (eyebrow) eyebrow.textContent = heroCopy.eyebrow;
+  if (title) title.textContent = heroCopy.title;
+  if (body) body.textContent = heroCopy.body;
+  if (note) note.innerHTML = heroCopy.note;
+}
+
 function buildProfessionalAnalysisShell(flowSummary = null, holdingsSummary = null, pilotageSummary = null, circulationTimeseries = null, reuseYearlySummary = null, chainFateSummary = null, consumptionMapSummary = null) {
   const activeProfessionals = Array.isArray(appState.prosData)
     ? appState.prosData.length
     : 0;
+  const activeProfessionalAnalysisTab = appState.professionalsViewTab || "summary";
+  const professionalAnalysisHeroCopy = getProfessionalAnalysisHeroCopy(activeProfessionalAnalysisTab);
 
   return `
     ${renderAnalysisViewTabs({
@@ -17598,14 +18254,9 @@ function buildProfessionalAnalysisShell(flowSummary = null, holdingsSummary = nu
 
     <section class="card professional-analysis-hero analysis-view-masthead professional-analysis-masthead">
       <div class="professional-analysis-hero-main analysis-view-masthead-main">
-        <div class="stat-label">Professionnels &amp; particuliers · usages, circulation et ancrage des communautés d’échange</div>
-        <h2>Comment les utilisateurs de la Gonette — particuliers et professionnels — structurent-ils la circulation, les pôles d’usage et les communautés d’échange&nbsp;?</h2>
-        <p>
-          Cette vue croise les flux, les soldes, les cartes, les secteurs et les trajectoires
-          historiques pour analyser ensemble les particuliers et les professionnels :
-          qui alimente la circulation, qui la capte, quels clusters se forment,
-          et quels leviers peuvent renforcer l’ancrage de la Gonette dans ses usages réels.
-        </p>
+        <div class="stat-label" data-professional-analysis-hero-eyebrow>${professionalAnalysisHeroCopy.eyebrow}</div>
+        <h2 data-professional-analysis-hero-title>${professionalAnalysisHeroCopy.title}</h2>
+        <p data-professional-analysis-hero-body>${professionalAnalysisHeroCopy.body}</p>
       </div>
 
       <div class="professional-analysis-hero-aside analysis-view-masthead-aside">
@@ -17613,10 +18264,8 @@ function buildProfessionalAnalysisShell(flowSummary = null, holdingsSummary = nu
           <strong>${Number(activeProfessionals || 0).toLocaleString("fr-FR")}</strong>
           <span>professionnel(s) visibles dans le classement de la période</span>
         </div>
-        <div class="professional-analysis-hero-note analysis-view-masthead-note">
-          Le classement professionnel existant reste disponible dans l’onglet
-          <strong>Liste &amp; fiches</strong> pendant la refonte de cette vue élargie
-          aux usages des particuliers et des professionnels.
+        <div class="professional-analysis-hero-note analysis-view-masthead-note" data-professional-analysis-hero-note>
+          ${professionalAnalysisHeroCopy.note}
         </div>
       </div>
     </section>
@@ -19145,6 +19794,7 @@ function bindProfessionalAnalysisTabs() {
 
 function updateProfessionalAnalysisTabs() {
   const activeTab = appState.professionalsViewTab || "summary";
+  syncProfessionalAnalysisHeroCopy();
 
   document.querySelectorAll("[data-professional-analysis-tab]").forEach((button) => {
     const isActive = button.dataset.professionalAnalysisTab === activeTab;
