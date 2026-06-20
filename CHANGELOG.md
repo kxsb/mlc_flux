@@ -1,7 +1,9 @@
 # Notes de version MLCFlux multi
 
 
-## MLCFlux bêta v1.0.7 multi — juin 2026
+## v1.0.7 — 20/06/2026
+
+MLCFlux bêta v1.0.7 multi — juin 2026
 
 Version orientée qualité des données et exploitation client.
 
