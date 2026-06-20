@@ -1,3 +1,22 @@
+# Notes de version MLCFlux multi
+
+## v1.0.5 — 20 juin 2026
+
+### Interface multi-MLC
+- Ajout des logos d’instance dans l’interface applicative pour mieux distinguer La Graine et La Gonette.
+- Ajout d’une mention visuelle `DEV` sur les environnements de développement.
+- Ajout du favicon dynamique selon l’instance MLC active.
+
+### Sélecteur de période
+- Amélioration du sélecteur de période : l’affichage de la période suit désormais le déplacement du curseur avant validation.
+- Les données ne sont rechargées qu’au relâchement du curseur, afin d’éviter des rechargements inutiles pendant le déplacement.
+
+### Vue professionnels
+- Correction du texte d’introduction de l’onglet « Réseau interprofessionnel ».
+- L’onglet ne mentionne plus les particuliers dans une vue centrée sur les échanges P→P.
+- La formulation est désormais générique et ne cite plus directement le nom de l’instance dans ce bloc.
+
+
 # Changelog MLCFlux
 
 Ce fichier suit les versions publiées de MLCFlux à partir de la mise en place du versionnage formalisé.
