@@ -1,5 +1,24 @@
 # Notes de version MLCFlux multi
 
+
+## MLCFlux bêta v1.0.7 multi — juin 2026
+
+Version orientée qualité des données et exploitation client.
+
+### Résumé
+
+Cette version ajoute l’analyse sectorielle en double lecture — catégories internes MLC et nomenclature NAF — et améliore les fiches professionnelles avec un enrichissement SIRET / NAF activable. Elle corrige aussi le ticket T-00007 : les changements de catégories professionnelles effectués dans Cyclos sont désormais récupérés automatiquement par la synchronisation quotidienne.
+
+### Principales évolutions
+
+- Ajout du switch d’analyse sectorielle : Interne / NAF agrégé / NAF précis.
+- Ajout d’un registre économique professionnel exploitable par API.
+- Ajout de l’affichage enrichi SIRET / SIREN / NAF dans les fiches professionnelles.
+- Synchronisation automatique des profils professionnels Cyclos dans la sync quotidienne.
+- Historisation locale des changements détectés sur les profils professionnels.
+- Correction du ticket T-00007 : les catégories modifiées dans Cyclos sont répercutées dans l’analyse sectorielle.
+- Compactage de la lecture de l’analyse sectorielle et amélioration du switch visuel.
+
 Ce fichier suit les versions publiées de MLCFlux à partir de la mise en place du versionnage formalisé.
 
 ## v1.0.6 — 20/06/2026

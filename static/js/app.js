@@ -1,10 +1,10 @@
 /* VERSION_106_MLCFLUX_MULTI */
 window.MLCFLUX_VERSION = {
-  number: "v1.0.6",
-  label: "MLCFlux bêta v1.0.6 multi — juin 2026",
-  meta: "MLCFlux beta v1.0.6 multi - juin 2026"
+  number: "v1.0.7",
+  label: "MLCFlux bêta v1.0.7 multi — juin 2026",
+  meta: "MLCFlux beta v1.0.7 multi - juin 2026"
 };
-document.documentElement.setAttribute("data-mlcflux-version", "v1.0.6");
+document.documentElement.setAttribute("data-mlcflux-version", "v1.0.7");
 
 
 /* VERSION_UI001_RELEASE_NOTES_MODAL */
