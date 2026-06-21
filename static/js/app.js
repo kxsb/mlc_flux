@@ -844,6 +844,8 @@ const appState = {
 
   network: {
     minEdgeWeight: 500,
+    thresholdScale: [],
+    thresholdIndex: 0,
     includeOperators: false,
     searchTerm: "",
     cy: null,
@@ -2555,6 +2557,463 @@ async function renderCartographyView(forceReload = false) {
 }
 
 
+
+function ensureNetworkConstellationStyles() {
+  if (document.getElementById("networkConstellationStyles")) {
+    return;
+  }
+
+  const style = document.createElement("style");
+  style.id = "networkConstellationStyles";
+  style.textContent = `
+    .network-graph-shell {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .network-constellation-layer {
+      display: none;
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .network-graph-shell #networkGraph,
+    .network-graph-shell .network-floating-label {
+      position: relative;
+      z-index: 1;
+    }
+
+    body.dark-mode .network-atlas-hero,
+    body.dark-mode .network-atlas-workbench {
+      border-color: rgba(148, 163, 184, 0.22);
+      background:
+        radial-gradient(circle at 18% 12%, rgba(249, 115, 22, 0.12), transparent 28%),
+        radial-gradient(circle at 82% 10%, rgba(96, 165, 250, 0.10), transparent 30%),
+        linear-gradient(145deg, rgba(15, 23, 42, 0.98), rgba(2, 6, 23, 0.96));
+    }
+
+    body.dark-mode .network-graph-shell {
+      background:
+        radial-gradient(circle at 50% 42%, rgba(59, 130, 246, 0.14), transparent 38%),
+        radial-gradient(circle at 12% 18%, rgba(251, 191, 36, 0.12), transparent 24%),
+        radial-gradient(circle at 86% 82%, rgba(249, 115, 22, 0.10), transparent 24%),
+        linear-gradient(180deg, #020617 0%, #0f172a 100%);
+      box-shadow:
+        inset 0 0 0 1px rgba(148, 163, 184, 0.15),
+        inset 0 0 90px rgba(15, 23, 42, 0.94),
+        0 22px 70px rgba(2, 6, 23, 0.38);
+    }
+
+    body.dark-mode .network-constellation-layer {
+      display: block;
+      opacity: 0.95;
+      background-image:
+        radial-gradient(circle, rgba(248, 250, 252, 0.92) 0 1px, transparent 1.6px),
+        radial-gradient(circle, rgba(251, 191, 36, 0.72) 0 1px, transparent 1.8px),
+        radial-gradient(circle, rgba(96, 165, 250, 0.54) 0 1px, transparent 1.7px);
+      background-size: 88px 88px, 132px 132px, 184px 184px;
+      background-position: 8px 14px, 48px 60px, 110px 24px;
+      filter: drop-shadow(0 0 6px rgba(248, 250, 252, 0.22));
+    }
+
+    body.dark-mode .network-constellation-layer::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(110deg, transparent 0 18%, rgba(148, 163, 184, 0.09) 18.2% 18.6%, transparent 18.8% 100%),
+        linear-gradient(36deg, transparent 0 58%, rgba(251, 191, 36, 0.08) 58.2% 58.55%, transparent 58.7% 100%),
+        linear-gradient(153deg, transparent 0 38%, rgba(96, 165, 250, 0.075) 38.2% 38.55%, transparent 38.7% 100%);
+      opacity: 0.65;
+    }
+
+    body.dark-mode .network-floating-label {
+      border-color: rgba(251, 191, 36, 0.40);
+      background: rgba(15, 23, 42, 0.92);
+      color: #f8fafc;
+      box-shadow: 0 14px 36px rgba(2, 6, 23, 0.42), 0 0 24px rgba(251, 191, 36, 0.14);
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function getNetworkGraphThemePalette() {
+  const isDark = document.body.classList.contains("dark-mode");
+
+  if (isDark) {
+    return {
+      nodeStart: "#fef3c7",
+      nodeEnd: "#f97316",
+      nodeBorder: "rgba(255, 247, 237, 0.86)",
+      edge: "rgba(148, 163, 184, 0.42)",
+      highlighted: "#fbbf24",
+      selectedNode: "#f8fafc",
+      searchMatch: "#38bdf8"
+    };
+  }
+
+  return {
+    nodeStart: "#bfdbfe",
+    nodeEnd: "#1d4ed8",
+    nodeBorder: "#eff6ff",
+    edge: "#94a3b8",
+    highlighted: "#f97316",
+    selectedNode: "#0f172a",
+    searchMatch: "#eab308"
+  };
+}
+
+function buildNetworkCytoscapeStyles() {
+  const palette = getNetworkGraphThemePalette();
+
+  return [
+    {
+      selector: "node",
+      style: {
+        "label": "",
+        "background-color": `mapData(volume, 0, 60000, ${palette.nodeStart}, ${palette.nodeEnd})`,
+        "width": "mapData(volume, 0, 60000, 18, 68)",
+        "height": "mapData(volume, 0, 60000, 18, 68)",
+        "border-width": 3,
+        "border-color": palette.nodeBorder,
+        "overlay-padding": 12,
+        "overlay-opacity": 0,
+        "z-index": 10
+      }
+    },
+    {
+      selector: "edge",
+      style: {
+        "width": "mapData(weight, 0, 60000, 1.1, 8)",
+        "line-color": palette.edge,
+        "target-arrow-color": palette.edge,
+        "target-arrow-shape": "triangle",
+        "arrow-scale": 0.72,
+        "curve-style": "bezier",
+        "control-point-step-size": 28,
+        "opacity": 0.34
+      }
+    },
+    {
+      selector: ".faded",
+      style: {
+        "opacity": 0.045
+      }
+    },
+    {
+      selector: ".highlighted",
+      style: {
+        "line-color": palette.highlighted,
+        "target-arrow-color": palette.highlighted,
+        "opacity": 0.98,
+        "z-index": 30
+      }
+    },
+    {
+      selector: ".selected-node",
+      style: {
+        "background-color": palette.selectedNode,
+        "border-color": palette.highlighted,
+        "border-width": 5
+      }
+    },
+    {
+      selector: ".search-match",
+      style: {
+        "border-color": palette.searchMatch,
+        "border-width": 5
+      }
+    }
+  ];
+}
+
+function refreshNetworkGraphTheme() {
+  const cy = appState.network.cy;
+
+  if (!cy || typeof cy.style !== "function") {
+    return;
+  }
+
+  cy.style()
+    .fromJson(buildNetworkCytoscapeStyles())
+    .update();
+
+  updateNetworkFloatingLabel();
+}
+
+
+function ensureNetworkCompactStyles() {
+  if (document.getElementById("networkCompactStyles")) {
+    return;
+  }
+
+  const style = document.createElement("style");
+  style.id = "networkCompactStyles";
+  style.textContent = `
+    .network-atlas-compact {
+      padding: clamp(14px, 1.6vw, 20px);
+    }
+
+    .network-compact-header {
+      display: grid;
+      grid-template-columns: minmax(280px, 1fr) minmax(480px, 1.15fr);
+      gap: 14px;
+      align-items: start;
+    }
+
+    .network-compact-title .stat-label {
+      margin-bottom: 4px;
+    }
+
+    .network-compact-title h2 {
+      margin: 0 0 6px;
+      font-size: clamp(1.2rem, 1.9vw, 1.75rem);
+      line-height: 1.08;
+    }
+
+    .network-compact-title p {
+      margin: 0;
+      max-width: 720px;
+      color: var(--muted-text, #64748b);
+      font-size: 0.92rem;
+      line-height: 1.38;
+    }
+
+    .network-atlas-compact .network-atlas-kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .network-atlas-compact .network-atlas-kpi {
+      padding: 9px 11px;
+      min-height: 0;
+      border-radius: 16px;
+    }
+
+    .network-atlas-compact .network-atlas-kpi span {
+      font-size: 0.72rem;
+      line-height: 1.1;
+      opacity: 0.86;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
+    .network-atlas-compact .network-atlas-kpi strong {
+      margin-top: 4px;
+      font-size: clamp(0.98rem, 1.45vw, 1.24rem);
+      line-height: 1.02;
+    }
+
+    .network-atlas-compact .network-atlas-kpi small {
+      display: none;
+    }
+
+    .network-switch-row {
+      display: flex;
+      justify-content: flex-start;
+      margin-top: 10px;
+      margin-bottom: 10px;
+    }
+
+    .network-switch {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: 16px;
+      border: 1px solid rgba(249, 115, 22, 0.28);
+      background: linear-gradient(135deg, rgba(249, 115, 22, 0.10), rgba(15, 23, 42, 0.20));
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .network-switch input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .network-switch-control {
+      position: relative;
+      width: 46px;
+      height: 26px;
+      border-radius: 999px;
+      background: rgba(100, 116, 139, 0.45);
+      box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.22);
+      transition: background 0.2s ease;
+      flex: 0 0 auto;
+    }
+
+    .network-switch-control::after {
+      content: "";
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #ffffff;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.24);
+      transition: transform 0.2s ease;
+    }
+
+    .network-switch input:checked + .network-switch-control {
+      background: linear-gradient(90deg, #2563eb, #f97316);
+    }
+
+    .network-switch input:checked + .network-switch-control::after {
+      transform: translateX(20px);
+    }
+
+    .network-switch-copy {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .network-switch-copy strong {
+      font-size: 0.95rem;
+      line-height: 1.2;
+    }
+
+    .network-switch-copy small {
+      font-size: 0.8rem;
+      line-height: 1.25;
+      opacity: 0.78;
+    }
+
+    .network-compact-toolbar {
+      display: grid;
+      grid-template-columns: minmax(320px, 1.3fr) minmax(260px, 0.75fr);
+      gap: 12px;
+      align-items: end;
+      margin-top: 0;
+      margin-bottom: 10px;
+    }
+
+    .network-compact-toolbar .network-search-box input {
+      min-height: 40px;
+    }
+
+    .network-compact-toolbar .network-slider-group label {
+      font-size: 0.88rem;
+      line-height: 1.2;
+    }
+
+    .network-compact-toolbar .network-slider-group small {
+      display: none;
+    }
+
+    .network-compact-legend {
+      margin: 8px 0 8px;
+      padding: 0;
+      gap: 10px;
+      font-size: 0.82rem;
+      background: transparent;
+      border: 0;
+      box-shadow: none;
+    }
+
+    .network-atlas-compact .network-atlas-layout {
+      margin-top: 6px;
+    }
+
+    .network-atlas-compact .network-graph-shell {
+      min-height: min(64vh, 660px);
+      position: relative;
+      overflow: hidden;
+      border-radius: 18px;
+    }
+
+    .network-map-controls {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      z-index: 3;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .network-map-controls .secondary-btn {
+      min-height: 34px;
+      padding: 0 12px;
+      font-size: 0.82rem;
+      border-radius: 999px;
+      backdrop-filter: blur(6px);
+      background: rgba(255, 255, 255, 0.92);
+      color: #0f172a;
+      border: 1px solid rgba(148, 163, 184, 0.34);
+      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.10);
+    }
+
+    .network-map-controls .secondary-btn:hover {
+      background: #ffffff;
+      border-color: rgba(249, 115, 22, 0.42);
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+    }
+
+    body.dark-mode .network-map-controls .secondary-btn {
+      background: rgba(15, 23, 42, 0.72);
+      color: #f8fafc;
+      border-color: rgba(148, 163, 184, 0.22);
+      box-shadow: 0 10px 28px rgba(2, 6, 23, 0.32);
+    }
+
+    body.dark-mode .network-map-controls .secondary-btn:hover {
+      background: rgba(30, 41, 59, 0.88);
+      border-color: rgba(251, 191, 36, 0.38);
+    }
+
+    .network-atlas-compact .network-sidepanel {
+      min-width: 260px;
+    }
+
+    @media (max-width: 1180px) {
+      .network-compact-header {
+        grid-template-columns: 1fr;
+      }
+
+      .network-atlas-compact .network-atlas-kpi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 900px) {
+      .network-compact-toolbar {
+        grid-template-columns: 1fr;
+      }
+
+      .network-map-controls {
+        top: 10px;
+        right: 10px;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .network-atlas-compact .network-atlas-kpi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .network-switch {
+        width: 100%;
+      }
+
+      .network-map-controls {
+        position: static;
+        margin: 8px 8px 0 auto;
+        justify-content: flex-end;
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+
 function buildNetworkApiUrl() {
   const periodQuery = getPeriodQueryParam();
   const includeOperators = Boolean(appState.network.includeOperators);
@@ -2567,15 +3026,14 @@ function buildNetworkApiUrl() {
   return `/api/network${periodQuery}${connector}include_operators=1`;
 }
 
-
 function buildProfessionalNetworkPanelLoadingHtml() {
   return `
     <section class="card professional-analysis-roadmap-card">
       <div class="professional-analysis-section-heading">
-        <div class="stat-label">Réseau interprofessionnel</div>
-        <h3>Chargement de l’atlas relationnel…</h3>
+        <div class="stat-label">Constellations interpro</div>
+        <h3>Chargement de la cartographie…</h3>
         <p>
-          Les relations P→P sont recalculées pour la période et le périmètre actuellement sélectionnés.
+          Les relations P→P sont recalculées pour la période et le périmètre sélectionnés.
         </p>
       </div>
     </section>
@@ -2586,8 +3044,8 @@ function buildProfessionalNetworkPanelErrorHtml() {
   return `
     <section class="card professional-analysis-roadmap-card">
       <div class="professional-analysis-section-heading">
-        <div class="stat-label">Réseau interprofessionnel</div>
-        <h3>Le graphe relationnel n’est pas disponible</h3>
+        <div class="stat-label">Constellations interpro</div>
+        <h3>La cartographie relationnelle n’est pas disponible</h3>
         <p>
           Les données réseau n’ont pas pu être chargées pour cette période.
           Les autres onglets restent utilisables.
@@ -2597,75 +3055,440 @@ function buildProfessionalNetworkPanelErrorHtml() {
   `;
 }
 
+
+function ensureNetworkZoomInDelegate() {
+  if (window.__mlcfluxNetworkZoomInDelegateInstalled) {
+    return;
+  }
+
+  window.__mlcfluxNetworkZoomInDelegateInstalled = true;
+
+  document.addEventListener("click", (event) => {
+    const target = event.target;
+    const button = target && target.closest
+      ? target.closest("#networkZoomInBtn")
+      : null;
+
+    if (!button) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (typeof event.stopImmediatePropagation === "function") {
+      event.stopImmediatePropagation();
+    }
+
+    const cy = appState && appState.network
+      ? appState.network.cy
+      : null;
+
+    if (!cy || typeof cy.zoom !== "function") {
+      return;
+    }
+
+    try {
+      if (typeof cy.maxZoom === "function" && Number(cy.maxZoom()) < 8) {
+        cy.maxZoom(8);
+      }
+    } catch (_error) {
+      // Fallback silencieux : certains builds Cytoscape peuvent ne pas exposer le setter.
+    }
+
+    const currentZoom = Number(cy.zoom()) || 1;
+
+    let maxZoom = 8;
+    try {
+      if (typeof cy.maxZoom === "function") {
+        maxZoom = Number(cy.maxZoom()) || 8;
+      }
+    } catch (_error) {
+      maxZoom = 8;
+    }
+
+    const nextZoom = Math.min(maxZoom, currentZoom * 1.25);
+
+    cy.zoom({
+      level: nextZoom,
+      renderedPosition: {
+        x: cy.width() / 2,
+        y: cy.height() / 2
+      }
+    });
+  }, true);
+}
+
+
+function ensureNetworkCosmosStyles() {
+  if (document.getElementById("networkCosmosStyles")) {
+    return;
+  }
+
+  const style = document.createElement("style");
+  style.id = "networkCosmosStyles";
+  style.textContent = `
+    .network-cosmos-video {
+      display: block;
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      min-width: 100%;
+      min-height: 100%;
+      object-fit: cover;
+      object-position: center center;
+      z-index: 0;
+      opacity: 0;
+      visibility: hidden;
+      filter: saturate(1.08) contrast(1.08) brightness(0.64);
+      transition: opacity 0.8s ease;
+      pointer-events: none;
+      transform: translateZ(0);
+      backface-visibility: hidden;
+      will-change: opacity;
+      contain: strict;
+    }
+
+    body.dark-mode .network-cosmos-active .network-cosmos-video {
+      opacity: 0.42;
+      visibility: visible;
+    }
+
+    body.dark-mode .network-cosmos-active .network-constellation-layer {
+      opacity: 0.42;
+      mix-blend-mode: screen;
+    }
+
+    body.dark-mode .network-cosmos-active #networkGraph {
+      pointer-events: none;
+    }
+
+
+    body.dark-mode .network-cosmos-active #networkGraph {
+      mix-blend-mode: screen;
+    }
+
+
+    .network-graph-shell {
+      isolation: isolate;
+      contain: layout paint;
+    }
+
+    .network-graph-shell #networkGraph {
+      position: relative;
+      z-index: 1;
+      min-height: inherit;
+      transform: translateZ(0);
+    }
+
+    .network-floating-label {
+      z-index: 4;
+      transform: translateZ(0);
+    }
+
+    .network-cosmos-play {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 34px;
+      padding: 0 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(251, 191, 36, 0.55);
+      background: linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(249, 115, 22, 0.72));
+      color: #fff7ed;
+      font-weight: 800;
+      letter-spacing: 0.01em;
+      cursor: pointer;
+      box-shadow: 0 10px 30px rgba(249, 115, 22, 0.22);
+      animation: network-cosmos-pulse 1.2s ease-in-out infinite;
+    }
+
+    .network-cosmos-play.hidden {
+      display: none;
+    }
+
+    @keyframes network-cosmos-pulse {
+      0%, 100% {
+        transform: translateY(0);
+        box-shadow: 0 10px 30px rgba(249, 115, 22, 0.18);
+      }
+      50% {
+        transform: translateY(-1px);
+        box-shadow: 0 14px 38px rgba(251, 191, 36, 0.30);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .network-cosmos-play {
+        animation: none;
+      }
+
+      .network-cosmos-video {
+        transition: none;
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+function ensureNetworkCosmosEasterEgg() {
+  if (window.__mlcfluxNetworkCosmosEasterEggInstalled) {
+    return;
+  }
+
+  window.__mlcfluxNetworkCosmosEasterEggInstalled = true;
+  window.__mlcfluxNetworkCosmosRecenterClicks = [];
+  window.__mlcfluxNetworkCosmosPlayTimeout = null;
+  window.__mlcfluxNetworkCosmosReverseFrame = null;
+  window.__mlcfluxNetworkCosmosLastTick = null;
+
+  const isDarkMode = () => document.body.classList.contains("dark-mode");
+
+  const hidePlayButton = () => {
+    const playButton = document.getElementById("networkCosmosPlayBtn");
+    if (playButton) {
+      playButton.classList.add("hidden");
+    }
+  };
+
+  const showPlayButton = () => {
+    const playButton = document.getElementById("networkCosmosPlayBtn");
+
+    if (!playButton || !isDarkMode()) {
+      return;
+    }
+
+    playButton.classList.remove("hidden");
+
+    if (window.__mlcfluxNetworkCosmosPlayTimeout) {
+      clearTimeout(window.__mlcfluxNetworkCosmosPlayTimeout);
+    }
+
+    window.__mlcfluxNetworkCosmosPlayTimeout = setTimeout(() => {
+      hidePlayButton();
+    }, 3000);
+  };
+
+  const syncCosmosFrameWithThreshold = () => {
+    const shell = document.querySelector(".network-graph-shell");
+    const video = document.getElementById("networkCosmosVideo");
+
+    if (!shell || !video) {
+      return;
+    }
+
+    if (!shell.classList.contains("network-cosmos-active")) {
+      return;
+    }
+
+    if (!Number.isFinite(video.duration) || video.duration <= 0) {
+      return;
+    }
+
+    const progress = Math.max(0, Math.min(1, getNetworkThresholdProgress()));
+
+    const targetTime = Math.max(
+      0,
+      Math.min(video.duration - 0.05, progress * video.duration)
+    );
+
+    try {
+      video.currentTime = targetTime;
+    } catch (_error) {
+      // Certains navigateurs peuvent refuser le seek avant initialisation complète.
+    }
+  };
+
+  const activateCosmos = () => {
+    if (!isDarkMode()) {
+      return;
+    }
+
+    const shell = document.querySelector(".network-graph-shell");
+    const video = document.getElementById("networkCosmosVideo");
+
+    if (!shell || !video) {
+      return;
+    }
+
+    if (!video.getAttribute("src")) {
+      video.setAttribute("src", "/static/media/constellations/cosmos-traveling-reversed.mp4");
+      video.load();
+    }
+
+    shell.classList.add("network-cosmos-active");
+    hidePlayButton();
+
+    const reducedMotion = window.matchMedia
+      ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      : false;
+
+    const start = () => {
+      syncCosmosFrameWithThreshold();
+
+      if (!reducedMotion && typeof video.play === "function") {
+        const playPromise = video.play();
+
+        if (playPromise && typeof playPromise.catch === "function") {
+          playPromise.catch(() => {
+            // La vidéo reste visible même si le navigateur bloque play().
+          });
+        }
+      }
+    };
+
+    if (Number.isFinite(video.duration) && video.duration > 0) {
+      start();
+    } else {
+      video.addEventListener("loadedmetadata", start, { once: true });
+    }
+  };
+
+  document.addEventListener("click", (event) => {
+    const target = event.target;
+    const recenterButton = target && target.closest
+      ? target.closest("#networkFitBtn")
+      : null;
+
+    if (recenterButton && isDarkMode()) {
+      const now = Date.now();
+      window.__mlcfluxNetworkCosmosRecenterClicks = (
+        window.__mlcfluxNetworkCosmosRecenterClicks || []
+      ).filter((timestamp) => now - timestamp <= 1200);
+
+      window.__mlcfluxNetworkCosmosRecenterClicks.push(now);
+
+      if (window.__mlcfluxNetworkCosmosRecenterClicks.length >= 3) {
+        window.__mlcfluxNetworkCosmosRecenterClicks = [];
+        showPlayButton();
+      }
+    }
+
+    const playButton = target && target.closest
+      ? target.closest("#networkCosmosPlayBtn")
+      : null;
+
+    if (playButton) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (typeof event.stopImmediatePropagation === "function") {
+        event.stopImmediatePropagation();
+      }
+
+      activateCosmos();
+    }
+  }, true);
+
+  document.addEventListener("input", (event) => {
+    if (event.target && event.target.id === "networkThreshold") {
+      syncCosmosFrameWithThreshold();
+    }
+  }, true);
+
+  if (window.MutationObserver) {
+    const observer = new MutationObserver(() => {
+      if (!isDarkMode()) {
+        const shell = document.querySelector(".network-graph-shell");
+        const video = document.getElementById("networkCosmosVideo");
+
+        hidePlayButton();
+
+        if (shell) {
+          shell.classList.remove("network-cosmos-active");
+        }
+
+        if (video && typeof video.pause === "function") {
+          video.pause();
+        }
+      }
+    });
+
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ["class"]
+    });
+  }
+}
+
+
 function buildProfessionalNetworkPanelHtml() {
+  if (typeof ensureNetworkConstellationStyles === "function") {
+    ensureNetworkConstellationStyles();
+  }
+  ensureNetworkCompactStyles();
+  ensureNetworkCosmosStyles();
+  ensureNetworkCosmosEasterEgg();
+  ensureNetworkZoomInDelegate();
+
   return `
-    <section class="card network-atlas-hero">
-      <div class="network-atlas-hero-main">
-        <div class="stat-label">Réseau interprofessionnel · flux P→P</div>
-        <h2>Atlas relationnel de la circulation entre professionnels</h2>
-        <p>
-          Ce graphe représente les relations monétaires <strong>professionnel → professionnel</strong>
-          observées sur la période sélectionnée. Chaque nœud correspond à un professionnel relié
-          au moins une fois à un autre professionnel ; chaque lien cumule le volume des paiements
-          orientés entre deux acteurs.
-        </p>
-
-        <div class="network-atlas-method-note">
-          <strong>Périmètre actuel.</strong>
-          Cette première lecture porte sur le cœur <strong>P→P</strong> du réseau.
-          Les comptes association / opérateurs sont
-          <strong>exclus par défaut</strong> afin de ne pas confondre l’infrastructure associative
-          avec le tissu d’échanges interprofessionnels. Ils peuvent être réintégrés via l’option
-          d’exploration ci-dessous.
-        </div>
-      </div>
-
-      <div class="network-atlas-kpi-grid">
-        <article class="network-atlas-kpi">
-          <span>Acteurs visibles</span>
-          <strong id="networkVisibleNodeCount">—</strong>
-          <small>Professionnels conservés après seuil.</small>
-        </article>
-
-        <article class="network-atlas-kpi">
-          <span>Relations visibles</span>
-          <strong id="networkVisibleEdgeCount">—</strong>
-          <small>Liens P→P au-dessus du seuil.</small>
-        </article>
-
-        <article class="network-atlas-kpi">
-          <span>Volume relationnel visible</span>
-          <strong id="networkVisibleVolume">—</strong>
-          <small>Somme des liens actuellement affichés.</small>
-        </article>
-
-        <article class="network-atlas-kpi">
-          <span>Seuil de relation</span>
-          <strong id="networkVisibleThreshold">—</strong>
-          <small>Filtre appliqué au volume cumulé.</small>
-        </article>
-      </div>
-    </section>
-
-    <section class="card network-atlas-workbench">
-      <div class="network-atlas-workbench-header">
-        <div>
-          <div class="stat-label">Exploration navigable</div>
-          <h3>Filtrer, chercher, isoler un voisinage</h3>
+    <section class="card network-atlas-workbench network-atlas-compact">
+      <div class="network-compact-header">
+        <div class="network-compact-title">
+          <div class="stat-label">Constellations interpro · flux P→P</div>
+          <h2>Cartographie des relations entre professionnels</h2>
           <p>
-            Ajuste le seuil pour faire émerger les relations structurantes, recherche un acteur,
-            puis clique sur un nœud pour isoler son voisinage visible et lire ses flux entrants
-            et sortants.
+            Flux cumulés entre professionnels sur la période sélectionnée.
+            Les comptes opérateurs sont exclus par défaut.
           </p>
         </div>
+
+        <div class="network-atlas-kpi-grid network-compact-kpis">
+          <article class="network-atlas-kpi">
+            <span>Acteurs</span>
+            <strong id="networkVisibleNodeCount">—</strong>
+            <small>Acteurs visibles</small>
+          </article>
+
+          <article class="network-atlas-kpi">
+            <span>Relations</span>
+            <strong id="networkVisibleEdgeCount">—</strong>
+            <small>Relations visibles</small>
+          </article>
+
+          <article class="network-atlas-kpi">
+            <span>Volume</span>
+            <strong id="networkVisibleVolume">—</strong>
+            <small>Volume visible</small>
+          </article>
+
+          <article class="network-atlas-kpi">
+            <span>Seuil</span>
+            <strong id="networkVisibleThreshold">—</strong>
+            <small>Seuil appliqué</small>
+          </article>
+        </div>
       </div>
 
-      <div class="network-toolbar network-atlas-toolbar">
+      <div class="network-switch-row">
+        <label class="network-switch" for="networkIncludeOperators">
+          <input
+            id="networkIncludeOperators"
+            type="checkbox"
+            ${appState.network.includeOperators ? "checked" : ""}
+          />
+          <span class="network-switch-control" aria-hidden="true"></span>
+          <span class="network-switch-copy">
+            <strong>Inclure les comptes techniques / associatifs</strong>
+            <small>Afficher aussi les comptes d’infrastructure et de support.</small>
+          </span>
+        </label>
+        <button
+          id="networkCosmosPlayBtn"
+          class="network-cosmos-play hidden"
+          type="button"
+          title="Activer le fond cosmique"
+        >Play</button>
+      </div>
+
+      <div class="network-toolbar network-atlas-toolbar network-compact-toolbar">
         <div class="network-search-box">
           <input
             id="networkSearch"
             type="text"
-            placeholder="Rechercher un professionnel : P0512, Biocoop, Melting..."
+            placeholder="Rechercher : P0512, Biocoop, Melting..."
             value="${escapeHtml(appState.network.searchTerm)}"
           />
           <div id="networkSearchPreview" class="network-search-preview hidden"></div>
@@ -2673,7 +3496,7 @@ function buildProfessionalNetworkPanelHtml() {
 
         <div class="network-slider-group">
           <label for="networkThreshold">
-            Seuil minimal des relations :
+            Seuil minimal :
             <strong id="networkThresholdValue">${appState.network.minEdgeWeight} €</strong>
           </label>
           <input
@@ -2684,39 +3507,32 @@ function buildProfessionalNetworkPanelHtml() {
             step="100"
             value="${appState.network.minEdgeWeight}"
           />
-          <small>Les liens dont le volume cumulé est inférieur au seuil sont masqués.</small>
-        </div>
-
-        <div class="network-actions">
-          <button id="networkFitBtn" class="secondary-btn" type="button">Recentrer</button>
-          <button id="networkZoomInBtn" class="secondary-btn" type="button">Zoom +</button>
-          <button id="networkZoomOutBtn" class="secondary-btn" type="button">Zoom -</button>
+          <small>Les liens inférieurs au seuil sont masqués.</small>
         </div>
       </div>
 
-      <label class="network-operator-toggle" for="networkIncludeOperators">
-        <input
-          id="networkIncludeOperators"
-          type="checkbox"
-          ${appState.network.includeOperators ? "checked" : ""}
-        />
-        <span>
-          <strong>Inclure les comptes association / opérateurs</strong>
-          <small>
-            Désactivé par défaut pour lire le réseau interprofessionnel hors comptes associatifs, opérateurs ou d’infrastructure.
-          </small>
-        </span>
-      </label>
-
-      <div class="network-atlas-legend">
-        <span><span class="legend-dot legend-dot-blue"></span> Taille du nœud : volume relationnel cumulé</span>
+      <div class="network-atlas-legend network-compact-legend">
+        <span><span class="legend-dot legend-dot-blue"></span> Taille : volume cumulé</span>
         <span><span class="legend-dot legend-dot-dark"></span> Acteur sélectionné</span>
-        <span><span class="legend-line legend-line-red"></span> Relations du voisinage isolé</span>
+        <span><span class="legend-line legend-line-red"></span> Voisinage isolé</span>
       </div>
 
       <div class="network-layout network-atlas-layout">
         <div class="network-main network-atlas-main">
           <div class="network-graph-shell">
+            <video
+              id="networkCosmosVideo"
+              class="network-cosmos-video"
+              muted
+              playsinline
+              preload="metadata"
+            ></video>
+            <div class="network-map-controls">
+              <button id="networkFitBtn" class="secondary-btn" type="button">Recentrer</button>
+              <button id="networkZoomInBtn" class="secondary-btn" type="button">Zoom +</button>
+              <button id="networkZoomOutBtn" class="secondary-btn" type="button">Zoom -</button>
+            </div>
+            <div class="network-constellation-layer" aria-hidden="true"></div>
             <div id="networkGraph"></div>
             <div id="networkFloatingLabel" class="network-floating-label hidden"></div>
           </div>
@@ -2725,10 +3541,7 @@ function buildProfessionalNetworkPanelHtml() {
         <aside id="networkSidePanel" class="network-sidepanel">
           <div class="network-sidepanel-empty">
             <strong>Sélectionner un professionnel</strong>
-            <span>
-              Clique sur un nœud pour isoler son voisinage visible, lire son volume relationnel
-              et ouvrir sa fiche détaillée.
-            </span>
+            <span>Clique sur un nœud pour isoler son voisinage et ouvrir sa fiche détaillée.</span>
           </div>
         </aside>
       </div>
@@ -2791,16 +3604,18 @@ async function renderProfessionalNetworkPanel(forceReload = false) {
     const data = await apiGet(buildNetworkApiUrl());
     appState.network.rawData = data;
     appState.network.enrichedData = enrichNetworkData(data);
+    initializeNetworkThresholdScale(appState.network.enrichedData);
 
     panel.innerHTML = buildProfessionalNetworkPanelHtml();
     panel.dataset.professionalNetworkHydrated = "true";
 
+    configureNetworkThresholdControl();
     renderNetworkGraph(data);
     bindNetworkControls();
     updateNetworkOverviewMetrics();
   } catch (error) {
     console.warn(
-      "Réseau interprofessionnel indisponible dans la vue Professionnels & particuliers.",
+      "Constellations interpro indisponibles dans la vue Professionnels & particuliers.",
       error
     );
 
@@ -2963,8 +3778,8 @@ function bindNetworkControls() {
 
   if (thresholdInput) {
     thresholdInput.addEventListener("input", (e) => {
-      appState.network.minEdgeWeight = Number(e.target.value || 0);
-      thresholdValue.textContent = `${appState.network.minEdgeWeight} €`;
+      appState.network.minEdgeWeight = getNetworkThresholdFromControl(e.target);
+      updateNetworkThresholdControlLabel();
       updateNetworkGraphVisibility();
     });
   }
@@ -3027,6 +3842,170 @@ function enrichNetworkData(data) {
 
   return data;
 }
+
+
+function buildNetworkThresholdScale(data, maxSteps = 600) {
+  const edges = Array.isArray(data?.edges) ? data.edges : [];
+
+  const uniqueWeights = Array.from(new Set(
+    edges
+      .map(edge => Math.round(Number(edge?.data?.weight || 0) * 100) / 100)
+      .filter(value => Number.isFinite(value) && value > 0)
+  )).sort((a, b) => a - b);
+
+  if (!uniqueWeights.length) {
+    return [0];
+  }
+
+  const scale = [0];
+
+  if (uniqueWeights.length <= maxSteps) {
+    scale.push(...uniqueWeights);
+  } else {
+    for (let i = 0; i < maxSteps; i += 1) {
+      const ratio = maxSteps <= 1 ? 0 : i / (maxSteps - 1);
+
+      // Léger biais vers les faibles seuils, où le réseau change souvent le plus.
+      const shapedRatio = Math.pow(ratio, 1.12);
+      const index = Math.max(
+        0,
+        Math.min(uniqueWeights.length - 1, Math.round(shapedRatio * (uniqueWeights.length - 1)))
+      );
+
+      scale.push(uniqueWeights[index]);
+    }
+  }
+
+  return Array.from(new Set(scale)).sort((a, b) => a - b);
+}
+
+function getClosestNetworkThresholdIndex(scale, threshold) {
+  if (!Array.isArray(scale) || !scale.length) {
+    return 0;
+  }
+
+  const value = Math.max(0, Number(threshold) || 0);
+
+  let bestIndex = 0;
+  let bestDistance = Infinity;
+
+  scale.forEach((candidate, index) => {
+    const distance = Math.abs(Number(candidate || 0) - value);
+
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index;
+    }
+  });
+
+  return bestIndex;
+}
+
+function initializeNetworkThresholdScale(data) {
+  const previousThreshold = Number(appState.network.minEdgeWeight || 0);
+  const scale = buildNetworkThresholdScale(data);
+
+  const index = getClosestNetworkThresholdIndex(scale, previousThreshold);
+  const threshold = Number(scale[index] || 0);
+
+  appState.network.thresholdScale = scale;
+  appState.network.thresholdIndex = index;
+  appState.network.minEdgeWeight = threshold;
+}
+
+function formatNetworkThresholdLabel(value, index = appState.network.thresholdIndex) {
+  const scale = Array.isArray(appState.network.thresholdScale)
+    ? appState.network.thresholdScale
+    : [];
+
+  if (!scale.length || scale.length === 1) {
+    return euro(value || 0);
+  }
+
+  return `${euro(value || 0)} · palier ${Number(index || 0) + 1}/${scale.length}`;
+}
+
+function configureNetworkThresholdControl() {
+  const input = document.getElementById("networkThreshold");
+  const label = document.getElementById("networkThresholdValue");
+
+  const scale = Array.isArray(appState.network.thresholdScale)
+    ? appState.network.thresholdScale
+    : [];
+
+  if (!input || !scale.length) {
+    return;
+  }
+
+  const index = getClosestNetworkThresholdIndex(scale, appState.network.minEdgeWeight || 0);
+  const threshold = Number(scale[index] || 0);
+
+  appState.network.thresholdIndex = index;
+  appState.network.minEdgeWeight = threshold;
+
+  input.dataset.scaleMode = "observed";
+  input.min = "0";
+  input.max = String(Math.max(0, scale.length - 1));
+  input.step = "1";
+  input.value = String(index);
+
+  if (label) {
+    label.textContent = formatNetworkThresholdLabel(threshold, index);
+  }
+}
+
+function getNetworkThresholdFromControl(input) {
+  const scale = Array.isArray(appState.network.thresholdScale)
+    ? appState.network.thresholdScale
+    : [];
+
+  if (!input || input.dataset.scaleMode !== "observed" || !scale.length) {
+    return Number(input?.value || 0);
+  }
+
+  const rawIndex = Number(input.value || 0);
+  const index = Math.max(0, Math.min(scale.length - 1, Math.round(rawIndex)));
+  const threshold = Number(scale[index] || 0);
+
+  appState.network.thresholdIndex = index;
+  return threshold;
+}
+
+function updateNetworkThresholdControlLabel() {
+  const label = document.getElementById("networkThresholdValue");
+
+  if (!label) {
+    return;
+  }
+
+  label.textContent = formatNetworkThresholdLabel(
+    appState.network.minEdgeWeight || 0,
+    appState.network.thresholdIndex || 0
+  );
+}
+
+function getNetworkThresholdProgress() {
+  const scale = Array.isArray(appState.network.thresholdScale)
+    ? appState.network.thresholdScale
+    : [];
+
+  const input = document.getElementById("networkThreshold");
+
+  if (scale.length > 1) {
+    const rawIndex = input && input.dataset.scaleMode === "observed"
+      ? Number(input.value || 0)
+      : Number(appState.network.thresholdIndex || 0);
+
+    const index = Math.max(0, Math.min(scale.length - 1, Math.round(rawIndex)));
+    return index / (scale.length - 1);
+  }
+
+  const threshold = Math.max(0, Number(appState.network.minEdgeWeight || 0));
+  const maxThreshold = input ? Math.max(1, Number(input.max) || 5000) : 5000;
+
+  return Math.log1p(threshold) / Math.log1p(maxThreshold);
+}
+
 
 function getFilteredNetworkElements(data, minWeight) {
   const filteredEdges = data.edges.filter(
@@ -3591,65 +4570,7 @@ function renderNetworkGraph(data) {
         ...enriched.nodes,
         ...enriched.edges
       ],
-      style: [
-        {
-          selector: "node",
-          style: {
-            "label": "",
-            "background-color": "mapData(volume, 0, 60000, #bfdbfe, #1d4ed8)",
-            "width": "mapData(volume, 0, 60000, 18, 68)",
-            "height": "mapData(volume, 0, 60000, 18, 68)",
-            "border-width": 3,
-            "border-color": "#eff6ff",
-            "overlay-padding": 12,
-            "overlay-opacity": 0,
-            "z-index": 10
-          }
-        },
-        {
-          selector: "edge",
-          style: {
-            "width": "mapData(weight, 0, 60000, 1.1, 8)",
-            "line-color": "#94a3b8",
-            "target-arrow-color": "#94a3b8",
-            "target-arrow-shape": "triangle",
-            "arrow-scale": 0.72,
-            "curve-style": "bezier",
-            "control-point-step-size": 28,
-            "opacity": 0.30
-          }
-        },
-        {
-          selector: ".faded",
-          style: {
-            "opacity": 0.045
-          }
-        },
-        {
-          selector: ".highlighted",
-          style: {
-            "line-color": "#f97316",
-            "target-arrow-color": "#f97316",
-            "opacity": 0.98,
-            "z-index": 30
-          }
-        },
-        {
-          selector: ".selected-node",
-          style: {
-            "background-color": "#0f172a",
-            "border-color": "#f97316",
-            "border-width": 5
-          }
-        },
-        {
-          selector: ".search-match",
-          style: {
-            "border-color": "#eab308",
-            "border-width": 5
-          }
-        }
-      ],
+      style: buildNetworkCytoscapeStyles(),
       layout: {
         name: "cose",
         animate: false,
@@ -7424,11 +8345,11 @@ const PROGRESSIVE_VIEW_SHELLS = {
     eyebrow: "Utilisateurs de la Gonette",
     heading: "La vue des communautés d’usage s’ouvre immédiatement.",
     description:
-      "Les espaces de lecture sont disponibles dès l’entrée dans la page. Les synthèses, flux, réseau interprofessionnel, cartographies de clusters et classements sont ensuite hydratés.",
+      "Les espaces de lecture sont disponibles dès l’entrée dans la page. Les synthèses, flux, constellations interpro, cartographies de clusters et classements sont ensuite hydratés.",
     sections: [
       "Vue d’ensemble U / P",
       "Circulation et multiplicateur",
-      "Réseau interprofessionnel",
+      "Constellations interpro",
       "Cartographie des clusters",
       "Classements et détails"
     ]
@@ -7593,7 +8514,7 @@ async function openViewProgressively(viewKey) {
     await runProgressiveViewHydration({
       viewKey: "pros",
       hydrate: () => renderProsView(false),
-      message: "Chargement du réseau interprofessionnel…"
+      message: "Chargement des constellations interpro…"
     });
     return;
   }
@@ -19308,9 +20229,9 @@ function getProfessionalAnalysisHeroCopy(tabName) {
       note: "Les indicateurs de réemploi et de multiplicateur portent sur les professionnels visibles et les flux observés sur la période sélectionnée."
     },
     network: {
-      eyebrow: "Réseau interprofessionnel · échanges entre professionnels",
+      eyebrow: "Constellations interpro · échanges entre professionnels",
       title: "Comment les professionnels structurent-ils la circulation interprofessionnelle ?",
-      body: "Cette vue analyse les échanges entre professionnels : qui reçoit, qui réémet, quels liens P→P se forment, et quels acteurs semblent structurer le réseau interprofessionnel sur la période sélectionnée.",
+      body: "Cette vue analyse les échanges entre professionnels : qui reçoit, qui réémet, quels liens P→P se forment, et quels acteurs semblent structurer le constellations interpro sur la période sélectionnée.",
       note: "Cet onglet présente le réseau P→P. Les particuliers ne sont pas inclus dans ce graphe ; ils restent analysés dans les autres lectures de la vue."
     },
     clusters: {
@@ -19368,7 +20289,7 @@ function buildProfessionalAnalysisShell(flowSummary = null, holdingsSummary = nu
       tabs: [
         { key: "summary", label: "Synthèse" },
         { key: "circulation", label: "Circulation & multiplicateur" },
-        { key: "network", label: "Réseau interprofessionnel" },
+        { key: "network", label: "Constellations interpro" },
         { key: "clusters", label: "Circulation des clusters" },
         { key: "structures", label: "Analyse sectorielle" },
         { key: "directory", label: "Liste & fiches" }
@@ -19420,7 +20341,7 @@ function buildProfessionalAnalysisShell(flowSummary = null, holdingsSummary = nu
     >
       <section class="card professional-analysis-roadmap-card">
         <div class="professional-analysis-section-heading">
-          <div class="stat-label">Onglet 3 · Réseau interprofessionnel</div>
+          <div class="stat-label">Onglet 3 · Constellations interpro</div>
           <h3>Explorer la structure relationnelle des échanges P→P</h3>
           <p>
             Cet onglet cartographie les relations monétaires entre professionnels :
@@ -28788,6 +29709,7 @@ function applyTheme(theme, persist = true) {
   }
 
   refreshProfessionalConsumptionMapThemeRendering();
+  refreshNetworkGraphTheme();
 }
 
 function initThemeToggle() {
