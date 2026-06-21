@@ -3532,6 +3532,8 @@ function ensureNetworkRetroRoadGame() {
     roadsLayer: null,
     roadsLayerKey: "",
     professionalPayload: null,
+    professionalIndex: new Map(),
+    reconversionParticles: [],
     assetsLoading: false,
     assetsReady: false,
     assetsError: null,
@@ -3765,6 +3767,13 @@ function ensureNetworkRetroRoadGame() {
 
         const heatRadius = Math.max(0.018, Number(professional.heat_radius) || 0.02);
         const particleRadius = Math.max(0.003, Number(professional.particle_radius) || 0.004);
+        const gravityMass = Math.max(0.08, Number(professional.gravity_mass) || Number(professional.game_score) || 0.1);
+        const displayRadiusScale = Math.max(0.8, Number(professional.display_radius_scale) || 1.0);
+        const localMultiplier = Math.max(1.0, Number(professional.local_multiplier) || 1.0);
+        const lifeMax = Math.max(10, Number(professional.life_max) || 100);
+        const lifeStart = Math.max(0, Math.min(lifeMax, Number(professional.life_start) || 50));
+        const lifeEquilibrium = Math.max(0, Math.min(lifeMax, Number(professional.life_equilibrium) || lifeStart));
+        const reconversionDisplayScale = Math.max(0, Number(professional.reconversion_display_scale) || 0);
 
         return {
           ...professional,
@@ -3776,8 +3785,29 @@ function ensureNetworkRetroRoadGame() {
           vy: (Math.random() - 0.5) * 0.004,
           heatRadius,
           particleRadius,
+          gravityMass,
+          displayRadiusScale,
+          localMultiplier,
+          life: lifeStart,
+          lifeTarget: lifeStart,
+          lifeDisplay: lifeStart,
+          lifeDeltaBuffer: 0,
+          lifeEquilibrium,
+          lifeMax,
+          lifePulse: 0,
+          lifeTickPhase: Math.random() * Math.PI * 2,
+          lifeFlowAccumulator: 0,
+          lifeLastDirection: 0,
+          lifeRandomWalk: (Math.random() - 0.5) * 6,
+          lifeFluxMemory: 0,
+          lifeLastParticleTarget: lifeStart,
+          lifeIdleSeconds: 0,
+          lifeIdlePenaltyPulse: 0,
+          lifePositiveParticleCount: 0,
+          reconversionDisplayScale,
           driftLimit: Math.max(0.006, heatRadius * 0.34),
-          jitterSeed: Math.random() * Math.PI * 2
+          jitterSeed: Math.random() * Math.PI * 2,
+          graineProgress: 0
         };
       })
       .filter((professional) =>
@@ -3789,6 +3819,12 @@ function ensureNetworkRetroRoadGame() {
         && professional.anchorY >= -0.15
         && professional.anchorY <= 1.15
       );
+
+    game.professionalIndex = new Map(
+      game.professionals.map((professional) => [String(professional.code || "").toUpperCase(), professional])
+    );
+
+    game.reconversionParticles = [];
   };
 
 
@@ -4188,6 +4224,613 @@ function ensureNetworkRetroRoadGame() {
   };
 
 
+  const pickWeightedBtbTarget = (professional) => {
+    const targets = Array.isArray(professional?.btb_reuse_targets)
+      ? professional.btb_reuse_targets
+      : [];
+
+    if (!targets.length) {
+      return null;
+    }
+
+    const total = targets.reduce((sum, target) => {
+      const weight = Number(target.weight) || 0;
+      return sum + Math.max(0, weight);
+    }, 0);
+
+    if (total <= 0) {
+      return null;
+    }
+
+    let roll = Math.random() * total;
+
+    for (const target of targets) {
+      roll -= Math.max(0, Number(target.weight) || 0);
+
+      if (roll <= 0) {
+        return String(target.to || "").toUpperCase();
+      }
+    }
+
+    return String(targets[targets.length - 1].to || "").toUpperCase();
+  };
+
+  const getClosestProfessionalCollision = (x, y) => {
+    const game = window.__mlcfluxNetworkRetroGame;
+    const professionals = Array.isArray(game.professionals) ? game.professionals : [];
+
+    let best = null;
+    let bestDistance = Infinity;
+
+    professionals.forEach((professional) => {
+      const dx = professional.x - x;
+      const dy = professional.y - y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      const collisionRadius = Math.max(0.006, professional.particleRadius * 2.8);
+
+      if (distance < collisionRadius && distance < bestDistance) {
+        best = professional;
+        bestDistance = distance;
+      }
+    });
+
+    return best;
+  };
+
+  const applyProfessionalGravity = (particle, elapsed) => {
+    const game = window.__mlcfluxNetworkRetroGame;
+    const professionals = Array.isArray(game.professionals) ? game.professionals : [];
+
+    if (!particle || !professionals.length) {
+      return;
+    }
+
+    const targetCode = particle.targetProCode;
+    const target = targetCode && game.professionalIndex
+      ? game.professionalIndex.get(String(targetCode).toUpperCase())
+      : null;
+
+    if (target) {
+      const dx = target.x - particle.x;
+      const dy = target.y - particle.y;
+      const distance = Math.max(0.0008, Math.sqrt(dx * dx + dy * dy));
+      const force = Math.min(2.1, 0.18 / distance) * elapsed;
+
+      particle.vx += (dx / distance) * force;
+      particle.vy += (dy / distance) * force;
+
+      if (distance < 0.010) {
+        particle.targetProCode = null;
+        particle.btbCooldown = 0.65;
+      }
+
+      return;
+    }
+
+    let strongest = null;
+    let strongestPull = 0;
+
+    professionals.forEach((professional) => {
+      const dx = professional.x - particle.x;
+      const dy = professional.y - particle.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      const influenceRadius = Math.max(0.035, professional.heatRadius * 3.0);
+
+      if (distance > influenceRadius || distance <= 0.0008) {
+        return;
+      }
+
+      const mass = Math.max(0.08, Number(professional.gravityMass) || Number(professional.game_score) || 0.1);
+      const normalized = 1 - (distance / influenceRadius);
+      const pull = mass * normalized * normalized;
+
+      if (pull > strongestPull) {
+        strongestPull = pull;
+        strongest = { professional, dx, dy, distance };
+      }
+    });
+
+    if (strongest) {
+      const force = Math.min(1.2, strongestPull * 0.95) * elapsed;
+
+      particle.vx += (strongest.dx / strongest.distance) * force;
+      particle.vy += (strongest.dy / strongest.distance) * force;
+    }
+  };
+
+  const launchParticleTowardBtbTarget = (particle, sourceProfessional, targetCode) => {
+    const game = window.__mlcfluxNetworkRetroGame;
+    const target = targetCode && game.professionalIndex
+      ? game.professionalIndex.get(String(targetCode).toUpperCase())
+      : null;
+
+    if (!particle || !sourceProfessional || !target) {
+      particle.targetProCode = targetCode || null;
+      particle.kind = "btb";
+      particle.btbCooldown = 0.36;
+      particle.vx *= -1.35;
+      particle.vy *= -1.35;
+      return;
+    }
+
+    const dx = target.x - sourceProfessional.x;
+    const dy = target.y - sourceProfessional.y;
+    const distance = Math.max(0.001, Math.sqrt(dx * dx + dy * dy));
+
+    const ux = dx / distance;
+    const uy = dy / distance;
+
+    const tangent = (Math.random() - 0.5) * 0.34;
+    const speed = Math.min(0.92, 0.42 + distance * 1.15 + Math.random() * 0.18);
+
+    particle.x = sourceProfessional.x + ux * 0.012;
+    particle.y = sourceProfessional.y + uy * 0.012;
+    particle.vx = ux * speed + (-uy * tangent);
+    particle.vy = uy * speed + (ux * tangent);
+
+    particle.targetProCode = targetCode;
+    particle.kind = "btb";
+    particle.btbCooldown = 0.36;
+    particle.btbTrail = 1.0;
+  };
+
+
+  const handleProfessionalCollision = (particle) => {
+    if (!particle) {
+      return;
+    }
+
+    particle.btbCooldown = Math.max(0, Number(particle.btbCooldown || 0));
+
+    if (particle.btbCooldown > 0) {
+      return;
+    }
+
+    const collision = getClosestProfessionalCollision(particle.x, particle.y);
+
+    if (!collision) {
+      return;
+    }
+
+    const targetCode = pickWeightedBtbTarget(collision);
+
+    if (targetCode && Math.random() < 0.82) {
+      awardProfessionalLife(collision, 1 * Math.max(1, Number(collision.localMultiplier) || 1));
+      launchParticleTowardBtbTarget(particle, collision, targetCode);
+    } else {
+      const dx = particle.x - collision.x;
+      const dy = particle.y - collision.y;
+      const distance = Math.max(0.001, Math.sqrt(dx * dx + dy * dy));
+      const escapeSpeed = 0.34 + Math.random() * 0.22;
+
+      particle.vx = (dx / distance) * escapeSpeed;
+      particle.vy = (dy / distance) * escapeSpeed;
+      particle.btbCooldown = 0.42;
+    }
+  };
+
+  const seedReconversionParticles = () => {
+    const game = window.__mlcfluxNetworkRetroGame;
+
+    if (game.reconversionParticles.length) {
+      return;
+    }
+
+    const professionals = Array.isArray(game.professionals)
+      ? game.professionals.filter((professional) => Number(professional.reconversion_volume || 0) > 0)
+      : [];
+
+    if (!professionals.length) {
+      return;
+    }
+
+    const maxVolume = Math.max(...professionals.map((professional) => Number(professional.reconversion_volume || 0)), 1);
+
+    professionals.forEach((professional) => {
+      const score = Math.log1p(Number(professional.reconversion_volume || 0)) / Math.log1p(maxVolume);
+      const count = Math.max(1, Math.min(8, Math.round(score * 7)));
+
+      for (let i = 0; i < count; i += 1) {
+        game.reconversionParticles.push({
+          x: professional.x + (Math.random() - 0.5) * 0.018,
+          y: professional.y + (Math.random() - 0.5) * 0.018,
+          vx: (Math.random() - 0.5) * 0.020,
+          vy: (Math.random() - 0.5) * 0.020,
+          sourceCode: professional.code,
+          intensity: Math.max(0.2, score),
+          r: 0.0035 + score * 0.005
+        });
+      }
+    });
+  };
+
+  const updateAndDrawReconversionParticles = (ctx, width, height, elapsed) => {
+    const game = window.__mlcfluxNetworkRetroGame;
+    const particles = Array.isArray(game.reconversionParticles) ? game.reconversionParticles : [];
+    const drop = game.graineDrop || {};
+
+    if (!particles.length) {
+      return;
+    }
+
+    const targetX = Number.isFinite(drop.x) ? drop.x : 0.5;
+    const targetY = Number.isFinite(drop.y) ? drop.y : 0.94;
+
+    particles.forEach((particle) => {
+      const dx = targetX - particle.x;
+      const dy = targetY - particle.y;
+      const distance = Math.max(0.001, Math.sqrt(dx * dx + dy * dy));
+      const force = Math.min(1.6, 0.11 / distance) * elapsed * particle.intensity;
+
+      particle.vx += (dx / distance) * force;
+      particle.vy += (dy / distance) * force;
+
+      particle.vx *= Math.exp(-2.8 * elapsed);
+      particle.vy *= Math.exp(-2.8 * elapsed);
+
+      particle.x += particle.vx * elapsed * 60;
+      particle.y += particle.vy * elapsed * 60;
+
+      if (distance < 0.030) {
+        const sourceCode = String(particle.sourceCode || "").toUpperCase();
+        const sourceProfessional = sourceCode && game.professionalIndex
+          ? game.professionalIndex.get(sourceCode)
+          : null;
+
+        if (sourceProfessional) {
+          awardProfessionalLife(sourceProfessional, -1);
+          particle.x = sourceProfessional.x + (Math.random() - 0.5) * 0.020;
+          particle.y = sourceProfessional.y + (Math.random() - 0.5) * 0.020;
+          particle.vx = (Math.random() - 0.5) * 0.030;
+          particle.vy = (Math.random() - 0.5) * 0.030;
+        } else {
+          particle.x += (Math.random() - 0.5) * 0.020;
+          particle.y += (Math.random() - 0.5) * 0.020;
+          particle.vx *= -0.25;
+          particle.vy *= -0.25;
+        }
+      }
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.fillStyle = `rgba(239, 68, 68, ${0.42 + particle.intensity * 0.38})`;
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = "rgba(239, 68, 68, 0.55)";
+      ctx.arc(
+        particle.x * width,
+        particle.y * height,
+        Math.max(2.4, particle.r * Math.min(width, height)),
+        0,
+        Math.PI * 2
+      );
+      ctx.fill();
+      ctx.restore();
+    });
+  };
+
+
+  const awardProfessionalLife = (professional, delta) => {
+    if (!professional || !Number.isFinite(delta)) {
+      return;
+    }
+
+    const currentBuffer = Number(professional.lifeDeltaBuffer) || 0;
+
+    professional.lifeDeltaBuffer = Math.max(-45, Math.min(45, currentBuffer + delta));
+    professional.lifePulse = Math.max(-1, Math.min(1, delta > 0 ? 1 : -1));
+  };
+
+  const computeProfessionalParticlePressure = (professional) => {
+    const game = window.__mlcfluxNetworkRetroGame;
+
+    if (!professional || !game) {
+      return {
+        positive: 0,
+        negative: 0,
+        balance: 0,
+        count: 0,
+        positiveCount: 0,
+        negativeCount: 0
+      };
+    }
+
+    const px = Number(professional.x);
+    const py = Number(professional.y);
+
+    if (!Number.isFinite(px) || !Number.isFinite(py)) {
+      return {
+        positive: 0,
+        negative: 0,
+        balance: 0,
+        count: 0,
+        positiveCount: 0,
+        negativeCount: 0
+      };
+    }
+
+    const proCode = String(professional.code || "").toUpperCase();
+    const localMultiplier = Math.max(1, Number(professional.localMultiplier) || 1);
+    const heatRadius = Math.max(0.030, Number(professional.heatRadius) || 0.035);
+    const influenceRadius = Math.max(0.115, heatRadius * 6.8);
+
+    let positive = 0;
+    let negative = 0;
+    let count = 0;
+    let positiveCount = 0;
+    let negativeCount = 0;
+
+    const particles = Array.isArray(game.particles) ? game.particles : [];
+
+    particles.forEach((particle) => {
+      if (!particle) {
+        return;
+      }
+
+      const x = Number(particle.x);
+      const y = Number(particle.y);
+
+      if (!Number.isFinite(x) || !Number.isFinite(y)) {
+        return;
+      }
+
+      const dx = x - px;
+      const dy = y - py;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      if (distance > influenceRadius) {
+        return;
+      }
+
+      const proximity = 1 - distance / influenceRadius;
+      const proximityScore = Math.pow(proximity, 1.35);
+
+      const targetCode = String(particle.targetProCode || "").toUpperCase();
+      const isTargetingThisPro = targetCode && targetCode === proCode;
+      const isBtb = particle.kind === "btb" || Boolean(targetCode);
+
+      const typeWeight = isTargetingThisPro
+        ? 4.40
+        : (isBtb ? 2.30 : 1.15);
+
+      positive += proximityScore * typeWeight * Math.sqrt(localMultiplier);
+      count += 1;
+      positiveCount += 1;
+    });
+
+    const reconversionParticles = Array.isArray(game.reconversionParticles)
+      ? game.reconversionParticles
+      : [];
+
+    reconversionParticles.forEach((particle) => {
+      if (!particle) {
+        return;
+      }
+
+      const sourceCode = String(particle.sourceCode || "").toUpperCase();
+
+      if (sourceCode !== proCode) {
+        return;
+      }
+
+      const x = Number(particle.x);
+      const y = Number(particle.y);
+
+      if (!Number.isFinite(x) || !Number.isFinite(y)) {
+        return;
+      }
+
+      const dx = x - px;
+      const dy = y - py;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      const escape = Math.max(0, Math.min(1, distance / 0.42));
+      const intensity = Math.max(0.15, Number(particle.intensity) || 0.2);
+
+      negative += intensity * (0.80 + escape * 2.60);
+      count += 1;
+      negativeCount += 1;
+    });
+
+    positive = Math.min(18, positive);
+    negative = Math.min(18, negative);
+
+    return {
+      positive,
+      negative,
+      balance: positive - negative,
+      count,
+      positiveCount,
+      negativeCount
+    };
+  };
+
+  const tickProfessionalLife = (professional, elapsed, time) => {
+    if (!professional || !Number.isFinite(elapsed) || elapsed <= 0) {
+      return;
+    }
+
+    const maxLife = Math.max(1, Number(professional.lifeMax) || 100);
+    const currentTarget = Math.max(0, Math.min(maxLife, Number(professional.lifeTarget ?? professional.life ?? 0)));
+    const eventBuffer = Number(professional.lifeDeltaBuffer) || 0;
+
+    const localMultiplier = Math.max(1, Number(professional.localMultiplier) || 1);
+    const btbPressure = Math.max(0, Math.min(1, (localMultiplier - 1) / 3));
+    const reconversionPressure = Math.max(0, Math.min(1, Number(professional.reconversionDisplayScale) || 0));
+
+    const storedEquilibrium = Number(professional.lifeEquilibrium);
+    const structuralEquilibrium = Number.isFinite(storedEquilibrium)
+      ? storedEquilibrium
+      : Math.max(6, Math.min(96, 50 + btbPressure * 48 - reconversionPressure * 42));
+
+    const particlePressure = computeProfessionalParticlePressure(professional);
+
+    professional.lifeParticlePositive = particlePressure.positive;
+    professional.lifeParticleNegative = particlePressure.negative;
+    professional.lifeParticleBalance = particlePressure.balance;
+    professional.lifeParticleCount = particlePressure.count;
+    professional.lifePositiveParticleCount = particlePressure.positiveCount;
+
+    /*
+      Règle temporelle :
+      si aucune particule positive ne passe dans le champ du pro pendant X secondes,
+      il perd 1 point. Les particules rouges ne comptent pas comme "reçues".
+    */
+    const receivedPositiveParticle = particlePressure.positiveCount > 0 && particlePressure.positive > 0.035;
+    const idlePenaltyInterval = 5.0;
+
+    if (receivedPositiveParticle) {
+      professional.lifeIdleSeconds = 0;
+      professional.lifeIdlePenaltyPulse *= Math.exp(-4.0 * elapsed);
+    } else {
+      professional.lifeIdleSeconds = (Number(professional.lifeIdleSeconds) || 0) + elapsed;
+
+      if (professional.lifeIdleSeconds >= idlePenaltyInterval) {
+        const penaltyCount = Math.floor(professional.lifeIdleSeconds / idlePenaltyInterval);
+        professional.lifeIdleSeconds -= penaltyCount * idlePenaltyInterval;
+        awardProfessionalLife(professional, -1 * penaltyCount);
+        professional.lifeIdlePenaltyPulse = 1;
+      }
+    }
+
+    const idleRatio = Math.max(0, Math.min(1, (Number(professional.lifeIdleSeconds) || 0) / idlePenaltyInterval));
+
+    const randomPush = (Math.random() - 0.5) * elapsed * (2.2 + btbPressure * 6.0);
+    const structuralBias = (btbPressure - reconversionPressure) * elapsed * 4.2;
+    const particleBias = particlePressure.balance * elapsed * 2.8;
+
+    professional.lifeRandomWalk = Number(professional.lifeRandomWalk) || 0;
+    professional.lifeRandomWalk += randomPush + structuralBias + particleBias;
+    professional.lifeRandomWalk *= Math.exp(-0.75 * elapsed);
+    professional.lifeRandomWalk = Math.max(-22, Math.min(22, professional.lifeRandomWalk));
+
+    professional.lifeFluxMemory = Number(professional.lifeFluxMemory) || 0;
+    professional.lifeFluxMemory += particlePressure.balance * elapsed * 5.0;
+    professional.lifeFluxMemory *= Math.exp(-1.65 * elapsed);
+    professional.lifeFluxMemory = Math.max(-18, Math.min(18, professional.lifeFluxMemory));
+
+    const wave =
+      Math.sin(time * 0.0028 + (professional.lifeTickPhase || 0)) *
+      (1.2 + particlePressure.count * 0.18);
+
+    /*
+      La privation de flux pèse déjà via le -1 périodique,
+      et elle teinte aussi la cible à court terme pour que la baisse soit visible.
+    */
+    const idlePressure = idleRatio * 7.5;
+
+    const particleTarget = Math.max(
+      2,
+      Math.min(
+        99,
+        structuralEquilibrium
+          + professional.lifeRandomWalk
+          + professional.lifeFluxMemory
+          + particlePressure.positive * 3.8
+          - particlePressure.negative * 4.4
+          - idlePressure
+          + wave
+      )
+    );
+
+    professional.lifeLastParticleTarget = particleTarget;
+
+    let nextTarget = currentTarget;
+    let nextBuffer = Math.max(-45, Math.min(45, eventBuffer));
+
+    if (Math.abs(nextBuffer) > 0.001) {
+      const drainSpeed = 18.0;
+      const step = Math.sign(nextBuffer) * Math.min(Math.abs(nextBuffer), drainSpeed * elapsed);
+
+      nextTarget = Math.max(0, Math.min(maxLife, nextTarget + step));
+      nextBuffer -= step;
+
+      professional.lifeLastDirection = Math.sign(step);
+      professional.lifePulse = Math.max(
+        -1,
+        Math.min(1, (Number(professional.lifePulse) || 0) + Math.sign(step) * 0.16)
+      );
+    }
+
+    const followStrength = 4.85;
+    const targetPull = (particleTarget - nextTarget) * elapsed * followStrength;
+
+    nextTarget = Math.max(0, Math.min(maxLife, nextTarget + targetPull));
+
+    const direction = Math.sign((particleTarget - currentTarget) || professional.lifeLastDirection || 0);
+    professional.lifeLastDirection = direction;
+    professional.lifeTarget = nextTarget;
+    professional.life = nextTarget;
+    professional.lifeDeltaBuffer = Math.abs(nextBuffer) < 0.001 ? 0 : nextBuffer;
+
+    const display = Number.isFinite(professional.lifeDisplay)
+      ? professional.lifeDisplay
+      : nextTarget;
+
+    const smoothing = 1 - Math.exp(-14.0 * elapsed);
+
+    professional.lifeDisplay = Math.max(
+      0,
+      Math.min(maxLife, display + (nextTarget - display) * smoothing)
+    );
+
+    professional.lifeFlowAccumulator = (Number(professional.lifeFlowAccumulator) || 0) + elapsed * (
+      1 + Math.min(7, Math.abs(particlePressure.balance) + particlePressure.count * 0.15 + idleRatio * 3)
+    );
+
+    if (Math.abs(particlePressure.balance) > 0.05) {
+      professional.lifePulse = Math.max(
+        -1,
+        Math.min(
+          1,
+          (Number(professional.lifePulse) || 0)
+            + Math.sign(particlePressure.balance) * Math.min(0.28, Math.abs(particlePressure.balance) * 0.025)
+        )
+      );
+    }
+
+    professional.lifeIdlePenaltyPulse *= Math.exp(-3.2 * elapsed);
+    professional.lifePulse *= Math.exp(-2.7 * elapsed);
+  };
+
+  const drawProfessionalLifeBar = (ctx, professional, x, y, width, height) => {
+    const maxLife = Math.max(1, Number(professional.lifeMax) || 100);
+    const life = Math.max(0, Math.min(maxLife, Number(professional.lifeDisplay ?? professional.lifeTarget ?? professional.life) || 0));
+    const targetLife = Math.max(0, Math.min(maxLife, Number(professional.lifeLastParticleTarget ?? professional.lifeTarget ?? professional.life) || 0));
+    const ratio = life / maxLife;
+    const targetRatio = targetLife / maxLife;
+
+    const barWidth = Math.max(26, width * 1.18);
+    const barHeight = Math.max(4, height);
+    const left = x - barWidth / 2;
+    const top = y;
+
+    ctx.save();
+
+    /*
+      Rendu volontairement calme :
+      la mécanique de tick reste active, mais on ne dessine plus
+      l'étincelle mobile, le sablier d'inactivité ou les bordures pulsées.
+    */
+    ctx.fillStyle = "rgba(15, 23, 42, 0.86)";
+    ctx.fillRect(left, top, barWidth, barHeight);
+
+    ctx.fillStyle = targetRatio >= ratio
+      ? "rgba(134, 239, 172, 0.18)"
+      : "rgba(239, 68, 68, 0.18)";
+    ctx.fillRect(left, top, barWidth * targetRatio, barHeight);
+
+    const red = Math.round(239 - ratio * 110);
+    const green = Math.round(68 + ratio * 130);
+
+    ctx.fillStyle = `rgba(${red}, ${green}, 85, 0.96)`;
+    ctx.fillRect(left, top, barWidth * ratio, barHeight);
+
+    ctx.strokeStyle = "rgba(248, 250, 252, 0.38)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(left, top, barWidth, barHeight);
+
+    ctx.restore();
+  };
+
   const drawParticles = (ctx, width, height, elapsed) => {
     if (!ctx || !Number.isFinite(width) || !Number.isFinite(height)) {
       return;
@@ -4211,17 +4854,32 @@ function ensureNetworkRetroRoadGame() {
       particle.vx = Number.isFinite(particle.vx) ? particle.vx : 0;
       particle.vy = Number.isFinite(particle.vy) ? particle.vy : 0;
       particle.r = Number.isFinite(particle.r) ? particle.r : 0.004;
+      particle.btbCooldown = Math.max(0, Number(particle.btbCooldown || 0) - elapsed);
+
+      applyProfessionalGravity(particle, elapsed);
+
+      const speed = Math.sqrt(particle.vx * particle.vx + particle.vy * particle.vy);
+      const maxSpeed = particle.kind === "btb" ? 0.95 : 0.44;
+
+      if (speed > maxSpeed) {
+        particle.vx = (particle.vx / speed) * maxSpeed;
+        particle.vy = (particle.vy / speed) * maxSpeed;
+      }
+
+      if (particle.kind === "btb") {
+        particle.btbTrail = Math.max(0, Number(particle.btbTrail || 0) - elapsed * 0.85);
+      }
 
       particle.x += particle.vx * elapsed;
       particle.y += particle.vy * elapsed;
 
       if (particle.x <= 0 || particle.x >= 1) {
-        particle.vx *= -1;
+        particle.vx *= -0.82;
         particle.x = Math.max(0, Math.min(1, particle.x));
       }
 
       if (particle.y <= 0 || particle.y >= 1) {
-        particle.vy *= -1;
+        particle.vy *= -0.82;
         particle.y = Math.max(0, Math.min(1, particle.y));
       }
 
@@ -4234,8 +4892,29 @@ function ensureNetworkRetroRoadGame() {
         particle.vy += dy * 0.045;
       }
 
+      handleProfessionalCollision(particle);
+
+      const isBtb = Boolean(particle.targetProCode) || particle.kind === "btb";
+      const trail = Math.max(0, Math.min(1, Number(particle.btbTrail || 0)));
+
+      if (isBtb && trail > 0.05) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.strokeStyle = `rgba(134, 239, 172, ${0.08 + trail * 0.20})`;
+        ctx.lineWidth = Math.max(1, 2.4 * trail);
+        ctx.moveTo(
+          (particle.x - particle.vx * 0.055) * width,
+          (particle.y - particle.vy * 0.055) * height
+        );
+        ctx.lineTo(particle.x * width, particle.y * height);
+        ctx.stroke();
+        ctx.restore();
+      }
+
       ctx.beginPath();
-      ctx.fillStyle = "rgba(251, 191, 36, 0.38)";
+      ctx.fillStyle = isBtb
+        ? "rgba(134, 239, 172, 0.68)"
+        : "rgba(251, 191, 36, 0.38)";
       ctx.arc(
         particle.x * width,
         particle.y * height,
@@ -4251,13 +4930,27 @@ function ensureNetworkRetroRoadGame() {
     const game = window.__mlcfluxNetworkRetroGame;
     const professionals = Array.isArray(game.professionals) ? game.professionals : [];
     const image = game.graineLogoImage;
+    const drop = game.graineDrop || {};
 
     professionals.forEach((professional, index) => {
-      const wanderX = Math.sin(time * 0.0007 + professional.jitterSeed + index) * 0.000030;
-      const wanderY = Math.cos(time * 0.0009 + professional.jitterSeed * 1.7 + index) * 0.000030;
+      const progress = computeGraineTransformProgress(professional, time);
+      professional.graineProgress = progress;
 
-      const spring = 18.0;
-      const damping = Math.exp(-9.0 * elapsed);
+      const triggered = Boolean(drop.triggered);
+      const postTriggerPull = triggered ? progress : 0;
+
+      const wanderAmplitude = triggered
+        ? 0.000030 * (1 - postTriggerPull * 0.82)
+        : 0.000030;
+
+      const wanderX = Math.sin(time * 0.0007 + professional.jitterSeed + index) * wanderAmplitude;
+      const wanderY = Math.cos(time * 0.0009 + professional.jitterSeed * 1.7 + index) * wanderAmplitude;
+
+      const spring = triggered
+        ? 18.0 + postTriggerPull * 32.0
+        : 18.0;
+
+      const damping = Math.exp(-(9.0 + postTriggerPull * 4.0) * elapsed);
 
       professional.vx += (professional.anchorX - professional.x) * spring * elapsed + wanderX;
       professional.vy += (professional.anchorY - professional.y) * spring * elapsed + wanderY;
@@ -4271,7 +4964,10 @@ function ensureNetworkRetroRoadGame() {
       const dx = professional.x - professional.anchorX;
       const dy = professional.y - professional.anchorY;
       const distance = Math.sqrt(dx * dx + dy * dy);
-      const limit = professional.driftLimit || 0.01;
+      const baseLimit = professional.driftLimit || 0.01;
+      const limit = triggered
+        ? baseLimit * (1 - postTriggerPull * 0.74)
+        : baseLimit;
 
       if (distance > limit) {
         const ratio = limit / Math.max(0.000001, distance);
@@ -4281,32 +4977,49 @@ function ensureNetworkRetroRoadGame() {
         professional.vy *= -0.18;
       }
 
+      tickProfessionalLife(professional, elapsed, time);
+
       const x = professional.x * width;
       const y = professional.y * height;
       const baseRadius = Math.max(2.2, professional.particleRadius * Math.min(width, height));
-      const progress = computeGraineTransformProgress(professional, time);
-
-      professional.graineProgress = progress;
+      const scaledRadius = baseRadius * Math.max(0.8, professional.displayRadiusScale || 1.0);
 
       if (progress < 0.98) {
         ctx.save();
         ctx.globalAlpha = 1 - progress * 0.82;
         ctx.beginPath();
         ctx.fillStyle = "rgba(254, 243, 199, 0.82)";
-        ctx.arc(x, y, baseRadius, 0, Math.PI * 2);
+        ctx.arc(x, y, scaledRadius * 0.9, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.beginPath();
         ctx.strokeStyle = "rgba(251, 191, 36, 0.38)";
         ctx.lineWidth = 1;
-        ctx.arc(x, y, baseRadius * 1.85, 0, Math.PI * 2);
+        ctx.arc(x, y, scaledRadius * 1.6, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      if (professional.reconversionDisplayScale > 0.01) {
+        const reconvRadius = scaledRadius * (1.85 + professional.reconversionDisplayScale * 1.4);
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.strokeStyle = `rgba(239, 68, 68, ${0.18 + professional.reconversionDisplayScale * 0.46})`;
+        ctx.lineWidth = 1.5;
+        ctx.arc(x, y, reconvRadius, 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
       }
 
       if (progress > 0.02) {
-        const logoRadius = baseRadius * (1.25 + progress * 1.45);
+        const pulseBonus = professional.lifePulse > 0
+          ? professional.lifePulse * 0.20
+          : Math.abs(professional.lifePulse) * 0.10;
+
+        const logoRadius = scaledRadius * (1.10 + progress * 1.10 + pulseBonus);
         drawGraineLogo(ctx, image, x, y, logoRadius, Math.min(1, progress));
+        drawProfessionalLifeBar(ctx, professional, x, y + logoRadius + 5, Math.max(24, logoRadius * 2.4), 5);
       }
     });
   };
@@ -4369,6 +5082,7 @@ function ensureNetworkRetroRoadGame() {
     }
 
     seedParticles();
+    seedReconversionParticles();
 
     const avatar = game.avatar;
     const pointer = game.pointer;
@@ -4416,6 +5130,7 @@ function ensureNetworkRetroRoadGame() {
 
     drawParticles(ctx, width, height, elapsed);
     drawProfessionalParticles(ctx, width, height, elapsed, timestamp);
+    updateAndDrawReconversionParticles(ctx, width, height, elapsed);
     drawAvatar(ctx, width, height);
     updateAndDrawFallingGraineLogo(ctx, width, height, elapsed, timestamp);
 
