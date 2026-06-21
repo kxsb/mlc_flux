@@ -844,8 +844,6 @@ const appState = {
 
   network: {
     minEdgeWeight: 500,
-    thresholdScale: [],
-    thresholdIndex: 0,
     includeOperators: false,
     searchTerm: "",
     cy: null,
@@ -3119,308 +3117,11 @@ function ensureNetworkZoomInDelegate() {
   }, true);
 }
 
-
-function ensureNetworkCosmosStyles() {
-  if (document.getElementById("networkCosmosStyles")) {
-    return;
-  }
-
-  const style = document.createElement("style");
-  style.id = "networkCosmosStyles";
-  style.textContent = `
-    .network-cosmos-video {
-      display: block;
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      min-width: 100%;
-      min-height: 100%;
-      object-fit: cover;
-      object-position: center center;
-      z-index: 0;
-      opacity: 0;
-      visibility: hidden;
-      filter: saturate(1.08) contrast(1.08) brightness(0.64);
-      transition: opacity 0.8s ease;
-      pointer-events: none;
-      transform: translateZ(0);
-      backface-visibility: hidden;
-      will-change: opacity;
-      contain: strict;
-    }
-
-    body.dark-mode .network-cosmos-active .network-cosmos-video {
-      opacity: 0.42;
-      visibility: visible;
-    }
-
-    body.dark-mode .network-cosmos-active .network-constellation-layer {
-      opacity: 0.42;
-      mix-blend-mode: screen;
-    }
-
-    body.dark-mode .network-cosmos-active #networkGraph {
-      pointer-events: none;
-    }
-
-
-    body.dark-mode .network-cosmos-active #networkGraph {
-      mix-blend-mode: screen;
-    }
-
-
-    .network-graph-shell {
-      isolation: isolate;
-      contain: layout paint;
-    }
-
-    .network-graph-shell #networkGraph {
-      position: relative;
-      z-index: 1;
-      min-height: inherit;
-      transform: translateZ(0);
-    }
-
-    .network-floating-label {
-      z-index: 4;
-      transform: translateZ(0);
-    }
-
-    .network-cosmos-play {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 34px;
-      padding: 0 14px;
-      border-radius: 999px;
-      border: 1px solid rgba(251, 191, 36, 0.55);
-      background: linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(249, 115, 22, 0.72));
-      color: #fff7ed;
-      font-weight: 800;
-      letter-spacing: 0.01em;
-      cursor: pointer;
-      box-shadow: 0 10px 30px rgba(249, 115, 22, 0.22);
-      animation: network-cosmos-pulse 1.2s ease-in-out infinite;
-    }
-
-    .network-cosmos-play.hidden {
-      display: none;
-    }
-
-    @keyframes network-cosmos-pulse {
-      0%, 100% {
-        transform: translateY(0);
-        box-shadow: 0 10px 30px rgba(249, 115, 22, 0.18);
-      }
-      50% {
-        transform: translateY(-1px);
-        box-shadow: 0 14px 38px rgba(251, 191, 36, 0.30);
-      }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      .network-cosmos-play {
-        animation: none;
-      }
-
-      .network-cosmos-video {
-        transition: none;
-      }
-    }
-  `;
-
-  document.head.appendChild(style);
-}
-
-function ensureNetworkCosmosEasterEgg() {
-  if (window.__mlcfluxNetworkCosmosEasterEggInstalled) {
-    return;
-  }
-
-  window.__mlcfluxNetworkCosmosEasterEggInstalled = true;
-  window.__mlcfluxNetworkCosmosRecenterClicks = [];
-  window.__mlcfluxNetworkCosmosPlayTimeout = null;
-  window.__mlcfluxNetworkCosmosReverseFrame = null;
-  window.__mlcfluxNetworkCosmosLastTick = null;
-
-  const isDarkMode = () => document.body.classList.contains("dark-mode");
-
-  const hidePlayButton = () => {
-    const playButton = document.getElementById("networkCosmosPlayBtn");
-    if (playButton) {
-      playButton.classList.add("hidden");
-    }
-  };
-
-  const showPlayButton = () => {
-    const playButton = document.getElementById("networkCosmosPlayBtn");
-
-    if (!playButton || !isDarkMode()) {
-      return;
-    }
-
-    playButton.classList.remove("hidden");
-
-    if (window.__mlcfluxNetworkCosmosPlayTimeout) {
-      clearTimeout(window.__mlcfluxNetworkCosmosPlayTimeout);
-    }
-
-    window.__mlcfluxNetworkCosmosPlayTimeout = setTimeout(() => {
-      hidePlayButton();
-    }, 3000);
-  };
-
-  const syncCosmosFrameWithThreshold = () => {
-    const shell = document.querySelector(".network-graph-shell");
-    const video = document.getElementById("networkCosmosVideo");
-
-    if (!shell || !video) {
-      return;
-    }
-
-    if (!shell.classList.contains("network-cosmos-active")) {
-      return;
-    }
-
-    if (!Number.isFinite(video.duration) || video.duration <= 0) {
-      return;
-    }
-
-    const progress = Math.max(0, Math.min(1, getNetworkThresholdProgress()));
-
-    const targetTime = Math.max(
-      0,
-      Math.min(video.duration - 0.05, progress * video.duration)
-    );
-
-    try {
-      video.currentTime = targetTime;
-    } catch (_error) {
-      // Certains navigateurs peuvent refuser le seek avant initialisation complète.
-    }
-  };
-
-  const activateCosmos = () => {
-    if (!isDarkMode()) {
-      return;
-    }
-
-    const shell = document.querySelector(".network-graph-shell");
-    const video = document.getElementById("networkCosmosVideo");
-
-    if (!shell || !video) {
-      return;
-    }
-
-    if (!video.getAttribute("src")) {
-      video.setAttribute("src", "/static/media/constellations/cosmos-traveling-reversed.mp4");
-      video.load();
-    }
-
-    shell.classList.add("network-cosmos-active");
-    hidePlayButton();
-
-    const reducedMotion = window.matchMedia
-      ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
-      : false;
-
-    const start = () => {
-      syncCosmosFrameWithThreshold();
-
-      if (!reducedMotion && typeof video.play === "function") {
-        const playPromise = video.play();
-
-        if (playPromise && typeof playPromise.catch === "function") {
-          playPromise.catch(() => {
-            // La vidéo reste visible même si le navigateur bloque play().
-          });
-        }
-      }
-    };
-
-    if (Number.isFinite(video.duration) && video.duration > 0) {
-      start();
-    } else {
-      video.addEventListener("loadedmetadata", start, { once: true });
-    }
-  };
-
-  document.addEventListener("click", (event) => {
-    const target = event.target;
-    const recenterButton = target && target.closest
-      ? target.closest("#networkFitBtn")
-      : null;
-
-    if (recenterButton && isDarkMode()) {
-      const now = Date.now();
-      window.__mlcfluxNetworkCosmosRecenterClicks = (
-        window.__mlcfluxNetworkCosmosRecenterClicks || []
-      ).filter((timestamp) => now - timestamp <= 1200);
-
-      window.__mlcfluxNetworkCosmosRecenterClicks.push(now);
-
-      if (window.__mlcfluxNetworkCosmosRecenterClicks.length >= 3) {
-        window.__mlcfluxNetworkCosmosRecenterClicks = [];
-        showPlayButton();
-      }
-    }
-
-    const playButton = target && target.closest
-      ? target.closest("#networkCosmosPlayBtn")
-      : null;
-
-    if (playButton) {
-      event.preventDefault();
-      event.stopPropagation();
-
-      if (typeof event.stopImmediatePropagation === "function") {
-        event.stopImmediatePropagation();
-      }
-
-      activateCosmos();
-    }
-  }, true);
-
-  document.addEventListener("input", (event) => {
-    if (event.target && event.target.id === "networkThreshold") {
-      syncCosmosFrameWithThreshold();
-    }
-  }, true);
-
-  if (window.MutationObserver) {
-    const observer = new MutationObserver(() => {
-      if (!isDarkMode()) {
-        const shell = document.querySelector(".network-graph-shell");
-        const video = document.getElementById("networkCosmosVideo");
-
-        hidePlayButton();
-
-        if (shell) {
-          shell.classList.remove("network-cosmos-active");
-        }
-
-        if (video && typeof video.pause === "function") {
-          video.pause();
-        }
-      }
-    });
-
-    observer.observe(document.body, {
-      attributes: true,
-      attributeFilter: ["class"]
-    });
-  }
-}
-
-
 function buildProfessionalNetworkPanelHtml() {
   if (typeof ensureNetworkConstellationStyles === "function") {
     ensureNetworkConstellationStyles();
   }
   ensureNetworkCompactStyles();
-  ensureNetworkCosmosStyles();
-  ensureNetworkCosmosEasterEgg();
   ensureNetworkZoomInDelegate();
 
   return `
@@ -3475,12 +3176,6 @@ function buildProfessionalNetworkPanelHtml() {
             <small>Afficher aussi les comptes d’infrastructure et de support.</small>
           </span>
         </label>
-        <button
-          id="networkCosmosPlayBtn"
-          class="network-cosmos-play hidden"
-          type="button"
-          title="Activer le fond cosmique"
-        >Play</button>
       </div>
 
       <div class="network-toolbar network-atlas-toolbar network-compact-toolbar">
@@ -3520,13 +3215,6 @@ function buildProfessionalNetworkPanelHtml() {
       <div class="network-layout network-atlas-layout">
         <div class="network-main network-atlas-main">
           <div class="network-graph-shell">
-            <video
-              id="networkCosmosVideo"
-              class="network-cosmos-video"
-              muted
-              playsinline
-              preload="metadata"
-            ></video>
             <div class="network-map-controls">
               <button id="networkFitBtn" class="secondary-btn" type="button">Recentrer</button>
               <button id="networkZoomInBtn" class="secondary-btn" type="button">Zoom +</button>
@@ -3604,12 +3292,10 @@ async function renderProfessionalNetworkPanel(forceReload = false) {
     const data = await apiGet(buildNetworkApiUrl());
     appState.network.rawData = data;
     appState.network.enrichedData = enrichNetworkData(data);
-    initializeNetworkThresholdScale(appState.network.enrichedData);
 
     panel.innerHTML = buildProfessionalNetworkPanelHtml();
     panel.dataset.professionalNetworkHydrated = "true";
 
-    configureNetworkThresholdControl();
     renderNetworkGraph(data);
     bindNetworkControls();
     updateNetworkOverviewMetrics();
@@ -3778,8 +3464,8 @@ function bindNetworkControls() {
 
   if (thresholdInput) {
     thresholdInput.addEventListener("input", (e) => {
-      appState.network.minEdgeWeight = getNetworkThresholdFromControl(e.target);
-      updateNetworkThresholdControlLabel();
+      appState.network.minEdgeWeight = Number(e.target.value || 0);
+      thresholdValue.textContent = `${appState.network.minEdgeWeight} €`;
       updateNetworkGraphVisibility();
     });
   }
@@ -3842,170 +3528,6 @@ function enrichNetworkData(data) {
 
   return data;
 }
-
-
-function buildNetworkThresholdScale(data, maxSteps = 600) {
-  const edges = Array.isArray(data?.edges) ? data.edges : [];
-
-  const uniqueWeights = Array.from(new Set(
-    edges
-      .map(edge => Math.round(Number(edge?.data?.weight || 0) * 100) / 100)
-      .filter(value => Number.isFinite(value) && value > 0)
-  )).sort((a, b) => a - b);
-
-  if (!uniqueWeights.length) {
-    return [0];
-  }
-
-  const scale = [0];
-
-  if (uniqueWeights.length <= maxSteps) {
-    scale.push(...uniqueWeights);
-  } else {
-    for (let i = 0; i < maxSteps; i += 1) {
-      const ratio = maxSteps <= 1 ? 0 : i / (maxSteps - 1);
-
-      // Léger biais vers les faibles seuils, où le réseau change souvent le plus.
-      const shapedRatio = Math.pow(ratio, 1.12);
-      const index = Math.max(
-        0,
-        Math.min(uniqueWeights.length - 1, Math.round(shapedRatio * (uniqueWeights.length - 1)))
-      );
-
-      scale.push(uniqueWeights[index]);
-    }
-  }
-
-  return Array.from(new Set(scale)).sort((a, b) => a - b);
-}
-
-function getClosestNetworkThresholdIndex(scale, threshold) {
-  if (!Array.isArray(scale) || !scale.length) {
-    return 0;
-  }
-
-  const value = Math.max(0, Number(threshold) || 0);
-
-  let bestIndex = 0;
-  let bestDistance = Infinity;
-
-  scale.forEach((candidate, index) => {
-    const distance = Math.abs(Number(candidate || 0) - value);
-
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      bestIndex = index;
-    }
-  });
-
-  return bestIndex;
-}
-
-function initializeNetworkThresholdScale(data) {
-  const previousThreshold = Number(appState.network.minEdgeWeight || 0);
-  const scale = buildNetworkThresholdScale(data);
-
-  const index = getClosestNetworkThresholdIndex(scale, previousThreshold);
-  const threshold = Number(scale[index] || 0);
-
-  appState.network.thresholdScale = scale;
-  appState.network.thresholdIndex = index;
-  appState.network.minEdgeWeight = threshold;
-}
-
-function formatNetworkThresholdLabel(value, index = appState.network.thresholdIndex) {
-  const scale = Array.isArray(appState.network.thresholdScale)
-    ? appState.network.thresholdScale
-    : [];
-
-  if (!scale.length || scale.length === 1) {
-    return euro(value || 0);
-  }
-
-  return `${euro(value || 0)} · palier ${Number(index || 0) + 1}/${scale.length}`;
-}
-
-function configureNetworkThresholdControl() {
-  const input = document.getElementById("networkThreshold");
-  const label = document.getElementById("networkThresholdValue");
-
-  const scale = Array.isArray(appState.network.thresholdScale)
-    ? appState.network.thresholdScale
-    : [];
-
-  if (!input || !scale.length) {
-    return;
-  }
-
-  const index = getClosestNetworkThresholdIndex(scale, appState.network.minEdgeWeight || 0);
-  const threshold = Number(scale[index] || 0);
-
-  appState.network.thresholdIndex = index;
-  appState.network.minEdgeWeight = threshold;
-
-  input.dataset.scaleMode = "observed";
-  input.min = "0";
-  input.max = String(Math.max(0, scale.length - 1));
-  input.step = "1";
-  input.value = String(index);
-
-  if (label) {
-    label.textContent = formatNetworkThresholdLabel(threshold, index);
-  }
-}
-
-function getNetworkThresholdFromControl(input) {
-  const scale = Array.isArray(appState.network.thresholdScale)
-    ? appState.network.thresholdScale
-    : [];
-
-  if (!input || input.dataset.scaleMode !== "observed" || !scale.length) {
-    return Number(input?.value || 0);
-  }
-
-  const rawIndex = Number(input.value || 0);
-  const index = Math.max(0, Math.min(scale.length - 1, Math.round(rawIndex)));
-  const threshold = Number(scale[index] || 0);
-
-  appState.network.thresholdIndex = index;
-  return threshold;
-}
-
-function updateNetworkThresholdControlLabel() {
-  const label = document.getElementById("networkThresholdValue");
-
-  if (!label) {
-    return;
-  }
-
-  label.textContent = formatNetworkThresholdLabel(
-    appState.network.minEdgeWeight || 0,
-    appState.network.thresholdIndex || 0
-  );
-}
-
-function getNetworkThresholdProgress() {
-  const scale = Array.isArray(appState.network.thresholdScale)
-    ? appState.network.thresholdScale
-    : [];
-
-  const input = document.getElementById("networkThreshold");
-
-  if (scale.length > 1) {
-    const rawIndex = input && input.dataset.scaleMode === "observed"
-      ? Number(input.value || 0)
-      : Number(appState.network.thresholdIndex || 0);
-
-    const index = Math.max(0, Math.min(scale.length - 1, Math.round(rawIndex)));
-    return index / (scale.length - 1);
-  }
-
-  const threshold = Math.max(0, Number(appState.network.minEdgeWeight || 0));
-  const maxThreshold = input ? Math.max(1, Number(input.max) || 5000) : 5000;
-
-  return Math.log1p(threshold) / Math.log1p(maxThreshold);
-}
-
 
 function getFilteredNetworkElements(data, minWeight) {
   const filteredEdges = data.edges.filter(
