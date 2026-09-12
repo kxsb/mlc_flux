@@ -84,6 +84,10 @@ def _parse_occurred_at(value: str | None) -> datetime:
     return parsed.astimezone(UTC)
 
 
+BIGINT_MIN = -(2**63)
+BIGINT_MAX = 2**63 - 1
+
+
 def _amount_minor(
     amount: Decimal | None,
     exponent: int,
@@ -93,21 +97,51 @@ def _amount_minor(
             "Montant Cyclos absent ou invalide."
         )
 
+    if not isinstance(exponent, int) or isinstance(exponent, bool):
+        raise CyclosTransactionError(
+            "currency_exponent invalide."
+        )
+
     if exponent < 0:
         raise CyclosTransactionError(
             "currency_exponent négatif."
         )
 
-    scaled = amount * (Decimal(10) ** exponent)
-    integral = scaled.to_integral_value()
-
-    if scaled != integral:
+    if not amount.is_finite():
         raise CyclosTransactionError(
-            "Le montant Cyclos possède une précision supérieure "
-            "à celle déclarée pour la devise."
+            "Montant Cyclos non fini."
         )
 
-    return int(integral)
+    sign, digits, decimal_exponent = amount.as_tuple()
+
+    coefficient = 0
+    for digit in digits:
+        coefficient = coefficient * 10 + digit
+
+    scaled_exponent = decimal_exponent + exponent
+
+    if scaled_exponent >= 0:
+        result = coefficient * (10 ** scaled_exponent)
+    else:
+        divisor = 10 ** (-scaled_exponent)
+
+        if coefficient % divisor:
+            raise CyclosTransactionError(
+                "Le montant Cyclos possède une précision supérieure "
+                "à celle déclarée pour la devise."
+            )
+
+        result = coefficient // divisor
+
+    if sign:
+        result = -result
+
+    if result < BIGINT_MIN or result > BIGINT_MAX:
+        raise CyclosTransactionError(
+            "Montant Cyclos hors plage BIGINT signée."
+        )
+
+    return result
 
 
 def cyclos_transaction_row(

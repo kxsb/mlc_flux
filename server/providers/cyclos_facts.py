@@ -5,8 +5,12 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 
+class CyclosFactsError(ValueError):
+    """Payload Cyclos malformé ou incompatible avec les faits attendus."""
+
+
 def _clean(value: Any) -> str | None:
-    if value in (None, False):
+    if value is None or value is False:
         return None
 
     text = str(value).strip()
@@ -44,6 +48,10 @@ class CyclosTransactionFacts:
     amount_decimal: Decimal | None
 
     native_transaction_type: str | None
+    native_transaction_type_name: str | None
+    native_transaction_kind: str | None
+    native_creation_type: str | None
+
     native_transaction_label: str | None
     native_transaction_group: str | None
 
@@ -60,16 +68,29 @@ def extract_cyclos_actor_facts(
     Aucune classification MLCFlux, aucun mapping et aucune pseudonymisation
     ne doivent être réalisés ici.
     """
-    if not isinstance(actor, dict):
+    if actor is None or actor is False:
         return None
 
+    if not isinstance(actor, dict):
+        raise CyclosFactsError(
+            "Endpoint acteur Cyclos malformé : objet attendu."
+        )
+
     actor_type = actor.get("type")
-    if not isinstance(actor_type, dict):
+    if actor_type is None or actor_type is False:
         actor_type = {}
+    elif not isinstance(actor_type, dict):
+        raise CyclosFactsError(
+            "Champ actor.type Cyclos malformé : objet attendu."
+        )
 
     user = actor.get("user")
-    if not isinstance(user, dict):
+    if user is None or user is False:
         user = {}
+    elif not isinstance(user, dict):
+        raise CyclosFactsError(
+            "Champ actor.user Cyclos malformé : objet attendu."
+        )
 
     return CyclosActorFacts(
         actor_id=_clean(actor.get("id")),
@@ -93,11 +114,26 @@ def extract_cyclos_transaction_facts(
     - pas de résolution P/U/UD/T/X ;
     - pas de création de références ou pseudonymes.
     """
+    if not isinstance(transaction, dict):
+        raise CyclosFactsError(
+            "Transaction Cyclos malformée : objet attendu."
+        )
+
     tx_type = transaction.get("type")
-    if not isinstance(tx_type, dict):
+    if tx_type is None or tx_type is False:
         tx_type = {}
+    elif not isinstance(tx_type, dict):
+        raise CyclosFactsError(
+            "Champ transaction.type Cyclos malformé : objet attendu."
+        )
 
     amount_raw = _clean(transaction.get("amount"))
+    native_type = _clean(tx_type.get("internalName"))
+    native_type_name = _clean(tx_type.get("name"))
+    native_kind = _clean(transaction.get("kind"))
+    native_creation_type = _clean(
+        transaction.get("creationType")
+    )
 
     return CyclosTransactionFacts(
         transaction_id=_clean(transaction.get("id")),
@@ -108,16 +144,17 @@ def extract_cyclos_transaction_facts(
         native_currency_id=_clean(transaction.get("currency")),
         amount_raw=amount_raw,
         amount_decimal=_decimal(amount_raw),
-        native_transaction_type=_clean(
-            tx_type.get("internalName")
-        ),
+        native_transaction_type=native_type,
+        native_transaction_type_name=native_type_name,
+        native_transaction_kind=native_kind,
+        native_creation_type=native_creation_type,
         native_transaction_label=(
-            _clean(tx_type.get("name"))
-            or _clean(tx_type.get("internalName"))
+            native_type_name
+            or native_type
         ),
         native_transaction_group=(
-            _clean(transaction.get("kind"))
-            or _clean(transaction.get("creationType"))
+            native_kind
+            or native_creation_type
         ),
         source_actor=extract_cyclos_actor_facts(
             transaction.get("from")

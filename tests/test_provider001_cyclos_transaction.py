@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, localcontext
 
 import pytest
 
@@ -32,6 +32,9 @@ def transaction(**overrides):
         "amount_raw": "12.50",
         "amount_decimal": Decimal("12.50"),
         "native_transaction_type": "payment",
+        "native_transaction_type_name": "Paiement",
+        "native_transaction_kind": "transfer",
+        "native_creation_type": "manual",
         "native_transaction_label": "Paiement",
         "native_transaction_group": "transfer",
         "source_actor": actor("account-a"),
@@ -139,6 +142,78 @@ def test_naive_datetime_is_rejected():
         cyclos_transaction_row(
             transaction(
                 occurred_at="2026-09-12T14:30:00"
+            ),
+            currency_specs=SPECS,
+        )
+
+
+def test_decimal_conversion_is_independent_from_ambient_context():
+    with localcontext() as context:
+        context.prec = 8
+
+        row = cyclos_transaction_row(
+            transaction(
+                amount_raw="1234567.89",
+                amount_decimal=Decimal("1234567.89"),
+            ),
+            currency_specs=SPECS,
+        )
+
+    assert row["amount_minor"] == 123456789
+
+
+def test_very_small_subminor_fraction_is_rejected_without_rounding():
+    with pytest.raises(
+        CyclosTransactionError,
+        match="précision supérieure",
+    ):
+        cyclos_transaction_row(
+            transaction(
+                amount_raw="1.00000000000000000000000000001",
+                amount_decimal=Decimal(
+                    "1.00000000000000000000000000001"
+                ),
+            ),
+            currency_specs=SPECS,
+        )
+
+
+@pytest.mark.parametrize("value", ["NaN", "Infinity", "-Infinity"])
+def test_non_finite_amount_is_rejected(value):
+    with pytest.raises(
+        CyclosTransactionError,
+        match="non fini",
+    ):
+        cyclos_transaction_row(
+            transaction(
+                amount_raw=value,
+                amount_decimal=Decimal(value),
+            ),
+            currency_specs=SPECS,
+        )
+
+
+def test_bigint_maximum_is_accepted():
+    row = cyclos_transaction_row(
+        transaction(
+            amount_raw="92233720368547758.07",
+            amount_decimal=Decimal("92233720368547758.07"),
+        ),
+        currency_specs=SPECS,
+    )
+
+    assert row["amount_minor"] == 9223372036854775807
+
+
+def test_bigint_overflow_is_rejected():
+    with pytest.raises(
+        CyclosTransactionError,
+        match="hors plage BIGINT",
+    ):
+        cyclos_transaction_row(
+            transaction(
+                amount_raw="92233720368547758.08",
+                amount_decimal=Decimal("92233720368547758.08"),
             ),
             currency_specs=SPECS,
         )

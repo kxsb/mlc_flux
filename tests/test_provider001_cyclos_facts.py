@@ -1,8 +1,11 @@
 from decimal import Decimal
 import inspect
 
+import pytest
+
 from server.providers import cyclos_facts
 from server.providers.cyclos_facts import (
+    CyclosFactsError,
     extract_cyclos_actor_facts,
     extract_cyclos_transaction_facts,
 )
@@ -55,7 +58,26 @@ def test_extract_graine_actor_facts_without_interpreting_type():
 def test_missing_actor_remains_missing():
     assert extract_cyclos_actor_facts(None) is None
     assert extract_cyclos_actor_facts(False) is None
-    assert extract_cyclos_actor_facts("unexpected") is None
+
+
+def test_malformed_actor_is_not_silently_treated_as_missing():
+    with pytest.raises(
+        CyclosFactsError,
+        match="acteur Cyclos malformé",
+    ):
+        extract_cyclos_actor_facts("unexpected")
+
+
+def test_numeric_zero_is_preserved_as_native_fact():
+    facts = extract_cyclos_transaction_facts({
+        "id": 0,
+        "amount": 0,
+        "currency": "unit",
+    })
+
+    assert facts.transaction_id == "0"
+    assert facts.amount_raw == "0"
+    assert facts.amount_decimal == Decimal("0")
 
 
 def test_extract_transaction_preserves_native_facts():
@@ -106,6 +128,10 @@ def test_extract_transaction_preserves_native_facts():
     assert facts.amount_decimal == Decimal("12.50")
 
     assert facts.native_transaction_type == "internalPayment"
+    assert facts.native_transaction_type_name == "Paiement"
+    assert facts.native_transaction_kind == "payment"
+    assert facts.native_creation_type == "manual"
+
     assert facts.native_transaction_label == "Paiement"
     assert facts.native_transaction_group == "payment"
 
@@ -134,6 +160,9 @@ def test_creation_type_is_used_when_kind_is_missing():
     })
 
     assert facts.amount_decimal == Decimal("3.25")
+    assert facts.native_transaction_type_name is None
+    assert facts.native_transaction_kind is None
+    assert facts.native_creation_type == "scheduled"
     assert facts.native_transaction_label == "transfer"
     assert facts.native_transaction_group == "scheduled"
 
