@@ -377,27 +377,7 @@ def login():
             error="Identifiants invalides.",
         ), 401
 
-    # AUTH_FLOW006_PENDING_MLC_LOGIN
-    # Important : récupérer la MLC choisie avant session.clear().
-    pending_mlc_id = session.get("pending_mlc_id")
-
-    session.clear()
-    session["user_id"] = user["id"]
-    session["user_email"] = user["email"]
-    session["user_display_name"] = user["display_name"]
-    session["global_role"] = user["global_role"]
-
-    if pending_mlc_id:
-        # Import local pour éviter une boucle auth.py <-> mlc_instances.py.
-        from server.routes.mlc_instances import _user_can_access_mlc
-
-        allowed, role = _user_can_access_mlc(user, pending_mlc_id)
-        if allowed:
-            session["active_mlc_id"] = pending_mlc_id
-            session["active_mlc_role"] = role
-        session.pop("pending_mlc_id", None)
-
-    return redirect(next_url or "/app")
+    return redirect(next_url or "/")
 
 
 @auth_bp.route("/logout", methods=["GET", "POST"])

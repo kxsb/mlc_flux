@@ -3,7 +3,6 @@ from __future__ import annotations
 from flask import Blueprint, jsonify, request
 
 from server.mlc_context import get_active_mlc_id
-from server.mlc_profiles import get_mlc_profile
 from server.services.user_to_professional_map_analytics import (
     get_user_to_professional_map_payload,
 )
@@ -35,10 +34,13 @@ def _float_arg(name: str, default: float) -> float:
         raise ValueError(f"Paramètre {name} invalide.") from exc
 
 
-def _resolve_requested_mlc_id(value: str | None) -> str:
-    if value in (None, ""):
-        return get_active_mlc_id()
-    return get_mlc_profile(str(value).strip()).id
+def _resolve_mlc_id() -> str:
+    """
+    Retourne l'unique MLC configurée pour cette installation.
+
+    Aucun paramètre HTTP ne peut sélectionner une autre instance.
+    """
+    return get_active_mlc_id()
 
 
 
@@ -469,12 +471,7 @@ def _strip_user_to_professional_map_heavy_fields(
 @user_to_professional_map_bp.route("/api/user-to-professional-map", methods=["GET"])
 def user_to_professional_map():
     try:
-        requested_mlc = (
-            request.args.get("mlc_id")
-            or request.args.get("mlc")
-            or request.args.get("instance")
-        )
-        mlc_id = _resolve_requested_mlc_id(requested_mlc)
+        mlc_id = _resolve_mlc_id()
 
         payload = get_user_to_professional_map_payload(
             mlc_id=mlc_id,

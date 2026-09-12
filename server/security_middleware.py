@@ -157,114 +157,6 @@ def _is_mutating_request() -> bool:
 
 
 
-# SEC_AUTH005A_PUBLIC_ALLOWLIST
-
-_PUBLIC_INSTANCE_KEYS = {
-    "id",
-    "name",
-    "short_name",
-    "description",
-    "currency_name",
-    "currency_symbol",
-    "public_summary",
-    "can_access",
-    "access_role",
-    "locked",
-    "requires_login",
-}
-
-_PUBLIC_SUMMARY_KEYS = {
-    "available",
-    "period_start",
-    "period_end",
-    "period_label",
-    "transaction_count",
-    "active_individuals",
-    "active_professionals",
-    "active_total",
-    "circulating_money",
-    "circulating_money_label",
-    "circulating_money_source",
-    "circulating_money_snapshot_date",
-    "circulating_money_quality",
-    "circulating_money_numeric_value",
-    "circulating_money_paper_value",
-    "usage_frequency_label",
-    "usage_frequency_unit",
-    "usage_frequency_method",
-    "usage_frequency_max",
-    "usage_frequency_trend",
-    "transaction_volume_trend",
-}
-
-
-def _sanitize_public_instance(instance):
-    if not isinstance(instance, dict):
-        return instance
-
-    cleaned = {
-        key: instance.get(key)
-        for key in _PUBLIC_INSTANCE_KEYS
-        if key in instance
-    }
-
-    summary = instance.get("public_summary") or {}
-    if isinstance(summary, dict):
-        cleaned["public_summary"] = {
-            key: summary.get(key)
-            for key in _PUBLIC_SUMMARY_KEYS
-            if key in summary
-        }
-
-    return cleaned
-
-
-def _sanitize_public_mlc_instances_response(response):
-    if request.path != "/api/mlc-instances":
-        return response
-
-    if response.status_code != 200:
-        return response
-
-    mimetype = (response.mimetype or "").lower()
-    if "json" not in mimetype:
-        return response
-
-    try:
-        payload = json.loads(response.get_data(as_text=True))
-    except Exception:
-        return response
-
-    if not isinstance(payload, dict):
-        return response
-
-    # Ne sanitise que la réponse publique non connectée.
-    if payload.get("authenticated") is not False:
-        return response
-
-    instances = payload.get("instances") or []
-
-    sanitized = {
-        "authenticated": False,
-        "user": None,
-        "active_mlc_id": None,
-        "active_mlc_role": None,
-        "pending_mlc_id": payload.get("pending_mlc_id"),
-        "instances": [
-            _sanitize_public_instance(instance)
-            for instance in instances
-            if isinstance(instance, dict)
-        ],
-    }
-
-    raw = json.dumps(sanitized, ensure_ascii=False, separators=(",", ":"))
-    response.set_data(raw)
-    response.headers["Content-Length"] = str(len(raw.encode("utf-8")))
-
-    return response
-
-
-
 def _robots_txt_response():
     body = """# MLCFlux — accès robots interdit
 
@@ -431,7 +323,5 @@ def install_security_middleware(app):
         path = request.path or ""
         if path.startswith("/api/admin/") or path.startswith("/api/me"):
             response.headers.setdefault("Cache-Control", "no-store")
-
-        response = _sanitize_public_mlc_instances_response(response)
 
         return response

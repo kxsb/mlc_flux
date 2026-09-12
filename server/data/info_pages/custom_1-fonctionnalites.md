@@ -1253,15 +1253,15 @@ L’administration peut afficher :
 utilisateur / session
 → control.db
 → routes auth / admin
-→ sélection MLC
-→ accès ou refus selon droits
+→ authentification
+→ accès à l'instance MLC configurée
 
 
 ### Fonctions et fichiers principalement concernés
 
 Backend :
 - server/routes/auth.py
-- server/routes/mlc_instances.py
+- server/routes/current_mlc.py
 - server/routes/admin_accounts.py
 - server/routes/account_requests.py
 - server/routes/admin_integrity.py
@@ -1272,9 +1272,7 @@ Backend :
 Routes API :
 - /api/me
 - /api/me/password
-- /api/mlc-instances
 - /api/current-mlc
-- /api/select-mlc
 - /api/account-requests
 - /api/admin/account-requests
 - /api/admin/accounts

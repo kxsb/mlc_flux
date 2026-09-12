@@ -133,38 +133,11 @@ def _synthetic_source_area_feature_collection(source: dict[str, Any]) -> dict[st
 
 def _payment_basin_active_mlc_id() -> str:
     """
-    Résout l'instance MLC réellement active.
-
-    Ordre volontaire :
-    1. contexte HTTP multi-MLC : query string / session / g ;
-    2. variables d'environnement : scripts, tests directs, tâches CLI ;
-    3. fallback historique.
+    Retourne l'unique MLC configurée sur cette installation.
     """
-    try:
-        from flask import g, has_request_context, request, session
+    from server.mlc_context import get_default_mlc_id
 
-        if has_request_context():
-            candidates = [
-                request.args.get("mlc"),
-                session.get("active_mlc_id"),
-                session.get("pending_mlc_id"),
-                getattr(g, "active_mlc_id", None),
-                request.headers.get("X-MLC-Id"),
-                request.headers.get("X-MLCFlux-MLC-Id"),
-            ]
-
-            for candidate in candidates:
-                cleaned = str(candidate or "").strip()
-                if cleaned:
-                    return cleaned
-    except Exception:
-        pass
-
-    return (
-        os.environ.get("MLCFLUX_DEFAULT_MLC_ID")
-        or os.environ.get("MLCFLUX_ACTIVE_MLC_ID")
-        or "gonette"
-    )
+    return get_default_mlc_id()
 
 
 def _payment_basin_load_profile() -> dict[str, Any]:

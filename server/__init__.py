@@ -24,7 +24,7 @@ from server.routes.professional_payment_basin_map import professional_payment_ba
 from server.routes.user_to_professional_map import user_to_professional_map_bp
 from server.routes.professional_activity import professional_activity_bp
 from server.routes.professional_economic_registry import professional_economic_registry_bp
-from server.routes.mlc_instances import mlc_instances_bp
+from server.routes.current_mlc import current_mlc_bp
 from server.database import init_db, init_professional_enrichment_db
 
 def create_app():
@@ -64,7 +64,7 @@ def create_app():
     app.register_blueprint(user_to_professional_map_bp)
     app.register_blueprint(professional_activity_bp)
     app.register_blueprint(professional_economic_registry_bp)
-    app.register_blueprint(mlc_instances_bp)
+    app.register_blueprint(current_mlc_bp)
 
     install_security_middleware(app)
     install_auth_guard(app)

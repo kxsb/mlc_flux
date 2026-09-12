@@ -4,8 +4,6 @@ import os
 from pathlib import Path
 from typing import Any
 
-from flask import has_request_context, session
-
 from server.mlc_profiles import get_mlc_profile, load_mlc_profiles
 
 
@@ -42,20 +40,15 @@ def normalize_mlc_id(mlc_id: str | None) -> str:
 
 
 def get_active_mlc_id(*, fallback_to_default: bool = True) -> str | None:
-    if has_request_context():
-        active_mlc_id = session.get("active_mlc_id")
+    """
+    Retourne l'unique MLC configurée pour cette installation.
 
-        if active_mlc_id:
-            try:
-                return normalize_mlc_id(active_mlc_id)
-            except (KeyError, ValueError):
-                session.pop("active_mlc_id", None)
-                session.pop("active_mlc_role", None)
-
-    if fallback_to_default:
-        return get_default_mlc_id()
-
-    return None
+    fallback_to_default est conservé temporairement dans la signature
+    pour compatibilité avec les appels existants. En mode standalone,
+    il n'existe plus d'instance active distincte de l'instance configurée.
+    """
+    _ = fallback_to_default
+    return get_default_mlc_id()
 
 
 def get_active_mlc_profile(*, fallback_to_default: bool = True):
