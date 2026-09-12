@@ -75,7 +75,7 @@ balances = Table(
     Column("balance_component", Text, nullable=False),
     Column("amount_minor", BigInteger, nullable=False),
     Column("currency_code", String(64), nullable=False),
-    Column("currency_exponent", Integer, nullable=False, default=2),
+    Column("currency_exponent", Integer, nullable=False),
     Column("source_system", String(64), nullable=False),
 )
 
