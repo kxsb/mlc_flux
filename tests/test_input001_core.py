@@ -1,9 +1,10 @@
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine, insert
+from sqlalchemy.exc import StatementError
+from sqlalchemy import create_engine, insert, select
 
 from server.input_contract.reader import (
     FinancialContractReader,
@@ -360,3 +361,170 @@ def test_reader_rejects_empty_dataset_identity():
         match="dataset_metadata.dataset_id",
     ):
         FinancialContractReader(engine).metadata_row()
+
+
+def test_sqlite_transaction_datetime_roundtrip_preserves_instant():
+    engine = _build_empty_required_contract()
+
+    given = datetime.fromisoformat(
+        "2026-09-12T14:30:00+02:00"
+    )
+
+    with engine.begin() as conn:
+        conn.execute(
+            insert(transactions),
+            [{
+                "transaction_id": "utc-roundtrip",
+                "occurred_at": given,
+                "source_account_id": None,
+                "destination_account_id": None,
+                "amount_minor": 100,
+                "currency_code": "LOCAL",
+                "currency_exponent": 2,
+            }],
+        )
+
+    returned = (
+        FinancialContractReader(engine)
+        .fetch_transactions()[0]["occurred_at"]
+    )
+
+    assert returned.tzinfo is not None
+    assert returned.utcoffset().total_seconds() == 0
+    assert returned == datetime(
+        2026, 9, 12, 12, 30, tzinfo=UTC
+    )
+
+
+def test_sqlite_all_contract_temporal_fields_roundtrip_as_utc():
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+
+    for table in (
+        accounts,
+        transactions,
+        dataset_metadata,
+        account_states,
+        balances,
+        account_replacements,
+    ):
+        table.create(engine)
+
+    given = datetime.fromisoformat(
+        "2026-09-12T14:30:00+02:00"
+    )
+    expected = datetime(
+        2026, 9, 12, 12, 30, tzinfo=UTC
+    )
+
+    with engine.begin() as conn:
+        conn.execute(
+            insert(accounts),
+            [
+                {
+                    "account_id": "A",
+                    "source_system": "synthetic",
+                },
+                {
+                    "account_id": "B",
+                    "source_system": "synthetic",
+                },
+            ],
+        )
+
+        conn.execute(
+            insert(dataset_metadata),
+            [{
+                "dataset_id": "utc-test",
+                "contract_version": "input001-v0.1",
+                "source_system": "synthetic",
+                "coverage_from": given,
+                "coverage_to": given,
+                "account_state_history": True,
+                "balances": True,
+                "account_replacements": True,
+            }],
+        )
+
+        conn.execute(
+            insert(account_states),
+            [{
+                "account_id": "A",
+                "valid_from": given,
+                "valid_to": given,
+            }],
+        )
+
+        conn.execute(
+            insert(balances),
+            [{
+                "account_id": "A",
+                "observed_at": given,
+                "balance_component": "total",
+                "amount_minor": 100,
+                "currency_code": "LOCAL",
+                "currency_exponent": 2,
+                "source_system": "synthetic",
+            }],
+        )
+
+        conn.execute(
+            insert(account_replacements),
+            [{
+                "old_account_id": "A",
+                "new_account_id": "B",
+                "effective_at": given,
+            }],
+        )
+
+    metadata_value = (
+        FinancialContractReader(engine).metadata_row()
+    )
+
+    with engine.connect() as conn:
+        state = conn.execute(
+            select(account_states)
+        ).mappings().one()
+
+        balance = conn.execute(
+            select(balances)
+        ).mappings().one()
+
+        replacement = conn.execute(
+            select(account_replacements)
+        ).mappings().one()
+
+    for value in (
+        metadata_value["coverage_from"],
+        metadata_value["coverage_to"],
+        state["valid_from"],
+        state["valid_to"],
+        balance["observed_at"],
+        replacement["effective_at"],
+    ):
+        assert value == expected
+        assert value.tzinfo is not None
+        assert value.utcoffset().total_seconds() == 0
+
+
+def test_contract_rejects_naive_datetime_on_write():
+    engine = _build_empty_required_contract()
+
+    naive = datetime(2026, 9, 12, 14, 30)
+
+    with pytest.raises(
+        (ValueError, StatementError),
+        match="timezone-aware",
+    ):
+        with engine.begin() as conn:
+            conn.execute(
+                insert(transactions),
+                [{
+                    "transaction_id": "naive-time",
+                    "occurred_at": naive,
+                    "source_account_id": None,
+                    "destination_account_id": None,
+                    "amount_minor": 100,
+                    "currency_code": "LOCAL",
+                    "currency_exponent": 2,
+                }],
+            )

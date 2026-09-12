@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -10,7 +12,60 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    TypeDecorator,
 )
+
+class UTCDateTime(TypeDecorator):
+    """
+    Instant UTC portable entre SQLite et les moteurs avec timezone native.
+
+    - toute écriture doit fournir un datetime timezone-aware ;
+    - la valeur est normalisée en UTC avant stockage ;
+    - SQLite stocke un DATETIME naïf représentant explicitement UTC ;
+    - toute lecture restitue un datetime timezone-aware en UTC.
+    """
+
+    impl = DateTime
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        return dialect.type_descriptor(
+            DateTime(timezone=dialect.name != "sqlite")
+        )
+
+    def process_bind_param(
+        self,
+        value: datetime | None,
+        dialect,
+    ) -> datetime | None:
+        if value is None:
+            return None
+
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError(
+                "INPUT001 datetime values must be timezone-aware"
+            )
+
+        normalized = value.astimezone(UTC)
+
+        if dialect.name == "sqlite":
+            return normalized.replace(tzinfo=None)
+
+        return normalized
+
+    def process_result_value(
+        self,
+        value: datetime | None,
+        dialect,
+    ) -> datetime | None:
+        if value is None:
+            return None
+
+        if value.tzinfo is None or value.utcoffset() is None:
+            return value.replace(tzinfo=UTC)
+
+        return value.astimezone(UTC)
+
 
 metadata = MetaData()
 
@@ -19,7 +74,7 @@ transactions = Table(
     metadata,
     Column("transaction_id", Text, primary_key=True),
     Column("native_transaction_number", Text),
-    Column("occurred_at", DateTime(timezone=True), nullable=False),
+    Column("occurred_at", UTCDateTime(), nullable=False),
     Column("source_account_id", Text),
     Column("destination_account_id", Text),
     Column("amount_minor", BigInteger, nullable=False),
@@ -47,8 +102,8 @@ account_states = Table(
     "account_states",
     metadata,
     Column("account_id", Text, nullable=False),
-    Column("valid_from", DateTime(timezone=True), nullable=False),
-    Column("valid_to", DateTime(timezone=True)),
+    Column("valid_from", UTCDateTime(), nullable=False),
+    Column("valid_to", UTCDateTime()),
     Column("native_account_type", Text),
     Column("native_status", Text),
 )
@@ -59,8 +114,8 @@ dataset_metadata = Table(
     Column("dataset_id", Text, primary_key=True),
     Column("contract_version", String(64), nullable=False),
     Column("source_system", String(64), nullable=False),
-    Column("coverage_from", DateTime(timezone=True)),
-    Column("coverage_to", DateTime(timezone=True)),
+    Column("coverage_from", UTCDateTime()),
+    Column("coverage_to", UTCDateTime()),
     Column("snapshot_ref", Text),
     Column("account_state_history", Boolean, nullable=False, default=False),
     Column("balances", Boolean, nullable=False, default=False),
@@ -71,7 +126,7 @@ balances = Table(
     "balances",
     metadata,
     Column("account_id", Text, nullable=False),
-    Column("observed_at", DateTime(timezone=True), nullable=False),
+    Column("observed_at", UTCDateTime(), nullable=False),
     Column("balance_component", Text, nullable=False),
     Column("amount_minor", BigInteger, nullable=False),
     Column("currency_code", String(64), nullable=False),
@@ -84,7 +139,7 @@ account_replacements = Table(
     metadata,
     Column("old_account_id", Text, nullable=False),
     Column("new_account_id", Text, nullable=False),
-    Column("effective_at", DateTime(timezone=True), nullable=False),
+    Column("effective_at", UTCDateTime(), nullable=False),
     Column("native_reason", Text),
 )
 
