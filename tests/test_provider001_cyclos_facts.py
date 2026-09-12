@@ -64,6 +64,7 @@ def test_extract_transaction_preserves_native_facts():
         "transactionNumber": "TX-001",
         "date": "2026-01-12T10:15:00Z",
         "amount": "12.50",
+        "currency": "unit",
         "kind": "payment",
         "creationType": "manual",
         "type": {
@@ -100,6 +101,7 @@ def test_extract_transaction_preserves_native_facts():
     assert facts.transaction_number == "TX-001"
     assert facts.occurred_at == "2026-01-12T10:15:00Z"
 
+    assert facts.native_currency_id == "unit"
     assert facts.amount_raw == "12.50"
     assert facts.amount_decimal == Decimal("12.50")
 

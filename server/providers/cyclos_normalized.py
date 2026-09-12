@@ -42,3 +42,143 @@ def cyclos_account_row(
         "native_owner_id": actor.user_id,
         "source_system": "cyclos",
     }
+
+
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from decimal import Decimal
+from typing import Mapping
+
+from server.providers.cyclos_facts import CyclosTransactionFacts
+
+
+class CyclosTransactionError(ValueError):
+    """Une transaction Cyclos ne peut pas être normalisée sans perte."""
+
+
+@dataclass(frozen=True)
+class CyclosCurrencySpec:
+    native_currency_id: str
+    currency_code: str
+    currency_exponent: int
+
+
+def _parse_occurred_at(value: str | None) -> datetime:
+    if not value:
+        raise CyclosTransactionError("Transaction Cyclos sans date.")
+
+    try:
+        parsed = datetime.fromisoformat(
+            value.replace("Z", "+00:00")
+        )
+    except ValueError as exc:
+        raise CyclosTransactionError(
+            f"Date Cyclos invalide : {value!r}"
+        ) from exc
+
+    if parsed.tzinfo is None:
+        raise CyclosTransactionError(
+            "Date Cyclos sans fuseau horaire."
+        )
+
+    return parsed.astimezone(UTC)
+
+
+def _amount_minor(
+    amount: Decimal | None,
+    exponent: int,
+) -> int:
+    if amount is None:
+        raise CyclosTransactionError(
+            "Montant Cyclos absent ou invalide."
+        )
+
+    if exponent < 0:
+        raise CyclosTransactionError(
+            "currency_exponent négatif."
+        )
+
+    scaled = amount * (Decimal(10) ** exponent)
+    integral = scaled.to_integral_value()
+
+    if scaled != integral:
+        raise CyclosTransactionError(
+            "Le montant Cyclos possède une précision supérieure "
+            "à celle déclarée pour la devise."
+        )
+
+    return int(integral)
+
+
+def cyclos_transaction_row(
+    transaction: CyclosTransactionFacts,
+    *,
+    currency_specs: Mapping[str, CyclosCurrencySpec],
+) -> dict[str, Any]:
+    """
+    Convertit des faits transactionnels Cyclos vers le contrat normalisé.
+
+    La devise native n'est jamais assimilée implicitement à un code
+    de devise MLCFlux.
+    """
+    if not transaction.transaction_id:
+        raise CyclosTransactionError(
+            "Transaction Cyclos sans transaction.id."
+        )
+
+    native_currency_id = transaction.native_currency_id
+
+    if not native_currency_id:
+        raise CyclosTransactionError(
+            "Transaction Cyclos sans currency."
+        )
+
+    spec = currency_specs.get(native_currency_id)
+    if spec is None:
+        raise CyclosTransactionError(
+            "Devise Cyclos inconnue : "
+            f"{native_currency_id!r}"
+        )
+
+    if spec.native_currency_id != native_currency_id:
+        raise CyclosTransactionError(
+            "Spécification de devise incohérente."
+        )
+
+    source = cyclos_account_row(transaction.source_actor)
+    destination = cyclos_account_row(
+        transaction.destination_actor
+    )
+
+    return {
+        "transaction_id": transaction.transaction_id,
+        "native_transaction_number": (
+            transaction.transaction_number
+        ),
+        "occurred_at": _parse_occurred_at(
+            transaction.occurred_at
+        ),
+        "source_account_id": (
+            source["account_id"] if source else None
+        ),
+        "destination_account_id": (
+            destination["account_id"]
+            if destination else None
+        ),
+        "amount_minor": _amount_minor(
+            transaction.amount_decimal,
+            spec.currency_exponent,
+        ),
+        "native_currency_id": native_currency_id,
+        "currency_code": spec.currency_code,
+        "currency_exponent": spec.currency_exponent,
+        "native_transaction_type": (
+            transaction.native_transaction_type
+        ),
+        "native_transaction_label": (
+            transaction.native_transaction_label
+        ),
+        "native_transaction_group": (
+            transaction.native_transaction_group
+        ),
+    }

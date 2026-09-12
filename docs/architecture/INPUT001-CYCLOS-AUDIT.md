@@ -198,3 +198,45 @@ Ces constats portent sur des fenêtres réelles de 7 jours et ne prétendent
 pas démontrer l'immutabilité historique absolue de `actor.id`. Ils sont
 néanmoins cohérents sur deux configurations Cyclos indépendantes et
 suffisent pour fixer le contrat du provider actuel.
+
+## Audit monétaire Cyclos — Gonette / La Graine
+
+Audit read-only réalisé sur les mêmes fenêtres de 7 jours.
+
+### La Graine
+
+- 134 transactions observées ;
+- `amount` est fourni sous forme de chaîne ;
+- les 134 montants observés utilisent 2 décimales ;
+- `transaction.currency` est présent sur les 134 transactions ;
+- la valeur native observée est `graine34`.
+
+### La Gonette
+
+- 549 transactions observées ;
+- `amount` est fourni sous forme de chaîne ;
+- les 549 montants observés utilisent 2 décimales ;
+- `transaction.currency` est présent sur les 549 transactions ;
+- la valeur native observée est `unit`.
+
+### Décision PROVIDER001
+
+`transaction.currency` est conservé comme `native_currency_id`.
+
+Il n'est pas assimilé directement à `currency_code` : les valeurs
+observées (`graine34`, `unit`) sont des identifiants natifs Cyclos et non
+une nomenclature portable garantie.
+
+Le provider reçoit donc une spécification explicite associant :
+
+- `native_currency_id` ;
+- `currency_code` normalisé pour le dataset ;
+- `currency_exponent`.
+
+Le montant natif est lu avec `Decimal`, puis converti en `amount_minor`
+uniquement si sa précision est compatible avec l'exposant déclaré.
+Aucun arrondi silencieux n'est autorisé.
+
+Les 683 transactions observées utilisent 2 décimales, mais cette
+observation ne constitue pas une raison pour coder implicitement
+`currency_exponent = 2` dans le provider.

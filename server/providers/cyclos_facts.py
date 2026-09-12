@@ -39,6 +39,7 @@ class CyclosTransactionFacts:
     transaction_number: str | None
     occurred_at: str | None
 
+    native_currency_id: str | None
     amount_raw: str | None
     amount_decimal: Decimal | None
 
@@ -104,6 +105,7 @@ def extract_cyclos_transaction_facts(
             transaction.get("transactionNumber")
         ),
         occurred_at=_clean(transaction.get("date")),
+        native_currency_id=_clean(transaction.get("currency")),
         amount_raw=amount_raw,
         amount_decimal=_decimal(amount_raw),
         native_transaction_type=_clean(
