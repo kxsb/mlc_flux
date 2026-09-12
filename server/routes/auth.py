@@ -377,6 +377,12 @@ def login():
             error="Identifiants invalides.",
         ), 401
 
+    session.clear()
+    session["user_id"] = user["id"]
+    session["user_email"] = user["email"]
+    session["user_display_name"] = user["display_name"]
+    session["global_role"] = user["global_role"]
+
     return redirect(next_url or "/")
 
 

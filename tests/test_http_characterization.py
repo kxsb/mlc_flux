@@ -16,6 +16,53 @@ def test_root_requires_authentication():
     assert "/login" in response.headers["Location"]
 
 
+def test_successful_login_creates_session_without_mlc_selection(monkeypatch):
+    from flask import session
+    from server.routes import auth
+
+    user = {
+        "id": 42,
+        "email": "standalone@example.test",
+        "display_name": "Standalone",
+        "global_role": "user",
+    }
+    monkeypatch.setitem(app.config, "SECRET_KEY", "test-only-session-key")
+    monkeypatch.setattr(auth, "authenticate_user", lambda **kwargs: user)
+    monkeypatch.setattr(auth, "_auth_load_user_by_id", lambda user_id: user)
+
+    with app.test_request_context("/login", method="POST", data={
+        "email": user["email"], "password": "test-only-password",
+    }):
+        session["pending_mlc_id"] = "graine"
+        session["active_mlc_id"] = "graine"
+        session["active_mlc_role"] = "manager"
+        response = auth.login()
+
+        assert response.status_code == 302
+        assert response.headers["Location"] == "/"
+        assert session["user_id"] == user["id"]
+        assert session["user_email"] == user["email"]
+        assert session["global_role"] == "user"
+        assert not any("mlc" in key for key in session)
+        assert auth.current_user() == user
+
+
+def test_failed_login_does_not_create_session(monkeypatch):
+    from flask import session
+    from server.routes import auth
+
+    monkeypatch.setitem(app.config, "SECRET_KEY", "test-only-session-key")
+    monkeypatch.setattr(auth, "authenticate_user", lambda **kwargs: None)
+
+    with app.test_request_context("/login", method="POST", data={
+        "email": "standalone@example.test", "password": "invalid",
+    }):
+        _, status = auth.login()
+
+        assert status == 401
+        assert "user_id" not in session
+
+
 def test_version_api_is_public():
     client = app.test_client()
 

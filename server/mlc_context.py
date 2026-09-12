@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
 
 from server.mlc_profiles import get_mlc_profile, load_mlc_profiles
 
@@ -51,15 +50,6 @@ def get_active_mlc_id(*, fallback_to_default: bool = True) -> str | None:
     return get_default_mlc_id()
 
 
-def get_active_mlc_profile(*, fallback_to_default: bool = True):
-    active_mlc_id = get_active_mlc_id(fallback_to_default=fallback_to_default)
-
-    if not active_mlc_id:
-        return None
-
-    return get_mlc_profile(active_mlc_id)
-
-
 def get_mlc_instance_dir(mlc_id: str | None = None) -> Path:
     normalized_id = normalize_mlc_id(mlc_id or get_default_mlc_id())
     return INSTANCES_DIR / normalized_id
@@ -77,13 +67,8 @@ def get_mlc_db_path(mlc_id: str | None = None) -> Path:
     return get_mlc_instance_dir(mlc_id) / "mlcflux.db"
 
 
-def get_active_mlc_db_path(*, fallback_to_default: bool = True) -> Path | None:
-    active_mlc_id = get_active_mlc_id(fallback_to_default=fallback_to_default)
-
-    if not active_mlc_id:
-        return None
-
-    return get_mlc_db_path(active_mlc_id)
+def get_active_mlc_db_path() -> Path:
+    return get_mlc_db_path(get_default_mlc_id())
 
 
 def ensure_mlc_instance_dirs(mlc_id: str | None = None) -> dict[str, Path]:
@@ -102,32 +87,4 @@ def ensure_mlc_instance_dirs(mlc_id: str | None = None) -> dict[str, Path]:
         "runtime_dir": runtime_dir,
         "locks_dir": locks_dir,
         "db_path": get_mlc_db_path(normalized_id),
-    }
-
-
-def ensure_all_mlc_instance_dirs() -> dict[str, dict[str, Path]]:
-    result: dict[str, dict[str, Path]] = {}
-
-    for profile in load_mlc_profiles():
-        result[profile.id] = ensure_mlc_instance_dirs(profile.id)
-
-    return result
-
-
-def describe_mlc_data_context(mlc_id: str | None = None) -> dict[str, Any]:
-    normalized_id = normalize_mlc_id(mlc_id or get_default_mlc_id())
-    profile = get_mlc_profile(normalized_id)
-
-    paths = ensure_mlc_instance_dirs(normalized_id)
-
-    return {
-        "mlc_id": normalized_id,
-        "name": profile.name,
-        "sources": profile.sources,
-        "features": profile.features,
-        "instance_dir": str(paths["instance_dir"]),
-        "runtime_dir": str(paths["runtime_dir"]),
-        "locks_dir": str(paths["locks_dir"]),
-        "db_path": str(paths["db_path"]),
-        "db_exists": paths["db_path"].exists(),
     }

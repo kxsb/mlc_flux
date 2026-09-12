@@ -8,17 +8,8 @@ from server.mlc_context import (
 )
 
 
-# Chemin historique conservé temporairement pour compatibilité avec les
-# modules encore non refactorisés. Ne pas utiliser pour les nouveaux accès DB.
-LEGACY_DB_PATH = Path(__file__).resolve().parent / "data" / "mlcflux.db"
-DB_PATH = LEGACY_DB_PATH
-
-
 def get_db_path() -> Path:
-    db_path = get_active_mlc_db_path(fallback_to_default=True)
-
-    if db_path is None:
-        return LEGACY_DB_PATH
+    db_path = get_active_mlc_db_path()
 
     ensure_mlc_instance_dirs(db_path.parent.name)
     return db_path

@@ -15,6 +15,7 @@ from server.analytics import (
     compute_stats_charts,
 )
 from server.utils.sync_auth import require_sync_token
+from server.routes.sync import _format_sync_message
 
 legacy_api_bp = Blueprint("legacy_api", __name__)
 
@@ -430,21 +431,6 @@ def stats_charts():
         result["weekly_avg"] = result["weekly"]
 
     return jsonify(result)
-
-
-def _format_sync_message(fetched, written):
-    fetched_label = "transaction vérifiée" if fetched == 1 else "transactions vérifiées"
-    written_label = (
-        "transaction écrite / upsertée"
-        if written == 1
-        else "transactions écrites / upsertées"
-    )
-
-    return (
-        "Synchronisation terminée : "
-        f"{fetched} {fetched_label}, "
-        f"{written} {written_label}."
-    )
 
 
 @legacy_api_bp.route("/api/reload", methods=["POST"])

@@ -1,8 +1,11 @@
-# Instances MLCFlux
+# Données de l'installation MLCFlux
 
-Ce dossier contient les données runtime séparées par monnaie locale.
+Une installation utilise uniquement le sous-dossier du profil défini par
+`MLCFLUX_DEFAULT_MLC_ID`. L'arborescence par identifiant est conservée pour
+préserver les chemins des bases, mappings et caches existants ; elle ne constitue
+pas un portail de sélection de monnaies.
 
-Exemples :
+Exemples de chemins selon le profil installé :
 
 - `graine/mlcflux.db`
 - `gonette/mlcflux.db`

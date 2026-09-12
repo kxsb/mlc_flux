@@ -12,10 +12,12 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from server.mlc_context import normalize_mlc_id
+from server.mlc_profiles import load_mlc_profiles
+
 
 APP_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_ENV_FILE = APP_DIR / ".env"
-DEFAULT_INSTANCES = {"graine", "gonette"}
 EMAIL_RE = re.compile(r"(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b")
 ACCOUNT_ID_RE = re.compile(r'("account_id"\s*:\s*")([^"]+)(")')
 ACCOUNT_NUMBER_RE = re.compile(r'("account_number"\s*:\s*")([^"]+)(")')
@@ -62,24 +64,12 @@ def load_env_file(path: Path) -> None:
 
 
 def configure_instance(mlc_id: str, env_file: Path = DEFAULT_ENV_FILE) -> None:
-    if mlc_id not in DEFAULT_INSTANCES:
-        raise ValueError(f"Instance MLC inconnue : {mlc_id!r}")
+    mlc_id = normalize_mlc_id(mlc_id)
 
     load_env_file(env_file)
 
     os.environ["MLCFLUX_DEFAULT_MLC_ID"] = mlc_id
     os.environ["MLCFLUX_ACTIVE_MLC_ID"] = mlc_id
-
-    # Si server.database a déjà été importé, on vide les caches de chemin DB.
-    try:
-        from server import database
-
-        for name in ("get_db_path",):
-            func = getattr(database, name, None)
-            if hasattr(func, "cache_clear"):
-                func.cache_clear()
-    except Exception:
-        pass
 
 
 def save_sync_state(sync_name: str, status: str, message: str) -> None:
@@ -225,10 +215,13 @@ def refresh_cache_module(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Synchronise une instance MLCFlux multi-MLC de façon orchestrée."
+        description="Synchronise la MLC de cette installation standalone."
     )
 
-    parser.add_argument("--mlc", required=True, choices=sorted(DEFAULT_INSTANCES))
+    parser.add_argument(
+        "--mlc", required=True,
+        choices=sorted(profile.id for profile in load_mlc_profiles()),
+    )
     parser.add_argument("--env-file", default=str(DEFAULT_ENV_FILE))
     parser.add_argument("--date-from")
     parser.add_argument("--date-to")

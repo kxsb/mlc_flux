@@ -316,15 +316,15 @@ def build_postal_areas_for_instance(
     return output
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    profile_ids = sorted(path.stem for path in PROFILES_DIR.glob("*.json"))
     parser = argparse.ArgumentParser(
         description="Génère les géométries de fonds postaux pour les cartes bassin de paiement."
     )
     parser.add_argument(
         "--mlc",
-        action="append",
-        choices=["graine", "gonette"],
-        help="Instance MLC à traiter. Peut être répété. Par défaut : graine + gonette.",
+        choices=profile_ids,
+        help="Profil de l'installation. Par défaut : MLCFLUX_DEFAULT_MLC_ID.",
     )
     parser.add_argument(
         "--dry-run",
@@ -344,26 +344,25 @@ def main() -> None:
         help="Pause entre deux appels à geo.api.gouv.fr.",
     )
 
-    args = parser.parse_args()
-    mlc_ids = args.mlc or ["graine", "gonette"]
+    args = parser.parse_args(argv)
+    mlc_id = args.mlc or str(os.getenv("MLCFLUX_DEFAULT_MLC_ID") or "").strip()
+    if mlc_id not in profile_ids:
+        parser.error("Définissez MLCFLUX_DEFAULT_MLC_ID ou --mlc avec le profil de l'installation.")
 
-    summaries = []
-
-    for mlc_id in mlc_ids:
-        output = build_postal_areas_for_instance(
-            mlc_id,
-            sleep_seconds=args.sleep,
-            limit=args.limit,
-            dry_run=args.dry_run,
-        )
-        summaries.append({
-            "mlc_id": mlc_id,
-            "requested": output["postal_code_count_requested"],
-            "areas": output["area_count"],
-            "failures": output["failure_count"],
-            "output_path": str(_instance_output_path(mlc_id)),
-            "dry_run": args.dry_run,
-        })
+    output = build_postal_areas_for_instance(
+        mlc_id,
+        sleep_seconds=args.sleep,
+        limit=args.limit,
+        dry_run=args.dry_run,
+    )
+    summaries = [{
+        "mlc_id": mlc_id,
+        "requested": output["postal_code_count_requested"],
+        "areas": output["area_count"],
+        "failures": output["failure_count"],
+        "output_path": str(_instance_output_path(mlc_id)),
+        "dry_run": args.dry_run,
+    }]
 
     print(json.dumps(summaries, ensure_ascii=False, indent=2))
 

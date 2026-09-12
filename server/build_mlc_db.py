@@ -63,7 +63,6 @@ def _db_counts(db_path: Path) -> dict[str, int | None]:
         "transactions",
         "professional_enrichment",
         "odoo_professional_enrichment",
-        "tickets",
     ]
 
     result: dict[str, int | None] = {}
@@ -223,17 +222,6 @@ def main(argv: list[str] | None = None) -> int:
 
     # --mlc prime aussi après chargement .env.
     os.environ["MLCFLUX_DEFAULT_MLC_ID"] = args.mlc
-
-    # Sécurité si server.database a déjà résolu/caché un chemin avant main().
-    try:
-        from server import database as _database
-
-        for _name in ("get_db_path",):
-            _func = getattr(_database, _name, None)
-            if hasattr(_func, "cache_clear"):
-                _func.cache_clear()
-    except Exception:
-        pass
 
     from app import app
     from server.database import get_db_path, init_db, init_professional_enrichment_db
