@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 
-from server.mlc_secrets import get_cyclos_config
+from server.runtime_config import get_cyclos_config
 
 
 LOCAL_CALENDAR_TIMEZONE = ZoneInfo("Europe/Paris")

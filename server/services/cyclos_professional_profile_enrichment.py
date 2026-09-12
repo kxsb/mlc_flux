@@ -7,7 +7,7 @@ from typing import Any
 import requests
 
 from server.mlc_profiles import get_mlc_profile
-from server.mlc_secrets import get_cyclos_config
+from server.runtime_config import get_cyclos_config
 from server.services.cyclos_client import create_session_token, get_transactions
 from server.services.professional_ref_mapping import get_or_create_professional_ref
 

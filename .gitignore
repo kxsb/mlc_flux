@@ -107,7 +107,6 @@ node_modules/
 dist/
 build/
 # MLCFlux multi — fichiers locaux/sensibles à ne pas versionner
-server/mlc_secrets.py
 server/data/prenoms.csv
 
 # MLCFlux runtime / audit local
@@ -117,3 +116,6 @@ _tmp_*
 # MLCFlux caches générés
 server/data/professional_chain_fate_summary.json
 server/data/instances/*/professional_chain_fate_summary.json
+
+
+server/mlc_secrets.py

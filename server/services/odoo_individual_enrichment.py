@@ -7,7 +7,7 @@ from urllib.parse import quote
 
 import requests
 
-from server.mlc_secrets import get_cyclos_config
+from server.runtime_config import get_cyclos_config
 from flask import current_app
 
 from server.database import get_connection
