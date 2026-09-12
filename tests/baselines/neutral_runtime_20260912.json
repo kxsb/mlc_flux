@@ -1,0 +1,14 @@
+{
+  "algorithm": "sha256(canonical-json-selected-comparison-report)",
+  "baseline": "neutral_runtime_20260912",
+  "profiles": {
+    "gonette": {
+      "fingerprint": "dfe9c92131cbcd68316cd54a024c7eea56c2c9394596c9c1dc42f4cc32eced04"
+    },
+    "graine": {
+      "fingerprint": "d2a0a8b69096e719a3a701eb3032eae35d38cb962ef7e769a82d159b3a7c6b90"
+    }
+  },
+  "runtime_archive_sha256": "6b56d65b31f821e5be8d441341fe08456098853f26dd9c355f084afcbe6b7d63",
+  "source_commit": "ccd78a2c7ce9ab95e658d11f957d4a7a708437f8"
+}
