@@ -24,15 +24,6 @@ EXPECTED_TABLES: tuple[str, ...] = (
     "cyclos_individual_daily_balance_windows",
     "cyclos_professional_daily_balances",
     "cyclos_professional_daily_balance_windows",
-    "tickets",
-    "ticket_messages",
-    "ticket_events",
-)
-
-PRESERVED_APPLICATION_TABLES: tuple[str, ...] = (
-    "tickets",
-    "ticket_messages",
-    "ticket_events",
 )
 
 REQUIRED_INDEXES: dict[str, dict[str, dict[str, Any]]] = {
@@ -62,24 +53,6 @@ REQUIRED_INDEXES: dict[str, dict[str, dict[str, Any]]] = {
             "unique": False,
         },
         "idx_transaction_semantics_circuit": {
-            "unique": False,
-        },
-    },
-    "tickets": {
-        "idx_tickets_visibility_status_activity": {
-            "unique": False,
-        },
-        "idx_tickets_category": {
-            "unique": False,
-        },
-    },
-    "ticket_messages": {
-        "idx_ticket_messages_ticket_visibility_created": {
-            "unique": False,
-        },
-    },
-    "ticket_events": {
-        "idx_ticket_events_ticket_created": {
             "unique": False,
         },
     },
@@ -303,65 +276,10 @@ EXPECTED_COLUMN_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
         "last_run_at": {"type": "TEXT"},
         "fetched_at": {"type": "TEXT"},
     },
-    "tickets": {
-        "id": {"type": "INTEGER", "pk": 1},
-        "public_ref": {"type": "TEXT"},
-        "slug": {"type": "TEXT"},
-        "title": {"type": "TEXT", "notnull": True},
-        "category": {"type": "TEXT", "notnull": True},
-        "status": {"type": "TEXT", "notnull": True, "default": "new"},
-        "visibility": {"type": "TEXT", "notnull": True, "default": "public"},
-        "created_at": {"type": "TEXT", "notnull": True},
-        "updated_at": {"type": "TEXT", "notnull": True},
-        "last_activity_at": {"type": "TEXT", "notnull": True},
-        "resolved_at": {"type": "TEXT"},
-        "closed_at": {"type": "TEXT"},
-        "author_name": {"type": "TEXT", "notnull": True},
-        "author_email": {"type": "TEXT", "notnull": True},
-        "source_page": {"type": "TEXT"},
-        "context_json": {"type": "TEXT"},
-        "official_message_id": {"type": "INTEGER"},
-    },
-    "ticket_messages": {
-        "id": {"type": "INTEGER", "pk": 1},
-        "ticket_id": {"type": "INTEGER", "notnull": True},
-        "author_name": {"type": "TEXT", "notnull": True},
-        "author_email": {"type": "TEXT", "notnull": True},
-        "author_role": {"type": "TEXT", "notnull": True, "default": "public"},
-        "body_markdown": {"type": "TEXT", "notnull": True},
-        "visibility": {"type": "TEXT", "notnull": True, "default": "public"},
-        "created_at": {"type": "TEXT", "notnull": True},
-        "updated_at": {"type": "TEXT"},
-    },
-    "ticket_events": {
-        "id": {"type": "INTEGER", "pk": 1},
-        "ticket_id": {"type": "INTEGER", "notnull": True},
-        "event_type": {"type": "TEXT", "notnull": True},
-        "actor_role": {"type": "TEXT", "notnull": True},
-        "old_value": {"type": "TEXT"},
-        "new_value": {"type": "TEXT"},
-        "created_at": {"type": "TEXT", "notnull": True},
-    },
+
 }
 
-EXPECTED_FOREIGN_KEYS: dict[str, list[dict[str, Any]]] = {
-    "ticket_messages": [
-        {
-            "from": "ticket_id",
-            "table": "tickets",
-            "to": "id",
-            "on_delete": "CASCADE",
-        }
-    ],
-    "ticket_events": [
-        {
-            "from": "ticket_id",
-            "table": "tickets",
-            "to": "id",
-            "on_delete": "CASCADE",
-        }
-    ],
-}
+EXPECTED_FOREIGN_KEYS: dict[str, list[dict[str, Any]]] = {}
 
 MONETARY_NUMERIC_FIELDS: tuple[str, ...] = (
     "gonettes_num_circulation",
@@ -2464,189 +2382,6 @@ def _check_transaction_semantics_integrity(
 
 
 
-def _check_ticket_data_integrity(
-    conn: sqlite3.Connection,
-    report: dict[str, Any],
-) -> None:
-    integrity: dict[str, Any] = {
-        "available": _table_exists(conn, "tickets") and _table_exists(conn, "ticket_messages"),
-        "missing_public_ref_count": None,
-        "missing_slug_count": None,
-        "official_message_orphans": {
-            "count": None,
-            "sample": [],
-        },
-        "official_message_wrong_ticket": {
-            "count": None,
-            "sample": [],
-        },
-    }
-
-    if not integrity["available"]:
-        report["ticket_data_integrity"] = integrity
-        return
-
-    missing_public_ref_count = int(
-        _scalar(
-            conn,
-            """
-            SELECT COUNT(*)
-            FROM tickets
-            WHERE public_ref IS NULL
-               OR TRIM(public_ref) = ''
-            """,
-        )
-        or 0
-    )
-    missing_slug_count = int(
-        _scalar(
-            conn,
-            """
-            SELECT COUNT(*)
-            FROM tickets
-            WHERE slug IS NULL
-               OR TRIM(slug) = ''
-            """,
-        )
-        or 0
-    )
-
-    orphan_rows = conn.execute(
-        """
-        SELECT
-            t.id AS ticket_id,
-            t.public_ref,
-            t.official_message_id
-        FROM tickets t
-        LEFT JOIN ticket_messages tm
-          ON tm.id = t.official_message_id
-        WHERE t.official_message_id IS NOT NULL
-          AND tm.id IS NULL
-        ORDER BY t.id
-        LIMIT 50
-        """
-    ).fetchall()
-
-    orphan_count = int(
-        _scalar(
-            conn,
-            """
-            SELECT COUNT(*)
-            FROM tickets t
-            LEFT JOIN ticket_messages tm
-              ON tm.id = t.official_message_id
-            WHERE t.official_message_id IS NOT NULL
-              AND tm.id IS NULL
-            """,
-        )
-        or 0
-    )
-
-    wrong_ticket_rows = conn.execute(
-        """
-        SELECT
-            t.id AS ticket_id,
-            t.public_ref,
-            t.official_message_id,
-            tm.ticket_id AS message_ticket_id
-        FROM tickets t
-        JOIN ticket_messages tm
-          ON tm.id = t.official_message_id
-        WHERE t.official_message_id IS NOT NULL
-          AND tm.ticket_id <> t.id
-        ORDER BY t.id
-        LIMIT 50
-        """
-    ).fetchall()
-
-    wrong_ticket_count = int(
-        _scalar(
-            conn,
-            """
-            SELECT COUNT(*)
-            FROM tickets t
-            JOIN ticket_messages tm
-              ON tm.id = t.official_message_id
-            WHERE t.official_message_id IS NOT NULL
-              AND tm.ticket_id <> t.id
-            """,
-        )
-        or 0
-    )
-
-    integrity["missing_public_ref_count"] = missing_public_ref_count
-    integrity["missing_slug_count"] = missing_slug_count
-    integrity["official_message_orphans"] = {
-        "count": orphan_count,
-        "sample": _row_dicts(orphan_rows, limit=50),
-    }
-    integrity["official_message_wrong_ticket"] = {
-        "count": wrong_ticket_count,
-        "sample": _row_dicts(wrong_ticket_rows, limit=50),
-    }
-
-    if missing_public_ref_count:
-        _append_issue(
-            report,
-            severity="warning",
-            code="tickets.missing_public_ref",
-            message="Certains tickets n’ont pas de référence publique.",
-            details={"rows": missing_public_ref_count},
-        )
-
-    if missing_slug_count:
-        _append_issue(
-            report,
-            severity="warning",
-            code="tickets.missing_slug",
-            message="Certains tickets n’ont pas de slug.",
-            details={"rows": missing_slug_count},
-        )
-
-    if orphan_count:
-        _append_issue(
-            report,
-            severity="error",
-            code="tickets.official_message_orphan",
-            message="Certains official_message_id pointent vers un message inexistant.",
-            details=integrity["official_message_orphans"],
-        )
-
-    if wrong_ticket_count:
-        _append_issue(
-            report,
-            severity="error",
-            code="tickets.official_message_wrong_ticket",
-            message="Certains official_message_id pointent vers un message rattaché à un autre ticket.",
-            details=integrity["official_message_wrong_ticket"],
-        )
-
-    report["ticket_data_integrity"] = integrity
-
-
-def _check_preserved_application_data(
-    conn: sqlite3.Connection,
-    report: dict[str, Any],
-) -> None:
-    tables: dict[str, dict[str, Any]] = {}
-
-    for table_name in PRESERVED_APPLICATION_TABLES:
-        exists = _table_exists(conn, table_name)
-        tables[table_name] = {
-            "exists": exists,
-            "count": _safe_table_count(conn, table_name) if exists else None,
-            "rebuild_policy": "preserve",
-        }
-
-    report["preserved_application_data"] = {
-        "description": (
-            "Ces tables contiennent des données applicatives ou humaines "
-            "qui ne doivent pas être perdues lors d’un futur rebuild analytique."
-        ),
-        "tables": tables,
-    }
-
-
 # ---------------------------------------------------------------------------
 # Finalisation et rendu
 # ---------------------------------------------------------------------------
@@ -2698,8 +2433,6 @@ def run_db_integrity_test(
         "professional_enrichment_consistency": {},
         "odoo_monetary_consistency": {},
         "transaction_semantics_integrity": {},
-        "ticket_data_integrity": {},
-        "preserved_application_data": {},
         "observations": [],
         "warnings": [],
         "errors": [],
@@ -2739,8 +2472,6 @@ def run_db_integrity_test(
         _check_professional_enrichment_consistency(conn, report)
         _check_odoo_monetary_consistency(conn, report)
         _check_transaction_semantics_integrity(conn, report)
-        _check_ticket_data_integrity(conn, report)
-        _check_preserved_application_data(conn, report)
     except Exception as exc:
         _append_issue(
             report,
@@ -2774,8 +2505,6 @@ def render_integrity_report_text(report: dict[str, Any]) -> str:
     windows = report.get("balance_windows") or {}
     pro_consistency = report.get("professional_enrichment_consistency") or {}
     monetary = report.get("odoo_monetary_consistency") or {}
-    tickets_integrity = report.get("ticket_data_integrity") or {}
-    preserved = report.get("preserved_application_data") or {}
     table_counts = report.get("table_counts") or {}
 
     lines: list[str] = []
@@ -3000,42 +2729,7 @@ def render_integrity_report_text(report: dict[str, Any]) -> str:
     lines.extend(
         [
             "------------------------------------------------------------------------",
-            "9. Intégrité applicative des tickets",
-            "------------------------------------------------------------------------",
-            f"Disponible                                      : {tickets_integrity.get('available')}",
-            f"Tickets sans référence publique                 : {tickets_integrity.get('missing_public_ref_count')}",
-            f"Tickets sans slug                               : {tickets_integrity.get('missing_slug_count')}",
-            f"official_message_id orphelins                   : {(tickets_integrity.get('official_message_orphans') or {}).get('count')}",
-            f"official_message_id vers mauvais ticket         : {(tickets_integrity.get('official_message_wrong_ticket') or {}).get('count')}",
-            "",
-        ]
-    )
-
-    lines.extend(
-        [
-            "------------------------------------------------------------------------",
-            "10. Données applicatives à préserver lors d’un futur rebuild",
-            "------------------------------------------------------------------------",
-            str(preserved.get("description") or ""),
-        ]
-    )
-
-    preserved_tables = preserved.get("tables") or {}
-    for table_name in PRESERVED_APPLICATION_TABLES:
-        item = preserved_tables.get(table_name) or {}
-        lines.append(
-            f"{table_name:24s} : "
-            f"exists={item.get('exists')} | "
-            f"count={item.get('count')} | "
-            f"policy={item.get('rebuild_policy')}"
-        )
-
-    lines.append("")
-
-    lines.extend(
-        [
-            "------------------------------------------------------------------------",
-            "11. Observations",
+            "9. Observations",
             "------------------------------------------------------------------------",
         ]
     )
@@ -3054,7 +2748,7 @@ def render_integrity_report_text(report: dict[str, Any]) -> str:
     lines.extend(
         [
             "------------------------------------------------------------------------",
-            "12. Avertissements",
+            "10. Avertissements",
             "------------------------------------------------------------------------",
         ]
     )
@@ -3073,7 +2767,7 @@ def render_integrity_report_text(report: dict[str, Any]) -> str:
     lines.extend(
         [
             "------------------------------------------------------------------------",
-            "13. Erreurs",
+            "11. Erreurs",
             "------------------------------------------------------------------------",
         ]
     )

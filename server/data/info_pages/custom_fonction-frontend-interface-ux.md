@@ -2,7 +2,7 @@
 
 |Domaine|Fichier|Fonction / objet|Rôle technique|Déclencheur / contexte|Donnée ou endpoint lié|Explication humaine|Priorité|
 |---|---|---|---|---|---|---|---|
-|État|static/js/app.js|appState|Objet global d’état UI : vues, caches, cartes, charts, tickets, network, périodes.|Toute l’application|—|La mémoire vive de l’interface.|Essentiel|
+|État|static/js/app.js|appState|Objet global d’état UI : vues, caches, cartes, charts, network, périodes.|Toute l’application|—|La mémoire vive de l’interface.|Essentiel|
 |Performance|static/js/app.js|configureGlobalChartPerformanceDefaults()|Désactive les animations Chart.js pour les dashboards lourds.|Au chargement JS|Chart.js|Les graphes vont au résultat sans animation coûteuse.|Très utile|
 |Période|static/js/app.js|initPeriodFilter()|Initialise le sélecteur de période et ses écouteurs.|Démarrage interface|/api/period-bounds|Prépare le filtre d’analyse global.|Essentiel|
 |Période|static/js/app.js|applyAnalysisPeriod()|Valide la période choisie puis déclenche le refresh de la vue.|Bouton Appliquer|query `start/end`|On change l’horizon temporel de tout l’écran.|Essentiel|
@@ -18,10 +18,8 @@
 |Navigation|static/js/app.js|renderTerritoriesView()|Rendu de l’analyse territoriale.|Vue `territories`|/api/territories/zip|Lecture agrégée par zones.|Très utile|
 |Navigation|static/js/app.js|renderSectorsView()|Rendu de l’analyse sectorielle.|Vue `sectors`|route sectorielle dédiée|Lecture par familles d’activité.|Très utile|
 |Navigation|static/js/app.js|renderNetworkView()|Rendu de la vue réseau Cytoscape.|Vue `network` / onglet déplacé selon refonte|/api/network|Graphe relationnel interactif.|Très utile|
-|Navigation|static/js/app.js|renderTicketsView()|Rendu de la liste de tickets.|Vue `tickets`|/api/tickets|Suivi des retours dans l’interface.|Contexte|
-|Navigation|static/js/app.js|renderTicketDetail(slug, feedbackMessage = '')|Rendu du détail d’un ticket.|Ouverture d’un ticket|/api/tickets/<slug>|Lecture fine d’un retour ou d’une discussion.|Contexte|
 |Navigation|static/js/app.js|renderInfoView(forceReload = false)|Charge et affiche la page Info & méthodologie.|Vue `info`|/api/info-content|Documentation méthodologique dans l’app.|Très utile|
-|Info|static/js/app.js|renderInfoMarkdown(markdown)|Convertit Markdown -> HTML puis sanitise.|Vue Info + tickets messages markdown|marked + DOMPurify|Rendre lisible du texte riche en restant sûr.|Essentiel|
+|Info|static/js/app.js|renderInfoMarkdown(markdown)|Convertit Markdown -> HTML puis sanitise.|Vue Info|marked + DOMPurify|Rendre lisible du texte riche en restant sûr.|Essentiel|
 |Info|static/js/app.js|renderInfoMarkdownToc(reader)|Construit le sommaire dynamique à partir des titres.|Après rendu markdown|DOM|Créer un index de navigation dans la méthodo.|Très utile|
 |Carto|static/js/app.js|destroyCartographyMap()|Détruit proprement carte + overlay deck.gl.|Changement de vue / rerender|MapLibre + deck.gl|Évite les artefacts et doublons de carte.|Très utile|
 |Carto|static/js/app.js|formatCartographyLocation(professional)|Formate ville/code postal pour la tooltip.|Tooltip carto|payload pro carto|Affichage humain de la localisation.|Contexte|
@@ -57,7 +55,7 @@
 |Thème|static/js/app.js|initThemeToggle()|Initialise le bouton de thème.|Boot application|local/UI state|Basculer clair/sombre.|Contexte|
 |Sidebar|static/js/app.js|initSidebarCollapse()|Initialise le repli de la sidebar.|Boot application|DOM|Récupérer de la place pour les vues denses.|Contexte|
 |Utilitaires|static/js/app.js|apiGet(url)|Fetch GET JSON standardisé avec gestion d’erreur.|Presque toutes les vues|Endpoints internes|Un point de passage commun pour lire l’API.|Essentiel|
-|Utilitaires|static/js/app.js|apiPostJson(url, payload)|Fetch POST JSON standardisé.|Info markdown, tickets, actions|Endpoints POST|Un point de passage commun pour écrire.|Très utile|
+|Utilitaires|static/js/app.js|apiPostJson(url, payload)|Fetch POST JSON standardisé.|Info markdown, actions|Endpoints POST|Un point de passage commun pour écrire.|Très utile|
 |Utilitaires|static/js/app.js|setTitle(title)|Met à jour le titre principal de la vue.|À chaque rendu de vue|DOM|Clarifie immédiatement l’écran actif.|Contexte|
 |Utilitaires|static/js/app.js|escapeHtml(text)|Échappe des chaînes injectées dans des templates HTML.|Rendu dynamique de labels|données JSON|Empêcher qu’un label devienne du HTML exécuté.|Essentiel|
 |Utilitaires|static/js/app.js|euro(value) / formatters `format...`|Formatent montants, ratios, entiers et libellés.|Affichage KPI/graphiques|—|Affichage cohérent en français.|Contexte|

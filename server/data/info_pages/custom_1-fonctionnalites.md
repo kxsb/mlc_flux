@@ -1146,76 +1146,6 @@ La documentation sert plutôt d’aide transversale à tous les graphiques, KPI 
 
 ---
 
-## 12. Tickets, demandes et améliorations
-
-### Finalité
-
-La partie tickets permet de conserver les retours, demandes, anomalies et pistes d’amélioration.
-
-Elle sert à ne pas perdre les idées et à rendre visible l’évolution du logiciel.
-
-### Où la trouver dans MLCFlux ?
-
-Localisation principale :
-
-Vue : Tickets / Roadmap
-
-### Mise en forme
-
-La vue peut afficher :
-
-* une liste de tickets ;
-* des statuts ;
-* des messages ;
-* une roadmap ;
-* des échanges Markdown ;
-* des filtres.
-
-### Interprétation possible
-
-Les tickets ne sont pas seulement des bugs. Ils peuvent être :
-
-Des demandes utilisateur.
-Des problèmes d’ergonomie.
-Des pistes de recherche.
-Des limites méthodologiques.
-Des besoins de documentation.
-Des anomalies de données.
-Des idées de nouveaux indicateurs.
-
-### Chemin principal des données
-
-formulaire ou action utilisateur
-→ route tickets
-→ service tickets
-→ tables tickets/messages
-→ rendu frontend
-
-### Fonctions et fichiers principalement concernés
-
-Backend :
-- server/services/tickets.py
-- server/routes/tickets.py
-
-Routes API :
-- /api/tickets
-- /api/tickets/roadmap
-- /api/tickets/<slug>
-- /api/tickets/<slug>/messages
-- /api/tickets/<slug>/status
-
-Frontend :
-- vues tickets dans static/js/app.js
-- renderInfoMarkdown() pour les messages Markdown
-
-### Graphiques concernés
-
-Aucun graphique métier direct.
-
-Cette partie relève plutôt du pilotage du développement de MLCFlux.
-
----
-
 ## 13. Administration, comptes et accès
 
 ### Finalité
@@ -1302,7 +1232,6 @@ L’administration protège l’accès aux données et au pilotage, mais ne cons
 | Soldes                      | Où la monnaie est-elle détenue ?                          | Soldes quotidiens                  | Pilotage, détention               |
 | Réemploi                    | La monnaie reçue est-elle réutilisée ?                    | Chaînes de flux                    | Pilotage, circulation pro         |
 | Documentation               | Comment lire l’outil ?                                    | Markdown                           | Info & méthodologie               |
-| Tickets                     | Comment suivre les besoins et anomalies ?                 | Tickets/messages                   | Roadmap                           |
 | Administration              | Qui accède à quoi ?                                       | control.db, sessions, rôles        | Sélection MLC, admin              |
 
 ---

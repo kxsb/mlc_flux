@@ -4,7 +4,7 @@ from server.routes.current_mlc import current_mlc
 
 def test_route_count_characterization():
     # Baseline Neutral après suppression du portail multi-instance.
-    assert len(list(app.url_map.iter_rules())) == 82
+    assert len(list(app.url_map.iter_rules())) == 76
 
 
 def test_root_requires_authentication():
@@ -182,3 +182,16 @@ def test_user_to_professional_map_cannot_switch_mlc(
         "&instance=graine"
     ):
         assert _resolve_mlc_id() == "gonette"
+
+
+
+def test_ticket_routes_are_removed():
+    routes = {
+        str(rule)
+        for rule in app.url_map.iter_rules()
+    }
+
+    assert not any(
+        route.startswith("/api/tickets")
+        for route in routes
+    )

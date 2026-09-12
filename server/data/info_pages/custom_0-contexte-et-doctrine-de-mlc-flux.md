@@ -103,7 +103,6 @@ Les principales fonctionnalités sont :
 * suivi des soldes et de la détention monétaire ;
 * exploration de certains indicateurs de réemploi ou de circulation ;
 * accès à des fiches de documentation méthodologique ;
-* suivi des tickets, demandes et améliorations de l’outil ;
 * administration des comptes et des accès lorsque l’instance est protégée.
 
 Toutes les fonctionnalités n’ont pas le même niveau de maturité. Certaines sont déjà utiles pour le pilotage. D’autres sont encore expérimentales et doivent être lues comme des espaces de travail.

@@ -14,7 +14,6 @@ from server.routes.info_content import info_content_bp
 from server.routes.admin_integrity import admin_integrity_bp
 from server.routes.admin_accounts import admin_accounts_bp
 from server.routes.account_requests import account_requests_bp
-from server.routes.tickets import tickets_bp
 from server.routes.monetary_indicators import monetary_indicators_bp
 from server.routes.individual_balances import individual_balances_bp
 from server.routes.user_postal_clusters import user_postal_clusters_bp
@@ -54,7 +53,6 @@ def create_app():
     app.register_blueprint(admin_integrity_bp)
     app.register_blueprint(admin_accounts_bp)
     app.register_blueprint(account_requests_bp)
-    app.register_blueprint(tickets_bp)
     app.register_blueprint(monetary_indicators_bp)
     app.register_blueprint(individual_balances_bp)
     app.register_blueprint(user_postal_clusters_bp)

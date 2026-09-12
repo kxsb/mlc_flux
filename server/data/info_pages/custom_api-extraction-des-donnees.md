@@ -23,8 +23,4 @@
 |Bassin de paiement pro|renderProfessionalCirculationPanel() / map renderer|/api/professionals/consumption-map|GET|Routes agrégées code postal -> pro, couverture, sources/destinations.|Oui|Carte de bassins de consommation.|Rendu via canvas dédié, extrait progressivement.|
 |Info & méthodologie|renderInfoView()|/api/info-content|GET|Markdown courant.|Non|Lecture de la méthodologie.|Rendu via marked + DOMPurify.|
 |Info & méthodologie|renderInfoView()|/api/info-content|POST|Nouveau Markdown.|Non|Édition in-app.|Permet la mise à jour sans éditer directement le fichier.|
-|Tickets|renderTicketsView()|/api/tickets|GET|Liste filtrée de tickets.|Filtres, pas période|Suivi des retours.|Filtres dans `appState.tickets.filters`.|
-|Ticket détail|renderTicketDetail(slug)|/api/tickets/<slug>|GET|Ticket + messages.|Non|Lecture d’un retour.|Affichage markdown possible dans les messages.|
-|Ticket création|renderTicketsView()|/api/tickets|POST|Nouveau ticket.|Non|Création de retour.|Présent dans la brique tickets.|
-|Ticket réponse|renderTicketDetail(slug)|/api/tickets/<slug>/messages|POST|Nouveau message dans un ticket.|Non|Discussion / suivi.|Présent dans la brique tickets.|
 |Rechargement données|action dédiée dans UI selon route legacy|/api/reload|POST|Déclenchement d’une sync récente.|Non|Action de maintenance depuis l’UI.|À lire avec précaution / sync auth selon état actuel.|
