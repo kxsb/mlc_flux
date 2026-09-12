@@ -70,6 +70,10 @@ def test_version_api_is_public():
 
     assert response.status_code == 200
 
+    payload = response.get_json()
+    assert "standalone" in payload["label"].lower()
+    assert "multi" not in payload["label"].lower()
+
 
 def test_multi_instance_selector_routes_are_removed():
     routes = {
@@ -114,21 +118,16 @@ def test_current_mlc_uses_server_configuration(
     assert payload["active_mlc"]["id"] == "gonette"
 
 
-def test_health_v2_currently_requires_authentication():
-    """
-    Comportement déjà caractérisé avant SINGLE001.
-
-    /api/v2/health existe mais n'est toujours pas dans
-    les chemins publics de l'auth guard.
-    """
+def test_health_v2_is_public():
+    """La sonde de santé doit rester accessible sans session applicative."""
     client = app.test_client()
 
     response = client.get("/api/v2/health")
 
-    assert response.status_code == 401
+    assert response.status_code == 200
 
     payload = response.get_json()
-    assert payload["authenticated"] is False
+    assert payload["status"] == "ok"
 
 
 def test_active_mlc_is_always_server_configured(

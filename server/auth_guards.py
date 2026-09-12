@@ -8,7 +8,7 @@ from server.routes.auth import current_user
 PUBLIC_PATHS = {
     "/login",
     "/logout",
-    "/api/health",
+    "/api/v2/health",
     "/api/me",
     "/api/version",
     "/api/account-requests",
