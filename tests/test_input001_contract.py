@@ -64,6 +64,10 @@ def test_input001_reference_datasets_are_structurally_valid():
             assert isinstance(transaction["amount_minor"], int)
             assert not isinstance(transaction["amount_minor"], bool)
 
+            assert isinstance(transaction["currency_exponent"], int)
+            assert not isinstance(transaction["currency_exponent"], bool)
+            assert transaction["currency_exponent"] >= 0
+
             _parse_datetime(transaction["occurred_at"])
 
             assert not (

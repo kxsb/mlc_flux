@@ -142,8 +142,11 @@ Champs minimaux :
 - `destination_account_id` — compte destination ;
 - `amount_minor` — montant exact en unité minimale ;
 - `currency_code` ou équivalent ;
+- `currency_exponent` — nombre de décimales correspondant à l’unité minimale ;
 - `native_transaction_type` — type natif si disponible ;
 - `native_transaction_label` — libellé natif si disponible.
+
+`amount_minor` est exprimé dans l’unité minimale de la devise ; `currency_exponent` permet d’en reconstruire l’échelle sans supposer implicitement deux décimales.
 
 Le contrat devra préciser explicitement si une ligne représente un mouvement unique ou une écriture comptable.
 
