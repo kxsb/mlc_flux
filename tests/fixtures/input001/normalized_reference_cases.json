@@ -1,0 +1,159 @@
+{
+  "contract_version": "input001-v0.1",
+  "datasets": [
+    {
+      "name": "gonette_cyclos_reference",
+      "metadata": {
+        "source_system": "cyclos",
+        "profile": "gonette",
+        "account_state_history": false,
+        "balances": false,
+        "account_replacements": false
+      },
+      "accounts": [
+        {
+          "account_id": "gonette-u-001",
+          "native_account_type": "compteparticulier",
+          "native_status": "active"
+        },
+        {
+          "account_id": "gonette-p-001",
+          "native_account_type": "comptepro",
+          "native_status": "active"
+        },
+        {
+          "account_id": "gonette-t-emission",
+          "native_account_type": "emission",
+          "native_status": "active"
+        }
+      ],
+      "transactions": [
+        {
+          "transaction_id": "gonette-tx-001",
+          "occurred_at": "2026-01-10T10:00:00+00:00",
+          "source_account_id": "gonette-u-001",
+          "destination_account_id": "gonette-p-001",
+          "amount_minor": 1250,
+          "currency_code": "GONETTE",
+          "native_transaction_type": "payment"
+        },
+        {
+          "transaction_id": "gonette-tx-002",
+          "occurred_at": "2026-01-10T11:00:00+00:00",
+          "source_account_id": "gonette-t-emission",
+          "destination_account_id": "gonette-u-001",
+          "amount_minor": 5000,
+          "currency_code": "GONETTE",
+          "native_transaction_type": "credit"
+        }
+      ]
+    },
+    {
+      "name": "graine_cyclos_reference",
+      "metadata": {
+        "source_system": "cyclos",
+        "profile": "graine",
+        "account_state_history": false,
+        "balances": false,
+        "account_replacements": false
+      },
+      "accounts": [
+        {
+          "account_id": "graine-u-001",
+          "native_account_type": "monCompte",
+          "native_status": "active"
+        },
+        {
+          "account_id": "graine-p-001",
+          "native_account_type": "MonComptePro",
+          "native_status": "active"
+        },
+        {
+          "account_id": "graine-t-stock",
+          "native_account_type": "stockBch",
+          "native_status": "active"
+        }
+      ],
+      "transactions": [
+        {
+          "transaction_id": "graine-tx-001",
+          "occurred_at": "2026-01-11T10:00:00+00:00",
+          "source_account_id": "graine-u-001",
+          "destination_account_id": "graine-p-001",
+          "amount_minor": 875,
+          "currency_code": "GRAINE",
+          "native_transaction_type": "payment"
+        }
+      ]
+    },
+    {
+      "name": "comchain_account_replacement_reference",
+      "metadata": {
+        "source_system": "comchain",
+        "profile": null,
+        "account_state_history": true,
+        "balances": true,
+        "account_replacements": true
+      },
+      "accounts": [
+        {
+          "account_id": "comchain-old-personal",
+          "native_account_type": "personal",
+          "native_status": "inactive"
+        },
+        {
+          "account_id": "comchain-new-personal",
+          "native_account_type": "personal",
+          "native_status": "active"
+        },
+        {
+          "account_id": "comchain-business",
+          "native_account_type": "business",
+          "native_status": "active"
+        }
+      ],
+      "account_states": [
+        {
+          "account_id": "comchain-old-personal",
+          "valid_from": "2025-01-01T00:00:00+00:00",
+          "valid_to": "2026-02-01T00:00:00+00:00",
+          "native_account_type": "personal",
+          "native_status": "active"
+        },
+        {
+          "account_id": "comchain-old-personal",
+          "valid_from": "2026-02-01T00:00:00+00:00",
+          "valid_to": null,
+          "native_account_type": "personal",
+          "native_status": "inactive"
+        },
+        {
+          "account_id": "comchain-new-personal",
+          "valid_from": "2026-02-01T00:00:00+00:00",
+          "valid_to": null,
+          "native_account_type": "personal",
+          "native_status": "active"
+        }
+      ],
+      "account_replacements": [
+        {
+          "old_account_id": "comchain-old-personal",
+          "new_account_id": "comchain-new-personal",
+          "effective_at": "2026-02-01T00:00:00+00:00",
+          "native_reason": "reference_case_only"
+        }
+      ],
+      "transactions": [
+        {
+          "transaction_id": "comchain-tx-001",
+          "occurred_at": "2025-12-20T14:00:00+00:00",
+          "source_account_id": "comchain-old-personal",
+          "destination_account_id": "comchain-business",
+          "amount_minor": 2300,
+          "currency_code": "LOCAL",
+          "native_transaction_type": null
+        }
+      ]
+    }
+  ]
+}
