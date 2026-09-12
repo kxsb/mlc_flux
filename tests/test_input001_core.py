@@ -259,3 +259,104 @@ def test_reader_requires_exactly_one_metadata_row():
         match="exactly one row",
     ):
         reader.metadata_row()
+
+
+def _build_empty_required_contract(
+    *,
+    contract_version="input001-v0.1",
+    balances_enabled=False,
+):
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+
+    accounts.create(engine)
+    transactions.create(engine)
+    dataset_metadata.create(engine)
+
+    with engine.begin() as conn:
+        conn.execute(
+            insert(dataset_metadata),
+            [{
+                "dataset_id": "validation-test",
+                "contract_version": contract_version,
+                "source_system": "synthetic",
+                "account_state_history": False,
+                "balances": balances_enabled,
+                "account_replacements": False,
+            }],
+        )
+
+    return engine
+
+
+def test_reader_rejects_unknown_contract_version():
+    engine = _build_empty_required_contract(
+        contract_version="input001-v999"
+    )
+
+    with pytest.raises(
+        InputContractError,
+        match="Unsupported financial contract version",
+    ):
+        FinancialContractReader(engine).metadata_row()
+
+
+def test_reader_rejects_declared_capability_without_relation():
+    engine = _build_empty_required_contract(
+        balances_enabled=True
+    )
+
+    with pytest.raises(
+        InputContractError,
+        match="balances",
+    ):
+        FinancialContractReader(engine).capabilities()
+
+
+def test_reader_rejects_required_relations_with_wrong_columns():
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+
+    with engine.begin() as conn:
+        for relation_name in (
+            "accounts",
+            "transactions",
+            "dataset_metadata",
+        ):
+            conn.exec_driver_sql(
+                f"CREATE VIEW {relation_name} "
+                "AS SELECT 1 AS wrong_column"
+            )
+
+    with pytest.raises(
+        InputContractError,
+        match="missing columns",
+    ):
+        FinancialContractReader(
+            engine
+        ).validate_required_relations()
+
+
+def test_reader_rejects_empty_dataset_identity():
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+
+    accounts.create(engine)
+    transactions.create(engine)
+    dataset_metadata.create(engine)
+
+    with engine.begin() as conn:
+        conn.execute(
+            insert(dataset_metadata),
+            [{
+                "dataset_id": "",
+                "contract_version": "input001-v0.1",
+                "source_system": "synthetic",
+                "account_state_history": False,
+                "balances": False,
+                "account_replacements": False,
+            }],
+        )
+
+    with pytest.raises(
+        InputContractError,
+        match="dataset_metadata.dataset_id",
+    ):
+        FinancialContractReader(engine).metadata_row()

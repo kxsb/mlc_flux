@@ -99,3 +99,30 @@ OPTIONAL_RELATIONS = {
     "balances",
     "account_replacements",
 }
+
+SUPPORTED_CONTRACT_VERSIONS = frozenset({
+    "input001-v0.1",
+})
+
+CONTRACT_RELATIONS = {
+    table.name: table
+    for table in (
+        transactions,
+        accounts,
+        dataset_metadata,
+        account_states,
+        balances,
+        account_replacements,
+    )
+}
+
+CONTRACT_RELATION_COLUMNS = {
+    name: frozenset(column.name for column in table.columns)
+    for name, table in CONTRACT_RELATIONS.items()
+}
+
+CAPABILITY_RELATIONS = {
+    "account_state_history": "account_states",
+    "balances": "balances",
+    "account_replacements": "account_replacements",
+}
