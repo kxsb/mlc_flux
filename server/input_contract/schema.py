@@ -19,19 +19,21 @@ transactions = Table(
     metadata,
     Column("transaction_id", Text, primary_key=True),
     Column("occurred_at", DateTime(timezone=True), nullable=False),
-    Column("source_account_id", Text, nullable=False),
-    Column("destination_account_id", Text, nullable=False),
+    Column("source_account_id", Text),
+    Column("destination_account_id", Text),
     Column("amount_minor", BigInteger, nullable=False),
     Column("currency_code", String(64), nullable=False),
     Column("currency_exponent", Integer, nullable=False, default=2),
     Column("native_transaction_type", Text),
     Column("native_transaction_label", Text),
+    Column("native_transaction_group", Text),
 )
 
 accounts = Table(
     "accounts",
     metadata,
     Column("account_id", Text, primary_key=True),
+    Column("native_account_number", Text),
     Column("native_account_type", Text),
     Column("native_status", Text),
     Column("display_label", Text),

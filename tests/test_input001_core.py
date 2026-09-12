@@ -73,6 +73,7 @@ def _build_sqlite_dataset(dataset):
     account_rows = [
         {
             "account_id": row["account_id"],
+            "native_account_number": row.get("native_account_number"),
             "native_account_type": row.get("native_account_type"),
             "native_status": row.get("native_status"),
             "display_label": row.get("display_label"),
@@ -96,6 +97,9 @@ def _build_sqlite_dataset(dataset):
             ),
             "native_transaction_label": row.get(
                 "native_transaction_label"
+            ),
+            "native_transaction_group": row.get(
+                "native_transaction_group"
             ),
         }
         for row in dataset["transactions"]
@@ -169,8 +173,29 @@ def test_reader_reads_graine_contract_from_sqlite():
     )
     reader = FinancialContractReader(engine)
 
-    assert len(reader.fetch_accounts()) == 3
-    assert len(reader.fetch_transactions()) == 1
+    account_rows = reader.fetch_accounts()
+    assert len(account_rows) == 3
+    assert len(reader.fetch_transactions()) == 2
+
+    professional = next(
+        row
+        for row in account_rows
+        if row["account_id"] == "graine-p-001"
+    )
+    assert (
+        professional["native_account_number"]
+        == "graine-pro-reference-001"
+    )
+
+    missing_actor = next(
+        row
+        for row in reader.fetch_transactions()
+        if row["transaction_id"] == "graine-tx-missing-actor"
+    )
+
+    assert missing_actor["source_account_id"] is None
+    assert missing_actor["destination_account_id"] == "graine-p-001"
+    assert missing_actor["native_transaction_group"] == "reference-case"
 
 
 def test_gonette_does_not_expose_optional_relations():

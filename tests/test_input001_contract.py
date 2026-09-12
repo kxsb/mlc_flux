@@ -58,8 +58,17 @@ def test_input001_reference_datasets_are_structurally_valid():
             assert transaction["transaction_id"] not in transaction_ids
             transaction_ids.add(transaction["transaction_id"])
 
-            assert transaction["source_account_id"] in accounts
-            assert transaction["destination_account_id"] in accounts
+            source_account_id = transaction["source_account_id"]
+            destination_account_id = transaction["destination_account_id"]
+
+            assert (
+                source_account_id is None
+                or source_account_id in accounts
+            )
+            assert (
+                destination_account_id is None
+                or destination_account_id in accounts
+            )
 
             assert isinstance(transaction["amount_minor"], int)
             assert not isinstance(transaction["amount_minor"], bool)

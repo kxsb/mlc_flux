@@ -138,13 +138,14 @@ Champs minimaux :
 
 - `transaction_id` — identifiant stable dans la source ;
 - `occurred_at` — date/heure effective ;
-- `source_account_id` — compte source ;
-- `destination_account_id` — compte destination ;
+- `source_account_id` — compte source, nullable si la source ne fournit pas l’acteur ;
+- `destination_account_id` — compte destination, nullable si la source ne fournit pas l’acteur ;
 - `amount_minor` — montant exact en unité minimale ;
 - `currency_code` ou équivalent ;
 - `currency_exponent` — nombre de décimales correspondant à l’unité minimale ;
 - `native_transaction_type` — type natif si disponible ;
-- `native_transaction_label` — libellé natif si disponible.
+- `native_transaction_label` — libellé natif si disponible ;
+- `native_transaction_group` — groupe / mode de création natif si disponible.
 
 `amount_minor` est exprimé dans l’unité minimale de la devise ; `currency_exponent` permet d’en reconstruire l’échelle sans supposer implicitement deux décimales.
 
@@ -157,6 +158,7 @@ Une ligne représente une identité financière stable.
 Champs minimaux :
 
 - `account_id` — identifiant financier stable ;
+- `native_account_number` — numéro/référence native du compte si disponible ;
 - `native_account_type` — type/rôle natif si disponible ;
 - `native_status` — état natif courant si disponible ;
 - `display_label` — optionnel, uniquement informatif ;
@@ -164,6 +166,8 @@ Champs minimaux :
 - `source_system` — provenance.
 
 Un libellé ne constitue jamais une identité stable.
+
+L’absence d’un compte sur un côté d’une transaction reste représentable par une référence nulle. Elle ne doit pas provoquer la création d’une fausse identité financière ; son interprétation éventuelle reste une règle du profil/resolver.
 
 ### 4.3. `account_states` — obligatoire si la source fournit la temporalité
 
@@ -329,6 +333,16 @@ Le contrat doit être éprouvé au minimum sur les cas suivants :
 - partenaire administratif absent.
 
 Le contrat n’est considéré suffisamment générique que s’il représente ces situations **sans ajouter de règle spécifique au backend dans MLCFlux Core**.
+
+### Portée actuelle des cas de référence
+
+Les cas disponibles ne constituent pas encore une validation d’une installation utilisant intégralement les conventions Lokavaluto.
+
+- **La Graine** n’est pas une monnaie cliente de Lokavaluto. Elle constitue un cas Cyclos indépendant, utile pour vérifier que le contrat MLCFlux ne dépend pas des conventions Lokavaluto.
+- **La Gonette** est cliente de Lokavaluto mais se trouve en cours de migration. Son environnement actuel est hybride et les données utilisées par MLCFlux proviennent encore notamment de Cyclos et d’Odoo. Elle ne constitue donc pas un cas de référence « full Lokavaluto ».
+- **Le cas ComChain actuellement présent dans les fixtures est synthétique.** Il permet d’éprouver les concepts de comptes, états et remplacements, mais il ne constitue pas encore une validation sur les vues et conventions réelles d’une monnaie entièrement déployée sur l’infrastructure Lokavaluto.
+
+En conséquence, les tests INPUT001 actuels valident la portabilité du **modèle de contrat**, mais ne doivent pas être présentés comme une validation complète de compatibilité Lokavaluto. Cette validation nécessitera soit un jeu de données réel représentatif, soit les vues SQL et conventions formellement garanties par Lokavaluto.
 
 ---
 

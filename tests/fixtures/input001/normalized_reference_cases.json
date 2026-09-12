@@ -19,7 +19,8 @@
         {
           "account_id": "gonette-p-001",
           "native_account_type": "comptepro",
-          "native_status": "active"
+          "native_status": "active",
+          "native_account_number": "P0001"
         },
         {
           "account_id": "gonette-t-emission",
@@ -63,17 +64,20 @@
         {
           "account_id": "graine-u-001",
           "native_account_type": "monCompte",
-          "native_status": "active"
+          "native_status": "active",
+          "native_account_number": null
         },
         {
           "account_id": "graine-p-001",
           "native_account_type": "MonComptePro",
-          "native_status": "active"
+          "native_status": "active",
+          "native_account_number": "graine-pro-reference-001"
         },
         {
           "account_id": "graine-t-stock",
           "native_account_type": "stockBch",
-          "native_status": "active"
+          "native_status": "active",
+          "native_account_number": null
         }
       ],
       "transactions": [
@@ -86,6 +90,17 @@
           "currency_code": "GRAINE",
           "native_transaction_type": "payment",
           "currency_exponent": 2
+        },
+        {
+          "transaction_id": "graine-tx-missing-actor",
+          "occurred_at": "2026-01-11T11:00:00+00:00",
+          "source_account_id": null,
+          "destination_account_id": "graine-p-001",
+          "amount_minor": 100,
+          "currency_code": "GRAINE",
+          "currency_exponent": 2,
+          "native_transaction_type": "technical-reference-case",
+          "native_transaction_group": "reference-case"
         }
       ]
     },
