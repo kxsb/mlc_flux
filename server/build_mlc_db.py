@@ -58,6 +58,14 @@ def _positive_int_or_none(value: str | None) -> int | None:
     return parsed
 
 
+def _transaction_limit(value: str) -> int | None:
+    if value.lower() == "none":
+        return None
+    if not value:
+        raise argparse.ArgumentTypeError("Utilisez un entier positif ou 'none'.")
+    return _positive_int_or_none(value)
+
+
 def _db_counts(db_path: Path) -> dict[str, int | None]:
     tables = [
         "transactions",
@@ -203,8 +211,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--days", type=_positive_int_or_none, default=7)
     parser.add_argument("--date-from", default=None)
     parser.add_argument("--date-to", default=None)
-    parser.add_argument("--limit", type=_positive_int_or_none, default=100)
-    parser.add_argument("--reset-transactions", action="store_true")
+    parser.add_argument(
+        "--limit", type=_transaction_limit, default=100,
+        help="Nombre maximal de transactions (100 par défaut), ou 'none' sans limite.",
+    )
+    parser.add_argument(
+        "--reset-transactions", action="store_true",
+        help="Remplace toute la table transactions par le lot validé, même vide (hors --dry-run). Nécessite --limit none, --date-from et --date-to explicites.",
+    )
     parser.add_argument("--sync-professionals", action="store_true")
     parser.add_argument("--professional-days", type=_positive_int_or_none, default=30)
     parser.add_argument("--professional-limit", type=_positive_int_or_none, default=50)
@@ -215,7 +229,19 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.reset_transactions and args.limit is not None:
+        parser.error(
+            "--reset-transactions nécessite explicitement --limit none : "
+            "un reset avec une limite numérique pourrait supprimer des transactions "
+            "sans les réinsérer."
+        )
+    if args.reset_transactions and (not args.date_from or not args.date_to):
+        parser.error(
+            "--reset-transactions nécessite --date-from et --date-to explicites : "
+            "un reset ne peut pas utiliser implicitement la période --days=7."
+        )
 
     os.environ["MLCFLUX_DEFAULT_MLC_ID"] = args.mlc
     _load_env_file(Path(args.secrets_file))

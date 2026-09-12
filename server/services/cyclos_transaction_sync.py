@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import closing
 from datetime import datetime, UTC
 from typing import Any
 
@@ -32,107 +33,113 @@ def _transaction_key(row: dict[str, Any]) -> tuple[str | None, str | None]:
     return transaction_number, cyclos_id
 
 
-def _store_classified_transaction_rows(rows: list[dict[str, Any]]) -> dict[str, int]:
+def _store_classified_transaction_rows(
+    rows: list[dict[str, Any]], *, reset: bool = False,
+) -> dict[str, int]:
     init_db()
-
-    conn = get_connection()
-    cur = conn.cursor()
 
     inserted = 0
     updated = 0
     skipped = 0
+    deleted = 0
 
-    for row in rows:
-        transaction_number, cyclos_id = _transaction_key(row)
+    # Le reset et le lot forment une seule transaction : toute erreur d'écriture
+    # restaure les lignes précédentes. closing ferme aussi la connexion en erreur.
+    with closing(get_connection()) as conn, conn:
+        cur = conn.cursor()
+        if reset:
+            cur.execute("DELETE FROM transactions")
+            deleted = cur.rowcount
 
-        # La table historique a transaction_number comme clé primaire.
-        # Si Cyclos ne fournit pas de transactionNumber, on utilise cyclos_id
-        # comme clé de substitution stable.
-        storage_transaction_number = transaction_number or cyclos_id
+        for row in rows:
+            transaction_number, cyclos_id = _transaction_key(row)
 
-        if not storage_transaction_number and not cyclos_id:
-            skipped += 1
-            continue
+            # La table historique a transaction_number comme clé primaire.
+            # Si Cyclos ne fournit pas de transactionNumber, on utilise cyclos_id
+            # comme clé de substitution stable.
+            storage_transaction_number = transaction_number or cyclos_id
 
-        existing = None
+            if not storage_transaction_number and not cyclos_id:
+                skipped += 1
+                continue
 
-        if cyclos_id:
-            existing = cur.execute(
-                """
-                SELECT rowid
-                FROM transactions
-                WHERE cyclos_id = ?
-                LIMIT 1
-                """,
-                (cyclos_id,),
-            ).fetchone()
+            existing = None
 
-        if existing is None and storage_transaction_number:
-            existing = cur.execute(
-                """
-                SELECT rowid
-                FROM transactions
-                WHERE transaction_number = ?
-                LIMIT 1
-                """,
-                (storage_transaction_number,),
-            ).fetchone()
+            if cyclos_id:
+                existing = cur.execute(
+                    """
+                    SELECT rowid
+                    FROM transactions
+                    WHERE cyclos_id = ?
+                    LIMIT 1
+                    """,
+                    (cyclos_id,),
+                ).fetchone()
 
-        params = (
-            storage_transaction_number,
-            cyclos_id,
-            row.get("date"),
-            row.get("group_label"),
-            row.get("from_label"),
-            row.get("to_label"),
-            _parse_amount(row.get("amount")),
-            row.get("type_label"),
-        )
+            if existing is None and storage_transaction_number:
+                existing = cur.execute(
+                    """
+                    SELECT rowid
+                    FROM transactions
+                    WHERE transaction_number = ?
+                    LIMIT 1
+                    """,
+                    (storage_transaction_number,),
+                ).fetchone()
 
-        if existing is None:
-            cur.execute(
-                """
-                INSERT INTO transactions (
-                    transaction_number,
-                    cyclos_id,
-                    date,
-                    group_label,
-                    from_label,
-                    to_label,
-                    amount,
-                    type_label
+            params = (
+                storage_transaction_number,
+                cyclos_id,
+                row.get("date"),
+                row.get("group_label"),
+                row.get("from_label"),
+                row.get("to_label"),
+                _parse_amount(row.get("amount")),
+                row.get("type_label"),
+            )
+
+            if existing is None:
+                cur.execute(
+                    """
+                    INSERT INTO transactions (
+                        transaction_number,
+                        cyclos_id,
+                        date,
+                        group_label,
+                        from_label,
+                        to_label,
+                        amount,
+                        type_label
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    params,
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                params,
-            )
-            inserted += 1
-        else:
-            cur.execute(
-                """
-                UPDATE transactions
-                SET
-                    transaction_number = ?,
-                    cyclos_id = ?,
-                    date = ?,
-                    group_label = ?,
-                    from_label = ?,
-                    to_label = ?,
-                    amount = ?,
-                    type_label = ?
-                WHERE rowid = ?
-                """,
-                (*params, existing["rowid"]),
-            )
-            updated += 1
-
-    conn.commit()
-    conn.close()
+                inserted += 1
+            else:
+                cur.execute(
+                    """
+                    UPDATE transactions
+                    SET
+                        transaction_number = ?,
+                        cyclos_id = ?,
+                        date = ?,
+                        group_label = ?,
+                        from_label = ?,
+                        to_label = ?,
+                        amount = ?,
+                        type_label = ?
+                    WHERE rowid = ?
+                    """,
+                    (*params, existing["rowid"]),
+                )
+                updated += 1
 
     return {
         "inserted": inserted,
         "updated": updated,
         "skipped": skipped,
+        "deleted": deleted,
     }
 
 
@@ -212,7 +219,8 @@ def sync_cyclos_transactions(
     }
 
     if write:
-        write_result = _store_classified_transaction_rows(rows)
+        write_result = _store_classified_transaction_rows(rows, reset=reset)
+        deleted = write_result.pop("deleted")
 
     return {
         "mlc_id": mlc_id,

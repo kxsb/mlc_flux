@@ -329,9 +329,18 @@ def main(argv: list[str] | None = None) -> int:
             return
 
         started = time.monotonic()
+        payload = None
 
         try:
             payload = fn()
+            if isinstance(payload, dict) and (
+                payload.get("ok") is False
+                or ("returncode" in payload and payload["returncode"] != 0)
+            ):
+                raise RuntimeError(
+                    f"Échec de {payload.get('module', name)} "
+                    f"(returncode={payload.get('returncode')}, ok={payload.get('ok')})"
+                )
             report["steps"].append(
                 step_result(
                     name,
@@ -341,12 +350,14 @@ def main(argv: list[str] | None = None) -> int:
                 )
             )
         except Exception as exc:
+            report["ok"] = False
             report["steps"].append(
                 step_result(
                     name,
                     "error",
                     duration_seconds=round(time.monotonic() - started, 3),
                     error=f"{type(exc).__name__}: {exc}",
+                    payload=payload,
                 )
             )
             if not args.continue_on_error:
