@@ -132,28 +132,81 @@ Les noms ci-dessous sont provisoires mais leur sémantique constitue le contrat 
 
 ### 4.1. `transactions` — obligatoire
 
-Une ligne représente un mouvement financier unique.
+Une ligne représente **un mouvement financier normalisé unique**.
+
+Le grain du contrat est le mouvement financier, et non nécessairement
+l’opération native telle qu’elle est stockée par le backend.
+
+Une opération native peut donc produire :
+
+- un seul mouvement normalisé ;
+- plusieurs mouvements normalisés si la source représente plusieurs effets
+  financiers distincts dans une même opération.
+
+Inversement, les deux écritures comptables d’un même transfert ne doivent
+pas être comptées deux fois comme deux mouvements économiques lorsque la
+source permet d’identifier qu’elles représentent le même transfert.
 
 Champs minimaux :
 
-- `transaction_id` — identifiant stable dans la source ;
-- `occurred_at` — date/heure effective ;
-- `source_account_id` — compte source, nullable si la source ne fournit pas l’acteur ;
-- `destination_account_id` — compte destination, nullable si la source ne fournit pas l’acteur ;
+- `transaction_id` — identifiant stable du mouvement normalisé dans l’espace
+  du dataset ;
+- `native_transaction_number` — référence ou numéro natif si disponible ;
+- `occurred_at` — instant effectif du mouvement selon la référence temporelle
+  documentée par le provider ;
+- `source_account_id` — compte source, nullable si la source ne fournit pas
+  l’acteur ;
+- `destination_account_id` — compte destination, nullable si la source ne
+  fournit pas l’acteur ;
 - `amount_minor` — montant exact en unité minimale ;
-- `currency_code` ou équivalent ;
+- `native_currency_id` — identifiant natif de devise si disponible ;
+- `currency_code` — identifiant de devise normalisé pour le dataset ;
 - `currency_exponent` — nombre de décimales correspondant à l’unité minimale ;
 - `native_transaction_type` — type natif si disponible ;
 - `native_transaction_label` — libellé natif si disponible ;
-- `native_transaction_group` — groupe / mode de création natif si disponible.
+- `native_transaction_group` — groupe natif si disponible.
 
-`amount_minor` est exprimé dans l’unité minimale de la devise ; `currency_exponent` permet d’en reconstruire l’échelle sans supposer implicitement deux décimales.
+`transaction_id` n’est pas défini comme « l’ID natif du backend ».
+Un provider peut construire un identifiant de mouvement à partir d’un
+identifiant d’opération native et d’un sous-identifiant stable lorsque la
+source l’exige.
 
-Le contrat devra préciser explicitement si une ligne représente un mouvement unique ou une écriture comptable.
+Le lien avec l’opération native doit rester récupérable sans ambiguïté.
+Le contrat pourra donc transporter explicitement un identifiant natif
+d’opération lorsque le deuxième provider réel confirme ce besoin.
+
+`amount_minor` est exprimé dans l’unité minimale de la devise ;
+`currency_exponent` permet d’en reconstruire l’échelle sans supposer
+implicitement deux décimales.
+
+Le signe du montant ne doit pas être utilisé pour deviner source et
+destination. La convention de signe appartient au provider et doit produire
+une représentation cohérente dans le contrat.
+
+La relation `transactions` ne contient que les mouvements que le provider
+considère réalisés / comptabilisables selon une politique de finalité
+documentée pour la source. Un état pending, failed ou équivalent ne doit pas
+être silencieusement assimilé à un mouvement réalisé.
 
 ### 4.2. `accounts` — obligatoire
 
-Une ligne représente une identité financière stable.
+Une ligne représente une identité financière stable **dans l’espace
+d’identités défini par le dataset**.
+
+La relation peut être :
+
+- exhaustive, lorsque la source fournit un registre complet de comptes ;
+- observée, lorsqu’elle est construite à partir des identifiants financiers
+  effectivement rencontrés dans les transactions, soldes, états ou
+  remplacements.
+
+Construire un compte minimal à partir d’un identifiant source/destination
+déjà présent dans une transaction ne constitue pas une invention
+d’identité. En revanche, aucun propriétaire, type, statut ou libellé ne doit
+être inventé pour compléter ce compte.
+
+Une relation `accounts` observée ne peut pas servir, à elle seule, à compter
+le nombre total de comptes ou de membres du backend.
 
 Champs minimaux :
 
@@ -185,14 +238,36 @@ Si la source ne sait fournir que l’état courant, elle **DOIT le déclarer com
 
 ### 4.4. `dataset_metadata` — obligatoire
 
-Décrit le jeu de données fourni :
+Décrit le jeu de données fourni.
+
+`dataset_id` définit l’**espace d’identités stable** dans lequel les clés
+`account_id` et `transaction_id` sont interprétées.
+
+Deux installations distinctes d’un même logiciel financier ne partagent
+donc pas implicitement le même espace d’identités, même si elles exposent
+des identifiants natifs identiques.
+
+`snapshot_ref` identifie, lorsqu’il existe, une publication, extraction ou
+version particulière de cet espace. Il ne remplace pas `dataset_id`.
+
+Les métadonnées décrivent notamment :
 
 - version du contrat ;
 - source / backend ;
-- couverture temporelle ;
-- date ou instantané de référence ;
+- espace d’identités du dataset ;
+- couverture temporelle connue ;
+- référence de publication / instantané ;
 - capacités disponibles ;
-- caractère historique ou état courant de chaque relation.
+- caractère exhaustif, observé ou inconnu du registre de comptes ;
+- caractère historique ou état courant des informations exposées ;
+- limites connues d’exhaustivité ou de finalité.
+
+`coverage_from` et `coverage_to` décrivent des bornes connues du dataset.
+Elles ne constituent pas, à elles seules, une preuve d’exhaustivité entre
+ces deux bornes.
+
+Un dataset peut être vide tout en restant conforme si ses relations et ses
+métadonnées sont valides.
 
 ### 4.5. `balances` — optionnel
 
@@ -221,6 +296,32 @@ Cette relation ne doit pas être inventée lorsqu’elle n’existe pas dans la 
 
 ## 5. Temporalité, remplacement et comptes désactivés
 
+Tous les instants du contrat représentent des **instants UTC**.
+
+Le stockage physique peut différer selon le dialecte SQL, mais la lecture
+par MLCFlux doit restituer une sémantique UTC non ambiguë. Le fuseau utilisé
+pour agréger des journées civiles est une information distincte de
+l’instant UTC.
+
+Sémantique temporelle :
+
+- `occurred_at` : instant de réalisation du mouvement selon la référence
+  documentée par le provider ; ce n’est pas la date d’import ;
+- `valid_from` : début inclusif d’un état attesté ;
+- `valid_to` : fin exclusive d’un état attesté, nullable si l’état est
+  toujours courant ou si sa fin n’est pas connue ;
+- `effective_at` : instant d’effet attesté d’un remplacement ;
+- `observed_at` : instant auquel un stock / solde est valable selon la
+  sémantique documentée de la source, et non automatiquement l’heure de
+  collecte.
+
+Une date de découverte par l’adaptateur ne doit pas être transformée en
+date d’effet métier.
+
+Une source qui ne fournit qu’une date civile sans instant ne doit pas
+inventer silencieusement une heure. Cette limite doit être déclarée par le
+provider ou le dataset.
+
 Le modèle doit distinguer :
 
 1. l’identité financière durable ;
@@ -236,6 +337,37 @@ La désactivation d’un compte **NE DOIT PAS** entraîner automatiquement :
 - l’interprétation d’un compte de remplacement comme nouvelle émission ou conversion.
 
 Les effets exacts de la désactivation et du remplacement restent à préciser pour ComChain.
+
+---
+
+### 5.1. Portée des identifiants
+
+Les identifiants du contrat sont opaques.
+
+Le Core MLCFlux ne doit pas leur appliquer de normalisation générique de
+casse, de préfixe ou de format.
+
+Les règles d’égalité appartiennent au provider correspondant à la source.
+
+En particulier :
+
+- `account_id` n’est pas une personne ;
+- `native_owner_id` n’est pas automatiquement un identifiant administratif ;
+- deux comptes partageant le même propriétaire restent deux comptes ;
+- deux comptes appartenant à deux datasets différents ne sont jamais
+  assimilés sur la seule égalité de leur chaîne d’identifiant.
+
+### 5.2. Cohérence d’un snapshot
+
+Lorsque les relations du contrat sont exposées dynamiquement par des vues,
+elles doivent représenter un jeu cohérent pendant une lecture analytique.
+
+MLCFlux ne doit pas supposer qu’une succession de connexions indépendantes
+constitue automatiquement un même snapshot.
+
+Le mécanisme exact de cohérence — publication immuable, transaction SQL,
+niveau d’isolation ou matérialisation — dépend du producteur et du dialecte,
+mais doit être documentable.
 
 ---
 
