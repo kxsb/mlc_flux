@@ -137,3 +137,64 @@ Le refactor Cyclos devra conserver :
 - les mêmes résultats de `transaction_semantics`.
 
 Aucune heuristique de classification supplémentaire ne doit être introduite.
+
+## Audit d'identité Cyclos — La Graine production
+
+Audit read-only réalisé sur une fenêtre glissante de 7 jours sur
+l'instance Cyclos réelle de La Graine.
+
+Résultats :
+
+- 134 transactions ;
+- 268 positions d'acteurs ;
+- 0 acteur absent ;
+- `actor.id` présent sur 268 / 268 positions ;
+- `actor.number` présent sur 268 / 268 positions ;
+- `actor.user.id` absent sur 39 positions ;
+- 107 `actor.id` distincts ;
+- 107 `actor.number` distincts ;
+- 90 `actor.user.id` distincts ;
+- aucune relation 1 `actor.id` -> plusieurs `actor.number` observée ;
+- aucune relation 1 `actor.number` -> plusieurs `actor.id` observée ;
+- aucune relation 1 `actor.id` -> plusieurs `actor.user.id` observée ;
+- 14 `actor.user.id` sont reliés à plusieurs `actor.id` ;
+- aucune variation de type natif pour un même `actor.id` observée.
+
+Types natifs observés :
+
+- `monCompte` : 93 ;
+- `MonComptePro` : 69 ;
+- `stockBch` : 35 ;
+- `emissionNum` : 33 ;
+- `compteBillets` : 29 ;
+- `stockCoffreCentral` : 4 ;
+- `compteProBillets` : 2 ;
+- `conversionNumerique` : 2 ;
+- `histoDepotPrestataire` : 1.
+
+### Conclusion croisée Gonette / Graine
+
+Les deux instances Cyclos réelles observées convergent sur la même
+séparation des identités :
+
+- `actor.id` représente l'identité technique du compte / acteur financier ;
+- `actor.number` est une référence native de compte, utile mais non
+  disponible universellement ;
+- `actor.user.id` représente l'identité du propriétaire / utilisateur et
+  ne peut pas servir d'identité de compte : sur La Graine, plusieurs
+  `actor.id` peuvent partager le même `actor.user.id`.
+
+Décision du provider Cyclos :
+
+- `account_id` = `actor.id` ;
+- `native_account_number` = `actor.number` ;
+- `native_owner_id` = `actor.user.id` ;
+- `native_account_type` = `actor.type.internalName`.
+
+Aucun fallback automatique de `account_id` vers `actor.number` ou
+`actor.user.id` n'est autorisé.
+
+Ces constats portent sur des fenêtres réelles de 7 jours et ne prétendent
+pas démontrer l'immutabilité historique absolue de `actor.id`. Ils sont
+néanmoins cohérents sur deux configurations Cyclos indépendantes et
+suffisent pour fixer le contrat du provider actuel.
