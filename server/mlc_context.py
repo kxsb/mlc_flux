@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from server.mlc_profiles import get_mlc_profile, load_mlc_profiles
+from server.mlc_profiles import get_mlc_profile
 
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
@@ -12,21 +12,28 @@ DEFAULT_MLC_ID_ENV = "MLCFLUX_DEFAULT_MLC_ID"
 
 
 def get_default_mlc_id() -> str:
+    """
+    Retourne l'unique MLC configurée pour cette installation standalone.
+
+    Aucune monnaie n'est choisie implicitement : une installation Neutral
+    mal configurée doit échouer explicitement plutôt que lire/écrire la base
+    d'une autre MLC par défaut.
+    """
     configured = str(os.getenv(DEFAULT_MLC_ID_ENV, "") or "").strip()
 
-    if configured:
+    if not configured:
+        raise RuntimeError(
+            f"Configuration standalone incomplète : {DEFAULT_MLC_ID_ENV} "
+            "doit identifier explicitement la MLC de cette installation."
+        )
+
+    try:
         return get_mlc_profile(configured).id
-
-    profiles = load_mlc_profiles()
-    if not profiles:
-        raise RuntimeError("Aucun profil MLC disponible.")
-
-    # Pour le chantier actuel, La Graine est l'instance de travail prioritaire.
-    for profile in profiles:
-        if profile.id == "graine":
-            return profile.id
-
-    return profiles[0].id
+    except (KeyError, ValueError) as exc:
+        raise RuntimeError(
+            f"Configuration standalone invalide : {DEFAULT_MLC_ID_ENV}="
+            f"{configured!r} ne correspond à aucun profil MLC valide."
+        ) from exc
 
 
 def normalize_mlc_id(mlc_id: str | None) -> str:
