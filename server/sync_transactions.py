@@ -4,6 +4,7 @@ from server import create_app
 from server.database import init_db, get_connection
 from server.services.cyclos_client import get_transactions
 from server.utils.anonymizer import anonymize_transactions
+from server.input_contract.shadow import materialize_cyclos_shadow
 
 
 def save_sync_state(status, message):
@@ -101,23 +102,52 @@ def run_sync(days=None, date_from=None, date_to=None):
 
         fetched = len(raw_transactions)
 
+        # INPUT001 reste un miroir de contrôle.
+        #
+        # Une erreur du shadow ne doit jamais invalider une écriture
+        # legacy déjà réussie : le pipeline de production continue
+        # actuellement de dépendre de mlcflux.db.
+        try:
+            shadow_result = materialize_cyclos_shadow(
+                raw_transactions
+            )
+        except Exception as exc:
+            shadow_result = {
+                "enabled": True,
+                "status": "error",
+                "error_type": type(exc).__name__,
+            }
+
+            print(
+                "INPUT001 SHADOW ERROR - "
+                f"{type(exc).__name__}: {exc}"
+            )
+
+        shadow_status = shadow_result.get(
+            "status",
+            "unknown",
+        )
+
         save_sync_state(
             status="success",
             message=(
                 f"{written} transactions écrites / upsertées "
-                f"sur {fetched} transactions récupérées"
+                f"sur {fetched} transactions récupérées ; "
+                f"INPUT001 shadow={shadow_status}"
             )
         )
 
         print(
             "SYNC OK - "
             f"{fetched} transactions récupérées, "
-            f"{written} transactions écrites / upsertées"
+            f"{written} transactions écrites / upsertées, "
+            f"INPUT001 shadow={shadow_status}"
         )
 
         return {
             "fetched": fetched,
             "written": written,
+            "input001_shadow": shadow_result,
         }
 
 
