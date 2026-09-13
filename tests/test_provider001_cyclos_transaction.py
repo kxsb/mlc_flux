@@ -39,6 +39,7 @@ def transaction(**overrides):
         "native_transaction_group": "transfer",
         "source_actor": actor("account-a"),
         "destination_actor": actor("account-b"),
+        "native_transaction_description": "Paiement utilisateur",
     }
     values.update(overrides)
     return CyclosTransactionFacts(**values)
@@ -76,6 +77,10 @@ def test_transaction_normalizes_without_losing_native_facts():
     assert row["native_transaction_type"] == "payment"
     assert row["native_transaction_label"] == "Paiement"
     assert row["native_transaction_group"] == "transfer"
+    assert (
+        row["native_transaction_description"]
+        == "Paiement utilisateur"
+    )
 
 
 def test_missing_actor_remains_null_endpoint():

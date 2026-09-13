@@ -14,6 +14,8 @@ def actor(**overrides):
         "native_account_type": "comptepro",
         "user_id": "user-456",
         "user_display": "Professionnel exemple",
+        "native_account_kind": "user",
+        "native_account_type_label": "Compte professionnel",
     }
     values.update(overrides)
     return CyclosActorFacts(**values)
@@ -26,6 +28,8 @@ def test_actor_id_becomes_contract_account_id():
         "account_id": "account-123",
         "native_account_number": "P0001",
         "native_account_type": "comptepro",
+        "native_account_kind": "user",
+        "native_account_type_label": "Compte professionnel",
         "native_status": None,
         "display_label": "Professionnel exemple",
         "native_owner_id": "user-456",

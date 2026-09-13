@@ -15,6 +15,7 @@ def test_extract_gonette_actor_facts():
     actor = {
         "id": "account-123",
         "number": "P0001",
+        "kind": "user",
         "type": {
             "internalName": "comptepro",
             "name": "Compte professionnel",
@@ -31,6 +32,8 @@ def test_extract_gonette_actor_facts():
     assert facts.actor_id == "account-123"
     assert facts.actor_number == "P0001"
     assert facts.native_account_type == "comptepro"
+    assert facts.native_account_kind == "user"
+    assert facts.native_account_type_label == "Compte professionnel"
     assert facts.user_id == "user-456"
     assert facts.user_display == "P0001 - Boulangerie exemple"
 
@@ -89,6 +92,7 @@ def test_extract_transaction_preserves_native_facts():
         "currency": "unit",
         "kind": "payment",
         "creationType": "manual",
+        "description": "Paiement utilisateur",
         "type": {
             "internalName": "internalPayment",
             "name": "Paiement",
@@ -134,6 +138,10 @@ def test_extract_transaction_preserves_native_facts():
 
     assert facts.native_transaction_label == "Paiement"
     assert facts.native_transaction_group == "payment"
+    assert (
+        facts.native_transaction_description
+        == "Paiement utilisateur"
+    )
 
     assert facts.source_actor is not None
     assert facts.source_actor.actor_id == "source-account"

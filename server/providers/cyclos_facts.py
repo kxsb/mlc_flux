@@ -35,6 +35,8 @@ class CyclosActorFacts:
     native_account_type: str | None
     user_id: str | None
     user_display: str | None
+    native_account_kind: str | None = None
+    native_account_type_label: str | None = None
 
 
 @dataclass(frozen=True)
@@ -57,6 +59,7 @@ class CyclosTransactionFacts:
 
     source_actor: CyclosActorFacts | None
     destination_actor: CyclosActorFacts | None
+    native_transaction_description: str | None = None
 
 
 def extract_cyclos_actor_facts(
@@ -98,6 +101,8 @@ def extract_cyclos_actor_facts(
         native_account_type=_clean(actor_type.get("internalName")),
         user_id=_clean(user.get("id")),
         user_display=_clean(user.get("display")),
+        native_account_kind=_clean(actor.get("kind")),
+        native_account_type_label=_clean(actor_type.get("name")),
     )
 
 
@@ -161,5 +166,8 @@ def extract_cyclos_transaction_facts(
         ),
         destination_actor=extract_cyclos_actor_facts(
             transaction.get("to")
+        ),
+        native_transaction_description=_clean(
+            transaction.get("description")
         ),
     )

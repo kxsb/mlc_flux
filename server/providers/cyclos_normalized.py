@@ -37,6 +37,8 @@ def cyclos_account_row(
         "account_id": actor.actor_id,
         "native_account_number": actor.actor_number,
         "native_account_type": actor.native_account_type,
+        "native_account_kind": actor.native_account_kind,
+        "native_account_type_label": actor.native_account_type_label,
         "native_status": None,
         "display_label": actor.user_display,
         "native_owner_id": actor.user_id,
@@ -214,5 +216,8 @@ def cyclos_transaction_row(
         ),
         "native_transaction_group": (
             transaction.native_transaction_group
+        ),
+        "native_transaction_description": (
+            transaction.native_transaction_description
         ),
     }

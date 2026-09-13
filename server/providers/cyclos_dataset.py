@@ -22,6 +22,8 @@ class CyclosDatasetError(ValueError):
 _ACCOUNT_FACT_FIELDS = (
     "native_account_number",
     "native_account_type",
+    "native_account_kind",
+    "native_account_type_label",
     "native_status",
     "display_label",
     "native_owner_id",

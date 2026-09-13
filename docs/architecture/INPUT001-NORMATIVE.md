@@ -164,7 +164,9 @@ Champs minimaux :
 - `currency_exponent` — nombre de décimales correspondant à l’unité minimale ;
 - `native_transaction_type` — type natif si disponible ;
 - `native_transaction_label` — libellé natif si disponible ;
-- `native_transaction_group` — groupe natif si disponible.
+- `native_transaction_group` — groupe natif si disponible ;
+- `native_transaction_description` — description transactionnelle native
+  lorsqu'elle est fournie distinctement du type ou du libellé.
 
 `transaction_id` n’est pas défini comme « l’ID natif du backend ».
 Un provider peut construire un identifiant de mouvement à partir d’un

@@ -84,6 +84,7 @@ transactions = Table(
     Column("native_transaction_type", Text),
     Column("native_transaction_label", Text),
     Column("native_transaction_group", Text),
+    Column("native_transaction_description", Text),
 )
 
 accounts = Table(
@@ -92,6 +93,8 @@ accounts = Table(
     Column("account_id", Text, primary_key=True),
     Column("native_account_number", Text),
     Column("native_account_type", Text),
+    Column("native_account_kind", Text),
+    Column("native_account_type_label", Text),
     Column("native_status", Text),
     Column("display_label", Text),
     Column("native_owner_id", Text),
