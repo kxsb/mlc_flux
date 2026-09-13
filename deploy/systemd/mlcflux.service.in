@@ -1,0 +1,21 @@
+[Unit]
+Description=MLCFlux standalone application
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@@RUN_USER@@
+Group=@@RUN_GROUP@@
+WorkingDirectory=@@APP_DIR@@
+EnvironmentFile=@@CONFIG_FILE@@
+Environment=PYTHONPATH=@@APP_DIR@@
+ExecStart=@@VENV_DIR@@/bin/gunicorn --workers @@GUNICORN_WORKERS@@ --bind 127.0.0.1:@@PORT@@ --access-logfile - --error-logfile - app:app
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
