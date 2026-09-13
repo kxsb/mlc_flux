@@ -1,0 +1,17 @@
+[Unit]
+Description=MLCFlux standalone 90-day transaction reconciliation
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=@@RUN_USER@@
+Group=@@RUN_GROUP@@
+WorkingDirectory=@@APP_DIR@@
+EnvironmentFile=@@CONFIG_FILE@@
+Environment=PYTHONPATH=@@APP_DIR@@
+ExecStart=@@VENV_DIR@@/bin/python -m server.sync_transactions --reconcile-days 90
+Nice=10
+TimeoutStartSec=30min
+PrivateTmp=true
+NoNewPrivileges=true
