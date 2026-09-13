@@ -98,3 +98,56 @@ def test_transaction_sync_lock_uses_active_instance_locks_dir(
         assert acquired == expected
         owner = json.loads(expected.read_text(encoding="utf-8"))
         assert owner["operation"] == "daily_sync"
+
+
+def test_transaction_sync_lock_reenters_same_operation_without_relocking(
+    tmp_path,
+    monkeypatch,
+):
+    locks_dir = tmp_path / "runtime" / "locks"
+    monkeypatch.setattr(
+        runtime_lock,
+        "get_mlc_locks_dir",
+        lambda: locks_dir,
+    )
+
+    expected = locks_dir / runtime_lock.TRANSACTION_SYNC_LOCK_NAME
+
+    with runtime_lock.exclusive_transaction_sync_lock(
+        operation="daily_sync",
+    ) as outer:
+        owner_before = expected.read_text(encoding="utf-8")
+
+        with runtime_lock.exclusive_transaction_sync_lock(
+            operation="daily_sync",
+        ) as inner:
+            assert inner == outer == expected
+            assert expected.read_text(encoding="utf-8") == owner_before
+
+        assert expected.read_text(encoding="utf-8") == owner_before
+
+    assert expected.read_text(encoding="utf-8") == ""
+
+
+def test_transaction_sync_lock_rejects_nested_different_operation(
+    tmp_path,
+    monkeypatch,
+):
+    locks_dir = tmp_path / "runtime" / "locks"
+    monkeypatch.setattr(
+        runtime_lock,
+        "get_mlc_locks_dir",
+        lambda: locks_dir,
+    )
+
+    with runtime_lock.exclusive_transaction_sync_lock(
+        operation="daily_sync",
+    ):
+        with pytest.raises(
+            runtime_lock.RuntimeLockError,
+            match="different operation",
+        ):
+            with runtime_lock.exclusive_transaction_sync_lock(
+                operation="historical_backfill",
+            ):
+                raise AssertionError("different nested operation must not enter")
