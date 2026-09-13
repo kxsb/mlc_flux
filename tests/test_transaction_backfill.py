@@ -1,6 +1,7 @@
 from contextlib import nullcontext
 from datetime import date
 import json
+import sqlite3
 
 import pytest
 
@@ -110,6 +111,37 @@ def test_backfill_window_updates_legacy_without_touching_shadow(monkeypatch):
 
     # Le module de backfill n'importe ni n'appelle materialize_cyclos_shadow.
     assert not hasattr(backfill, "materialize_cyclos_shadow")
+
+
+def test_pre_backfill_backups_are_private(tmp_path, monkeypatch):
+    instance_dir = tmp_path / "server" / "data" / "instances" / "gonette"
+    instance_dir.mkdir(parents=True)
+    legacy = instance_dir / "mlcflux.db"
+    input001 = instance_dir / "input001.db"
+
+    for path, marker in ((legacy, "legacy"), (input001, "input001")):
+        conn = sqlite3.connect(path)
+        conn.execute("CREATE TABLE marker (value TEXT)")
+        conn.execute("INSERT INTO marker VALUES (?)", (marker,))
+        conn.commit()
+        conn.close()
+
+    monkeypatch.setattr(backfill, "get_active_mlc_db_path", lambda: legacy)
+    monkeypatch.setattr(backfill, "get_active_mlc_input001_db_path", lambda: input001)
+
+    backups = backfill.create_pre_backfill_backups()
+    backup_dir = tmp_path / "server" / "data" / "backups"
+
+    assert backup_dir.stat().st_mode & 0o777 == 0o700
+    assert set(backups) == {"legacy", "input001"}
+
+    for label, backup_name in backups.items():
+        backup_path = backfill.Path(backup_name)
+        assert backup_path.stat().st_mode & 0o777 == 0o600
+        conn = sqlite3.connect(backup_path)
+        stored = conn.execute("SELECT value FROM marker").fetchone()[0]
+        conn.close()
+        assert stored == label
 
 
 def test_execute_backfill_stops_on_first_failure_and_records_error(monkeypatch):
