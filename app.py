@@ -1,15 +1,41 @@
-from server import create_app
-from flask import render_template, request, jsonify, redirect
+from pathlib import Path
 
-from server.services.monetary_indicators_adaptive import get_adaptive_monetary_indicators
-import os
+from flask import jsonify, redirect, render_template
+
+from server import create_app
+from server.services.monetary_indicators_adaptive import (
+    get_adaptive_monetary_indicators,
+)
+
+
+ROOT_DIR = Path(__file__).resolve().parent
+VERSION_PATH = ROOT_DIR / "VERSION"
+CHANGELOG_PATH = ROOT_DIR / "CHANGELOG.md"
+
+
+def _read_app_version() -> str:
+    raw = VERSION_PATH.read_text(encoding="utf-8").strip()
+    if not raw:
+        raise RuntimeError("Le fichier VERSION est vide.")
+    return raw if raw.startswith("v") else f"v{raw}"
+
+
+MLCFLUX_APP_VERSION = _read_app_version()
+MLCFLUX_RELEASE_LABEL = (
+    f"MLCFlux bêta {MLCFLUX_APP_VERSION} standalone"
+)
+
 
 app = create_app()
 
 
 @app.route("/")
 def home():
-    return render_template("index.html")
+    return render_template(
+        "index.html",
+        mlcflux_app_version=MLCFLUX_APP_VERSION,
+        mlcflux_release_label=MLCFLUX_RELEASE_LABEL,
+    )
 
 
 @app.route("/app")
@@ -20,10 +46,6 @@ def legacy_app_entrypoint():
 @app.route("/transactions-live")
 def transactions_live():
     return render_template("transactions_live.html")
-
-
-if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=8002, debug=False)
 
 
 @app.route("/api/monetary-indicators")
@@ -51,12 +73,6 @@ def api_monetary_indicators():
             "latest": None,
             "warnings": [str(exc)],
         }), 500
-
-
-
-# VERSION_UI001_RELEASE_NOTES_API
-MLCFLUX_APP_VERSION = "v1.0.7"
-MLCFLUX_RELEASE_LABEL = "MLCFlux bêta v1.0.7 standalone — juin 2026"
 
 
 def _extract_changelog_sections(markdown_text):
@@ -87,19 +103,16 @@ def _extract_changelog_sections(markdown_text):
 @app.route("/api/version")
 def api_version():
     """Expose la version courante et les notes de version lues depuis CHANGELOG.md."""
-    from pathlib import Path
-
-    changelog_path = Path(__file__).resolve().parent / "CHANGELOG.md"
-
     try:
-        changelog_markdown = changelog_path.read_text(encoding="utf-8")
+        changelog_markdown = CHANGELOG_PATH.read_text(encoding="utf-8")
     except Exception:
         changelog_markdown = ""
 
     sections = _extract_changelog_sections(changelog_markdown)
     current_section = next(
         (
-            section for section in sections
+            section
+            for section in sections
             if section.get("version") == MLCFLUX_APP_VERSION
         ),
         sections[0] if sections else {
@@ -116,3 +129,7 @@ def api_version():
         "sections": sections,
         "changelog_available": bool(changelog_markdown.strip()),
     })
+
+
+if __name__ == "__main__":
+    app.run(host="127.0.0.1", port=8002, debug=False)
