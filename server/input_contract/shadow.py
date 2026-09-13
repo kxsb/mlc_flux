@@ -7,6 +7,13 @@ from typing import Any, Mapping, Sequence
 
 from server.input_contract.reader import FinancialContractReader
 from server.input_contract.runtime import create_input001_engine
+from server.input_contract.shadow_lifecycle import (
+    prepare_shadow_storage,
+    read_shadow_health,
+    record_shadow_attempt,
+    record_shadow_error,
+    record_shadow_success,
+)
 from server.input_contract.writer import materialize_financial_dataset
 from server.providers.cyclos_dataset import (
     build_cyclos_financial_dataset,
@@ -143,6 +150,10 @@ def materialize_cyclos_shadow(
     Les bornes de couverture ne sont jamais déduites des transactions du lot :
     elles sont propagées uniquement lorsque l'appelant connaît explicitement la
     période réellement demandée à la source.
+
+    Le stockage shadow est possédé par MLCFlux. Avant chaque matérialisation,
+    sa forme physique est contrôlée indépendamment de contract_version. Un cache
+    ancien peut être reconstruit sans toucher à mlcflux.db.
     """
     resolved = (
         config
@@ -161,44 +172,60 @@ def materialize_cyclos_shadow(
     assert resolved.currency_code is not None
     assert resolved.currency_exponent is not None
 
-    currency_spec = CyclosCurrencySpec(
-        native_currency_id=resolved.native_currency_id,
-        currency_code=resolved.currency_code,
-        currency_exponent=resolved.currency_exponent,
-    )
-
-    payload = build_cyclos_financial_dataset(
-        raw_transactions,
-        dataset_id=resolved.dataset_id,
-        currency_specs={
-            resolved.native_currency_id: currency_spec,
-        },
-        snapshot_ref=(
-            snapshot_ref
-            if snapshot_ref is not None
-            else _default_snapshot_ref()
-        ),
-        coverage_from=coverage_from,
-        coverage_to=coverage_to,
-    )
-
     engine = create_input001_engine()
+    storage = prepare_shadow_storage(engine)
+    record_shadow_attempt(engine)
 
-    materialize_financial_dataset(
-        engine,
-        payload,
-    )
+    try:
+        currency_spec = CyclosCurrencySpec(
+            native_currency_id=resolved.native_currency_id,
+            currency_code=resolved.currency_code,
+            currency_exponent=resolved.currency_exponent,
+        )
 
-    reader = FinancialContractReader(engine)
-    reader.validate_required_relations()
+        payload = build_cyclos_financial_dataset(
+            raw_transactions,
+            dataset_id=resolved.dataset_id,
+            currency_specs={
+                resolved.native_currency_id: currency_spec,
+            },
+            snapshot_ref=(
+                snapshot_ref
+                if snapshot_ref is not None
+                else _default_snapshot_ref()
+            ),
+            coverage_from=coverage_from,
+            coverage_to=coverage_to,
+        )
 
-    metadata = reader.metadata_row()
+        materialize_financial_dataset(
+            engine,
+            payload,
+        )
+
+        reader = FinancialContractReader(engine)
+        reader.validate_required_relations()
+        metadata = reader.metadata_row()
+        record_shadow_success(engine, metadata)
+    except Exception as exc:
+        try:
+            record_shadow_error(engine, exc)
+        except Exception:
+            # L'état opérationnel ne doit jamais masquer l'erreur shadow réelle.
+            pass
+        raise
+
+    health = read_shadow_health(engine)
 
     return {
         "enabled": True,
         "status": "success",
         "dataset_id": metadata["dataset_id"],
         "snapshot_ref": metadata["snapshot_ref"],
+        "coverage_from": metadata["coverage_from"],
+        "coverage_to": metadata["coverage_to"],
         "accounts": len(payload.accounts),
         "transactions": len(payload.transactions),
+        "storage": storage,
+        "health": health,
     }
