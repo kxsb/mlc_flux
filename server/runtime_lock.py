@@ -42,10 +42,9 @@ def _owner_payload(operation: str) -> dict[str, object]:
 def _read_owner_text(handle) -> str:
     try:
         handle.seek(0)
-        value = handle.read().strip()
+        return handle.read().strip()
     except OSError:
         return ""
-    return value
 
 
 @contextmanager
@@ -65,6 +64,7 @@ def exclusive_file_lock(
     path.parent.mkdir(parents=True, exist_ok=True)
 
     handle = path.open("a+", encoding="utf-8")
+    acquired = False
 
     try:
         try:
@@ -72,6 +72,7 @@ def exclusive_file_lock(
                 handle.fileno(),
                 fcntl.LOCK_EX | fcntl.LOCK_NB,
             )
+            acquired = True
         except BlockingIOError as exc:
             owner = _read_owner_text(handle)
             detail = f" Owner: {owner}" if owner else ""
@@ -94,7 +95,7 @@ def exclusive_file_lock(
         yield path
     finally:
         try:
-            if not handle.closed:
+            if acquired and not handle.closed:
                 try:
                     handle.seek(0)
                     handle.truncate()
