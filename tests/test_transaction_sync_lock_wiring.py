@@ -19,6 +19,39 @@ def _recording_lock(events):
     return lock
 
 
+def test_shared_run_sync_service_acquires_lock_for_direct_callers(monkeypatch):
+    events = []
+    monkeypatch.setattr(
+        sync_transactions,
+        "exclusive_transaction_sync_lock",
+        _recording_lock(events),
+    )
+
+    def fake_locked(**kwargs):
+        events.append(("run_locked", kwargs))
+        return {"mode": kwargs["sync_mode"]}
+
+    monkeypatch.setattr(sync_transactions, "_run_sync_locked", fake_locked)
+
+    result = sync_transactions.run_sync(reconcile_days=90)
+
+    assert result == {"mode": "reconciliation"}
+    assert events == [
+        ("lock_enter", "reconciliation_sync"),
+        (
+            "run_locked",
+            {
+                "effective_days": 90,
+                "date_from": None,
+                "date_to": None,
+                "sync_name": "reconciliation_sync",
+                "sync_mode": "reconciliation",
+            },
+        ),
+        ("lock_exit", "reconciliation_sync"),
+    ]
+
+
 def test_daily_sync_cli_runs_inside_shared_lock(monkeypatch):
     events = []
     monkeypatch.setattr(
