@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 import json
 import os
 from pathlib import Path
+import threading
 from typing import Iterator
 
 from server.mlc_context import get_mlc_locks_dir
@@ -114,14 +115,58 @@ def transaction_sync_lock_path() -> Path:
     return get_mlc_locks_dir() / TRANSACTION_SYNC_LOCK_NAME
 
 
+_transaction_lock_local = threading.local()
+
+
+def _thread_transaction_locks() -> dict[str, dict[str, object]]:
+    locks = getattr(_transaction_lock_local, "locks", None)
+    if locks is None:
+        locks = {}
+        _transaction_lock_local.locks = locks
+    return locks
+
+
 @contextmanager
 def exclusive_transaction_sync_lock(
     *,
     operation: str,
 ) -> Iterator[Path]:
-    """Serialize daily sync, reconciliation and historical backfill writers."""
+    """Serialize supported transaction writers for the active MLC.
+
+    Re-entry is allowed only in the same thread and for the same logical
+    operation. This lets high-level entrypoints and the shared runtime service
+    both enforce the lock without deadlocking each other, while a second thread
+    or process still fails fast through ``flock``.
+    """
+    path = transaction_sync_lock_path()
+    key = str(path.resolve())
+    held = _thread_transaction_locks()
+    current = held.get(key)
+
+    if current is not None:
+        current_operation = str(current["operation"])
+        if current_operation != str(operation):
+            raise RuntimeLockError(
+                "Transaction writer lock re-entered with a different operation: "
+                f"{current_operation!r} -> {operation!r}."
+            )
+
+        current["depth"] = int(current["depth"]) + 1
+        try:
+            yield path
+        finally:
+            current["depth"] = int(current["depth"]) - 1
+        return
+
     with exclusive_file_lock(
-        transaction_sync_lock_path(),
+        path,
         operation=operation,
-    ) as path:
-        yield path
+    ) as acquired_path:
+        held[key] = {
+            "operation": str(operation),
+            "depth": 1,
+        }
+        try:
+            yield acquired_path
+        finally:
+            held.pop(key, None)
