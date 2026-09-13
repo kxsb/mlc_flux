@@ -71,6 +71,18 @@ def get_active_mlc_db_path() -> Path:
     return get_mlc_db_path(get_default_mlc_id())
 
 
+def get_mlc_input001_db_path(
+    mlc_id: str | None = None,
+) -> Path:
+    return get_mlc_instance_dir(mlc_id) / "input001.db"
+
+
+def get_active_mlc_input001_db_path() -> Path:
+    return get_mlc_input001_db_path(
+        get_default_mlc_id()
+    )
+
+
 def ensure_mlc_instance_dirs(mlc_id: str | None = None) -> dict[str, Path]:
     normalized_id = normalize_mlc_id(mlc_id or get_default_mlc_id())
 
