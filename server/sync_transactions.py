@@ -7,6 +7,7 @@ from server.database import init_db, get_connection
 from server.services.cyclos_client import get_transactions
 from server.utils.anonymizer import anonymize_transactions
 from server.input_contract.shadow import materialize_cyclos_shadow
+from server.runtime_lock import exclusive_transaction_sync_lock
 
 
 def save_sync_state(status, message, *, sync_name="daily_sync"):
@@ -368,34 +369,43 @@ def parse_args(argv=None):
     return args
 
 
-if __name__ == "__main__":
-    args = parse_args()
+def main(argv=None):
+    args = parse_args(argv)
     sync_name = (
         "reconciliation_sync"
         if args.reconcile_days is not None
         else "daily_sync"
     )
 
-    try:
-        run_sync(
-            days=args.days,
-            date_from=args.date_from,
-            date_to=args.date_to,
-            reconcile_days=args.reconcile_days,
-        )
-    except Exception as e:
-        app = create_app()
-        with app.app_context():
-            init_db()
-            if sync_name == "daily_sync":
-                save_sync_state(
-                    status="error",
-                    message=str(e),
-                )
-            else:
-                save_sync_state(
-                    status="error",
-                    message=str(e),
-                    sync_name=sync_name,
-                )
-        raise
+    # Le verrou est pris avant toute initialisation / écriture. Si un autre
+    # writer détient déjà le verrou, l'échec ne touche donc pas sync_state.
+    with exclusive_transaction_sync_lock(operation=sync_name):
+        try:
+            run_sync(
+                days=args.days,
+                date_from=args.date_from,
+                date_to=args.date_to,
+                reconcile_days=args.reconcile_days,
+            )
+        except Exception as e:
+            app = create_app()
+            with app.app_context():
+                init_db()
+                if sync_name == "daily_sync":
+                    save_sync_state(
+                        status="error",
+                        message=str(e),
+                    )
+                else:
+                    save_sync_state(
+                        status="error",
+                        message=str(e),
+                        sync_name=sync_name,
+                    )
+            raise
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
