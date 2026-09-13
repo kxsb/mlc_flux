@@ -1,0 +1,11 @@
+[Unit]
+Description=MLCFlux standalone weekly 90-day reconciliation timer
+
+[Timer]
+OnCalendar=Sun *-*-* 03:00:00 UTC
+Persistent=true
+AccuracySec=1min
+Unit=mlcflux-reconcile.service
+
+[Install]
+WantedBy=timers.target
