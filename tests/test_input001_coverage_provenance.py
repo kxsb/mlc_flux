@@ -150,7 +150,11 @@ def test_runtime_propagates_source_coverage_to_shadow(monkeypatch):
     monkeypatch.setattr(sync, "get_transactions", lambda **kwargs: raw)
     monkeypatch.setattr(sync, "anonymize_transactions", lambda rows: [{"safe": True}])
     monkeypatch.setattr(sync, "insert_transactions", lambda rows: 1)
-    monkeypatch.setattr(sync, "save_sync_state", lambda status, message: None)
+    monkeypatch.setattr(
+        sync,
+        "save_sync_state",
+        lambda status, message, **kwargs: None,
+    )
 
     received = {}
 
