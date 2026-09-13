@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sqlite3
 from dataclasses import dataclass
 from datetime import date, datetime, UTC
@@ -79,15 +80,35 @@ def build_year_windows(
 
 
 def _sqlite_backup(source_path: Path, destination_path: Path) -> None:
+    """Create a private online SQLite backup without exposing a 0644 window."""
+    destination_path.parent.mkdir(parents=True, exist_ok=True)
+
+    fd = os.open(
+        destination_path,
+        os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+        0o600,
+    )
+    os.close(fd)
+
     source = sqlite3.connect(source_path)
     target = sqlite3.connect(destination_path)
+    succeeded = False
 
     try:
         with target:
             source.backup(target)
+        succeeded = True
     finally:
         source.close()
         target.close()
+
+        if succeeded:
+            os.chmod(destination_path, 0o600)
+        else:
+            try:
+                destination_path.unlink()
+            except FileNotFoundError:
+                pass
 
 
 def create_pre_backfill_backups() -> dict[str, str]:
@@ -96,7 +117,8 @@ def create_pre_backfill_backups() -> dict[str, str]:
     input001_path = get_active_mlc_input001_db_path()
 
     backup_dir = legacy_path.parents[2] / "backups"
-    backup_dir.mkdir(parents=True, exist_ok=True)
+    backup_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    os.chmod(backup_dir, 0o700)
 
     stamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     result: dict[str, str] = {}
