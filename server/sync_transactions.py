@@ -165,6 +165,23 @@ def _sync_write_summary(insert_stats):
     )
 
 
+def _shadow_coverage_kwargs(raw_transactions):
+    """Propage uniquement les bornes attestées par le client source.
+
+    Les listes historiques ou les mocks de tests n'ont pas ces attributs et
+    conservent donc le comportement antérieur : aucune couverture n'est inventée
+    à partir des dates min/max du lot.
+    """
+    kwargs = {}
+
+    for field in ("coverage_from", "coverage_to"):
+        value = getattr(raw_transactions, field, None)
+        if value is not None:
+            kwargs[field] = value
+
+    return kwargs
+
+
 def run_sync(
     days=None,
     date_from=None,
@@ -238,7 +255,8 @@ def run_sync(
         # actuellement de dépendre de mlcflux.db.
         try:
             shadow_result = materialize_cyclos_shadow(
-                raw_transactions
+                raw_transactions,
+                **_shadow_coverage_kwargs(raw_transactions),
             )
         except Exception as exc:
             shadow_result = {
