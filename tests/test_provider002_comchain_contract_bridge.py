@@ -40,8 +40,8 @@ def source_rows():
             "contract": "0xContract",
             "contract_abi": "Currency",
             "type": "transfer",
-            "sender": "0xAccountA",
-            "receiver": "0xAccountB",
+            "sender": "0xAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAa",
+            "receiver": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
             "amount": 1250,
             "fn": "transfer",
             "fn_abi": "transfer(address,uint256)",
@@ -55,8 +55,8 @@ def source_rows():
             "contract": "0xContract",
             "contract_abi": "Currency",
             "type": "transfer",
-            "sender": "0xAccountB",
-            "receiver": "0xAccountC",
+            "sender": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+            "receiver": "0xcccccccccccccccccccccccccccccccccccccccc",
             "amount": 275,
             "fn": "transfer",
             "fn_abi": "transfer(address,uint256)",
@@ -137,9 +137,9 @@ def test_pyc3l_shaped_rows_roundtrip_through_input001():
         row["account_id"]
         for row in stored_accounts
     ] == [
-        "0xAccountA",
-        "0xAccountB",
-        "0xAccountC",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "cccccccccccccccccccccccccccccccccccccccc",
     ]
 
     for account in stored_accounts:
@@ -153,13 +153,13 @@ def test_pyc3l_shaped_rows_roundtrip_through_input001():
     second = stored_transactions[1]
 
     assert first["transaction_id"] == "0xTx001"
-    assert first["source_account_id"] == "0xAccountA"
-    assert first["destination_account_id"] == "0xAccountB"
+    assert first["source_account_id"] == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    assert first["destination_account_id"] == "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     assert first["amount_minor"] == 1250
 
     assert second["transaction_id"] == "0xTx002"
-    assert second["source_account_id"] == "0xAccountB"
-    assert second["destination_account_id"] == "0xAccountC"
+    assert second["source_account_id"] == "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    assert second["destination_account_id"] == "cccccccccccccccccccccccccccccccccccccccc"
     assert second["amount_minor"] == 275
 
     for row in stored_transactions:
@@ -187,8 +187,8 @@ def test_account_registry_is_observed_not_administrative():
         comchain_transaction_account_rows(facts[0])
     )
 
-    assert source["account_id"] == "0xAccountA"
-    assert destination["account_id"] == "0xAccountB"
+    assert source["account_id"] == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    assert destination["account_id"] == "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
     assert source["display_label"] is None
     assert source["native_owner_id"] is None

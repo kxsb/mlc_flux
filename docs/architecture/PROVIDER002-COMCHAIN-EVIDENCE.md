@@ -33,15 +33,26 @@ Le contrat utilise les adresses comme clés pour notamment :
 - `requestReplacementFrom`
 - `newAddress`
 
-Le provider INPUT001 conserve donc l'adresse source sans :
+Le provider INPUT001 applique une canonicalisation spécifique aux
+adresses Ethereum reconnues :
 
-- retrait générique du préfixe `0x`
-- conversion générique en minuscules
-- rapprochement Odoo
-- classification P/U/T/X
+- suppression du préfixe de présentation `0x`
+- représentation des 40 chiffres hexadécimaux en minuscules
 
-Les transformations d'adresse observées dans Lokavaluto servent au
-rapprochement administratif et ne définissent pas l'identité native.
+Cette règle est propre à l'identité technique ComChain/Ethereum et non
+au Core INPUT001.
+
+Elle est nécessaire notamment parce que les différentes couches
+ComChain n'exposent pas systématiquement le même préfixe de
+présentation.
+
+Les identifiants qui ne correspondent pas à une adresse Ethereum
+restent opaques et sont conservés tels quels.
+
+Cette canonicalisation ne réalise :
+
+- aucun rapprochement Odoo
+- aucune classification P/U/T/X
 
 ## Types natifs de compte
 

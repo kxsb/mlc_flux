@@ -37,11 +37,18 @@ def facts(**overrides):
     )
 
 
-def test_comchain_account_identity_is_native_endpoint():
-    row = comchain_account_row("0xAbCdEf")
+def test_comchain_ethereum_identity_is_canonical():
+    address = (
+        "0x"
+        "AbCdAbCdAbCdAbCdAbCdAbCdAbCdAbCdAbCdAbCd"
+    )
+
+    row = comchain_account_row(address)
 
     assert row is not None
-    assert row["account_id"] == "0xAbCdEf"
+    assert row["account_id"] == (
+        "abcdabcdabcdabcdabcdabcdabcdabcdabcdabcd"
+    )
     assert row["source_system"] == "comchain"
 
     assert row["native_account_number"] is None
@@ -51,17 +58,32 @@ def test_comchain_account_identity_is_native_endpoint():
     assert row["native_owner_id"] is None
 
 
-def test_comchain_identity_preserves_case_and_prefix():
-    prefixed = comchain_account_row("0xAbCdEf")
-    unprefixed = comchain_account_row("AbCdEf")
-    other_case = comchain_account_row("0xabcdef")
+def test_ethereum_prefix_and_case_share_identity():
+    expected = (
+        "abcdabcdabcdabcdabcdabcdabcdabcdabcdabcd"
+    )
 
-    assert prefixed["account_id"] == "0xAbCdEf"
-    assert unprefixed["account_id"] == "AbCdEf"
-    assert other_case["account_id"] == "0xabcdef"
+    variants = (
+        "0xAbCdAbCdAbCdAbCdAbCdAbCdAbCdAbCdAbCdAbCd",
+        "AbCdAbCdAbCdAbCdAbCdAbCdAbCdAbCdAbCdAbCd",
+        "0xabcdabcdabcdabcdabcdabcdabcdabcdabcdabcd",
+    )
 
-    assert prefixed["account_id"] != unprefixed["account_id"]
-    assert prefixed["account_id"] != other_case["account_id"]
+    assert {
+        comchain_account_row(value)["account_id"]
+        for value in variants
+    } == {expected}
+
+
+def test_non_ethereum_identifier_remains_opaque():
+    assert (
+        comchain_account_row("0xAbCdEf")["account_id"]
+        == "0xAbCdEf"
+    )
+    assert (
+        comchain_account_row("admin")["account_id"]
+        == "admin"
+    )
 
 
 def test_missing_endpoint_remains_missing():
@@ -124,7 +146,6 @@ def test_normalizer_has_no_odoo_or_business_dependencies():
         "is_receiver_external",
         "get_mlc_profile",
         "family",
-        "lower(",
         "lstrip(",
         "removeprefix(",
     )

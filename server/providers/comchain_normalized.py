@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -12,25 +13,21 @@ class ComChainIdentityError(ValueError):
     """Une identité financière ComChain ne peut pas être normalisée."""
 
 
-def comchain_account_row(
-    account_id: str | None,
-) -> dict[str, Any] | None:
+_ETHEREUM_ADDRESS_RE = re.compile(
+    r"^(?:0x)?([0-9a-fA-F]{40})$"
+)
+
+
+def _normalized_account_id(account_id: str) -> str:
     """
-    Convertit un endpoint financier ComChain vers une ligne `accounts`.
+    Canonicalisation propre au provider ComChain.
 
-    Décision actuelle :
-    - account_id = adresse / identifiant sender ou receiver tel que fourni ;
-    - aucune normalisation de casse ;
-    - aucun retrait du préfixe 0x ;
-    - aucun rapprochement Odoo ;
-    - aucun propriétaire inventé ;
-    - aucune classification P/U/T/X.
+    Une adresse Ethereum reconnue est représentée par ses 40 chiffres
+    hexadécimaux en minuscules, sans préfixe 0x.
 
-    L'espace d'identités est qualifié par dataset_id au niveau INPUT001.
+    Les identifiants non-Ethereum (par exemple une éventuelle sentinelle
+    native comme `admin`) restent opaques et sont conservés tels quels.
     """
-    if account_id is None:
-        return None
-
     if not isinstance(account_id, str):
         raise ComChainIdentityError(
             "Identifiant de compte ComChain non textuel."
@@ -41,8 +38,39 @@ def comchain_account_row(
             "Identifiant de compte ComChain vide."
         )
 
+    match = _ETHEREUM_ADDRESS_RE.fullmatch(account_id)
+
+    if match is not None:
+        return match.group(1).lower()
+
+    return account_id
+
+
+def comchain_account_row(
+    account_id: str | None,
+) -> dict[str, Any] | None:
+    """
+    Convertit un endpoint financier ComChain vers une ligne `accounts`.
+
+    Décision actuelle :
+    - une adresse Ethereum reconnue est canonicalisée en 40 hex
+      minuscules sans préfixe 0x ;
+    - un identifiant non-Ethereum reste opaque et inchangé ;
+    - aucun rapprochement Odoo ;
+    - aucun propriétaire inventé ;
+    - aucune classification P/U/T/X.
+
+    L'espace d'identités est qualifié par dataset_id au niveau INPUT001.
+    """
+    if account_id is None:
+        return None
+
+    normalized_account_id = _normalized_account_id(
+        account_id
+    )
+
     return {
-        "account_id": account_id,
+        "account_id": normalized_account_id,
         "native_account_number": None,
         "native_account_type": None,
         "native_status": None,
