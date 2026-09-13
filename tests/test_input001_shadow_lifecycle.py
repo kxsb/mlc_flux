@@ -21,6 +21,7 @@ from server.input_contract.shadow_lifecycle import (
     read_shadow_health,
     shadow_runtime_state,
 )
+from server.providers.cyclos_normalized import CyclosTransactionError
 
 
 def _actor(actor_id: str) -> dict:
@@ -152,7 +153,7 @@ def test_shadow_failure_is_recorded_and_next_valid_batch_recovers(monkeypatch):
     engine = create_engine("sqlite+pysqlite:///:memory:")
     monkeypatch.setattr(shadow, "create_input001_engine", lambda: engine)
 
-    with pytest.raises(ValueError, match="Devise Cyclos inconnue"):
+    with pytest.raises(CyclosTransactionError, match="Devise Cyclos inconnue"):
         materialize_cyclos_shadow(
             [_raw_transaction(currency="native-test")],
             config=_config(native_currency_id="other-currency"),
@@ -161,7 +162,7 @@ def test_shadow_failure_is_recorded_and_next_valid_batch_recovers(monkeypatch):
 
     failed = read_shadow_health(engine)
     assert failed["status"] == "error"
-    assert failed["error_type"] == "ValueError"
+    assert failed["error_type"] == "CyclosTransactionError"
     assert failed["last_attempt_at"] is not None
     assert failed["last_success_at"] is None
 
