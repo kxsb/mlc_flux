@@ -207,3 +207,54 @@ Aucune modification du core INPUT001 n'est nécessaire à ce stade.
 Le prochain provider ComChain peut les alimenter lorsqu'une source
 native suffisante est disponible, sans dépendre d'Odoo ni d'une
 classification métier MLCFlux.
+
+## Exactitude des lectures de solde
+
+`pyc3l` expose les fonctions natives ComChain au travers de son ABI.
+
+Les valeurs typées `Amount`, dont les lectures de `balanceEL`,
+`balanceCM` et du solde global, sont converties par la couche haut
+niveau avec une division par `100.0`.
+
+Cette représentation est adaptée à l'affichage mais ne constitue pas
+une source exacte pour INPUT001, qui stocke les montants en entier dans
+l'unité minimale.
+
+Le provider doit donc obtenir les valeurs entières natives du contrat
+avant cette conversion lorsqu'il alimente `balances.amount_minor`.
+
+Les composantes sont conservées séparément :
+
+- `balanceEL`
+- `balanceCM`
+
+Le total peut être dérivé mais ne remplace pas les composantes natives.
+
+## Snapshot courant et historique
+
+Une lecture de l'état courant permet d'attester notamment :
+
+- `accountType`
+- `accountStatus`
+- `balanceEL`
+- `balanceCM`
+- `newAddress`
+
+Elle ne permet pas à elle seule de connaître :
+
+- la date de début d'un `accountStatus`
+- la date d'un changement de type
+- l'instant effectif d'un remplacement déjà observé
+
+Par conséquent un simple snapshot courant peut alimenter :
+
+- `accounts`
+- `balances`
+
+mais ne suffit pas pour fabriquer :
+
+- `account_states`
+- `account_replacements`
+
+Ces relations historiques nécessitent une source temporelle native,
+par exemple les événements du contrat ou un historique équivalent.

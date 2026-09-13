@@ -6,7 +6,10 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, Mapping
 
-from server.providers.comchain_facts import ComChainTransactionFacts
+from server.providers.comchain_facts import (
+    ComChainAccountSnapshotFacts,
+    ComChainTransactionFacts,
+)
 
 
 class ComChainIdentityError(ValueError):
@@ -276,3 +279,178 @@ def comchain_transaction_row(
         "native_transaction_label": None,
         "native_transaction_group": None,
     }
+
+
+
+class ComChainAccountSnapshotError(ValueError):
+    """Un snapshot de compte ComChain ne peut pas être projeté sans perte."""
+
+
+_ZERO_ETHEREUM_ADDRESS = "0" * 40
+
+
+def _normalized_snapshot_address(
+    address: str,
+    *,
+    field: str,
+) -> str:
+    match = _ETHEREUM_ADDRESS_RE.fullmatch(address)
+
+    if match is None:
+        raise ComChainAccountSnapshotError(
+            f"Adresse ComChain invalide pour {field}: {address!r}"
+        )
+
+    return match.group(1).lower()
+
+
+def comchain_account_snapshot_row(
+    snapshot: ComChainAccountSnapshotFacts,
+) -> dict[str, Any]:
+    """
+    Produit l'état courant observable dans `accounts`.
+
+    `accountStatus` est conservé explicitement comme fait natif.
+    Il n'est pas confondu avec la fonction calculée `isActive()`.
+    """
+    account_id = _normalized_snapshot_address(
+        snapshot.account_address,
+        field="address",
+    )
+
+    native_account_type = (
+        str(snapshot.native_account_type)
+        if snapshot.native_account_type is not None
+        else None
+    )
+
+    native_status = (
+        "accountStatus:true"
+        if snapshot.native_account_status is True
+        else "accountStatus:false"
+        if snapshot.native_account_status is False
+        else None
+    )
+
+    return {
+        "account_id": account_id,
+        "native_account_number": None,
+        "native_account_type": native_account_type,
+        "native_status": native_status,
+        "display_label": None,
+        "native_owner_id": None,
+        "source_system": "comchain",
+    }
+
+
+def _snapshot_minor_amount(
+    value: int,
+    *,
+    field: str,
+) -> int:
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ComChainAccountSnapshotError(
+            f"{field} ComChain doit être un entier natif."
+        )
+
+    if value < BIGINT_MIN or value > BIGINT_MAX:
+        raise ComChainAccountSnapshotError(
+            f"{field} ComChain hors plage BIGINT signée."
+        )
+
+    return value
+
+
+def comchain_balance_rows(
+    snapshot: ComChainAccountSnapshotFacts,
+    *,
+    observed_at: datetime,
+    currency_spec: ComChainCurrencySpec,
+) -> list[dict[str, Any]]:
+    """
+    Projette les composantes natives balanceEL / balanceCM.
+
+    Le timestamp décrit l'instant auquel ce stock a été observé.
+    Il ne constitue pas un début de validité historique.
+    """
+    if (
+        not isinstance(observed_at, datetime)
+        or observed_at.tzinfo is None
+        or observed_at.utcoffset() is None
+    ):
+        raise ComChainAccountSnapshotError(
+            "observed_at doit être timezone-aware."
+        )
+
+    if currency_spec.amount_representation != "minor":
+        raise ComChainAccountSnapshotError(
+            "Les balances ComChain doivent être lues "
+            "dans l'unité minimale native."
+        )
+
+    if (
+        not isinstance(currency_spec.currency_exponent, int)
+        or isinstance(currency_spec.currency_exponent, bool)
+        or currency_spec.currency_exponent < 0
+    ):
+        raise ComChainAccountSnapshotError(
+            "currency_exponent ComChain invalide."
+        )
+
+    account_id = _normalized_snapshot_address(
+        snapshot.account_address,
+        field="address",
+    )
+
+    observed_at_utc = observed_at.astimezone(UTC)
+
+    rows: list[dict[str, Any]] = []
+
+    for component, value in (
+        ("balanceEL", snapshot.balance_el_minor),
+        ("balanceCM", snapshot.balance_cm_minor),
+    ):
+        if value is None:
+            continue
+
+        rows.append({
+            "account_id": account_id,
+            "observed_at": observed_at_utc,
+            "balance_component": component,
+            "amount_minor": _snapshot_minor_amount(
+                value,
+                field=component,
+            ),
+            "currency_code": currency_spec.currency_code,
+            "currency_exponent": (
+                currency_spec.currency_exponent
+            ),
+            "source_system": "comchain",
+        })
+
+    return rows
+
+
+def comchain_replacement_target(
+    snapshot: ComChainAccountSnapshotFacts,
+) -> str | None:
+    """
+    Restitue seulement la cible actuellement exposée par `newAddress`.
+
+    Aucun `account_replacements` INPUT001 n'est créé ici : le snapshot
+    courant ne fournit pas l'effective_at de l'événement.
+    """
+    value = snapshot.replacement_address
+
+    if value is None:
+        return None
+
+    normalized = _normalized_snapshot_address(
+        value,
+        field="newAddress",
+    )
+
+    if normalized == _ZERO_ETHEREUM_ADDRESS:
+        return None
+
+    return normalized

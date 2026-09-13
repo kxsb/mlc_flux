@@ -183,3 +183,101 @@ def extract_comchain_transaction_facts(
             field="status",
         ),
     )
+
+
+
+def _boolean(value: Any, *, field: str) -> bool | None:
+    if value is None:
+        return None
+
+    if isinstance(value, bool):
+        return value
+
+    if isinstance(value, int) and value in (0, 1):
+        return bool(value)
+
+    if isinstance(value, str) and value in ("0", "1"):
+        return value == "1"
+
+    raise ComChainFactsError(
+        f"Champ ComChain {field!r} non booléen."
+    )
+
+
+@dataclass(frozen=True)
+class ComChainAccountSnapshotFacts:
+    """
+    Faits natifs observés pour un compte ComChain à un instant/bloc donné.
+
+    Les balances sont les int256 natifs du contrat, avant toute
+    conversion d'affichage pyc3l.
+    """
+
+    account_address: str
+    block_number: int | None
+
+    native_account_type: int | None
+    native_account_status: bool | None
+
+    balance_el_minor: int | None
+    balance_cm_minor: int | None
+
+    replacement_address: str | None
+
+
+def extract_comchain_account_snapshot_facts(
+    row: Mapping[str, Any],
+) -> ComChainAccountSnapshotFacts:
+    """
+    Extrait les valeurs natives correspondant aux mappings Solidity :
+
+    - accountType
+    - accountStatus
+    - balanceEL
+    - balanceCM
+    - newAddress
+
+    Aucune classification métier ni conversion monétaire n'est faite.
+    """
+    if not isinstance(row, Mapping):
+        raise ComChainFactsError(
+            "Snapshot compte ComChain malformé : mapping attendu."
+        )
+
+    account_address = _text(
+        row.get("address"),
+        field="address",
+    )
+
+    if account_address is None or not account_address.strip():
+        raise ComChainFactsError(
+            "Snapshot compte ComChain sans adresse."
+        )
+
+    return ComChainAccountSnapshotFacts(
+        account_address=account_address,
+        block_number=_integer(
+            row.get("block"),
+            field="block",
+        ),
+        native_account_type=_integer(
+            row.get("accountType"),
+            field="accountType",
+        ),
+        native_account_status=_boolean(
+            row.get("accountStatus"),
+            field="accountStatus",
+        ),
+        balance_el_minor=_integer(
+            row.get("balanceEL"),
+            field="balanceEL",
+        ),
+        balance_cm_minor=_integer(
+            row.get("balanceCM"),
+            field="balanceCM",
+        ),
+        replacement_address=_text(
+            row.get("newAddress"),
+            field="newAddress",
+        ),
+    )
