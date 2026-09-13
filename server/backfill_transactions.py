@@ -14,6 +14,7 @@ from server.mlc_context import (
     get_active_mlc_db_path,
     get_active_mlc_input001_db_path,
 )
+from server.runtime_lock import exclusive_transaction_sync_lock
 from server.services.cyclos_client import get_transactions
 from server.sync_transactions import (
     _insert_transactions_for_sync,
@@ -263,7 +264,11 @@ def main(argv=None) -> int:
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0
 
-    report = execute_backfill(windows)
+    # Le verrou couvre le backup initial et toutes les fenêtres. Un backfill qui
+    # ne peut pas l'acquérir n'écrit donc ni base, ni backup, ni sync_state.
+    with exclusive_transaction_sync_lock(operation=SYNC_NAME):
+        report = execute_backfill(windows)
+
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0
 
