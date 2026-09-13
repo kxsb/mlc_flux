@@ -7,6 +7,7 @@ from sqlalchemy import Engine, inspect, select
 from server.input_contract.schema import (
     CAPABILITY_RELATIONS,
     CONTRACT_RELATION_COLUMNS,
+    CONTRACT_RELATIONS,
     OPTIONAL_RELATIONS,
     REQUIRED_RELATIONS,
     SUPPORTED_CONTRACT_VERSIONS,
@@ -36,6 +37,12 @@ class FinancialContractReader:
         inspector = inspect(self.engine)
         names = set(inspector.get_table_names())
         names.update(inspector.get_view_names())
+
+        # Les tables opérationnelles privées du runtime (santé du shadow,
+        # migrations de cache, etc.) ne font pas partie du contrat INPUT001.
+        # Le lecteur contractuel ne doit donc jamais les exposer comme une
+        # capacité financière disponible.
+        names &= set(CONTRACT_RELATIONS)
         return frozenset(names)
 
     def _relation_columns(self, relation_name: str) -> frozenset[str]:
