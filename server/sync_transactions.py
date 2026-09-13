@@ -1,5 +1,6 @@
 from datetime import datetime, UTC
 import argparse
+
 from server import create_app
 from server.database import init_db, get_connection
 from server.services.cyclos_client import get_transactions
@@ -7,7 +8,7 @@ from server.utils.anonymizer import anonymize_transactions
 from server.input_contract.shadow import materialize_cyclos_shadow
 
 
-def save_sync_state(status, message):
+def save_sync_state(status, message, *, sync_name="daily_sync"):
     conn = get_connection()
     cur = conn.cursor()
 
@@ -19,7 +20,7 @@ def save_sync_state(status, message):
             last_status=excluded.last_status,
             last_message=excluded.last_message
     """, (
-        "daily_sync",
+        sync_name,
         datetime.now(UTC).isoformat(),
         status,
         message,
@@ -29,13 +30,37 @@ def save_sync_state(status, message):
     conn.close()
 
 
-def insert_transactions(transactions):
+def insert_transactions(transactions, *, return_stats=False):
+    """
+    Insère ou met à jour un lot de transactions legacy.
+
+    Par compatibilité, la fonction retourne le nombre de lignes upsertées.
+    Avec return_stats=True, elle distingue en plus les transactions réellement
+    nouvelles de celles qui existaient déjà avant le lot.
+    """
     conn = get_connection()
     cur = conn.cursor()
 
-    written = 0
+    upserted = 0
+    inserted_new = 0
+    existing = 0
 
     for tx in transactions:
+        transaction_number = tx.get("transactionNumber")
+        cyclos_id = tx.get("id")
+
+        already_exists = cur.execute("""
+            SELECT 1
+            FROM transactions
+            WHERE transaction_number = ?
+               OR (? IS NOT NULL AND cyclos_id = ?)
+            LIMIT 1
+        """, (
+            transaction_number,
+            cyclos_id,
+            cyclos_id,
+        )).fetchone() is not None
+
         cur.execute("""
             INSERT INTO transactions (
                 transaction_number,
@@ -57,8 +82,8 @@ def insert_transactions(transactions):
                 amount=excluded.amount,
                 type_label=excluded.type_label
         """, (
-            tx.get("transactionNumber"),
-            tx.get("id"),
+            transaction_number,
+            cyclos_id,
             tx.get("date"),
             tx.get("group"),
             tx.get("from"),
@@ -67,15 +92,34 @@ def insert_transactions(transactions):
             tx.get("type"),
         ))
 
-        if cur.rowcount > 0:
-            written += 1
+        upserted += 1
+
+        if already_exists:
+            existing += 1
+        else:
+            inserted_new += 1
 
     conn.commit()
     conn.close()
 
-    return written
+    stats = {
+        "upserted": upserted,
+        "inserted_new": inserted_new,
+        "existing": existing,
+    }
 
-def run_sync(days=None, date_from=None, date_to=None):
+    if return_stats:
+        return stats
+
+    return upserted
+
+
+def run_sync(
+    days=None,
+    date_from=None,
+    date_to=None,
+    reconcile_days=None,
+):
     """
     Synchronise les transactions Cyclos vers SQLite.
 
@@ -83,24 +127,59 @@ def run_sync(days=None, date_from=None, date_to=None):
     - comportement quotidien par défaut du client Cyclos, actuellement 48h.
 
     Avec arguments :
-    - days=N
-    - date_from=YYYY-MM-DD ou ISO
-    - date_to=YYYY-MM-DD ou ISO
+    - days=N : fenêtre glissante manuelle ;
+    - date_from/date_to : période calendaire explicite ;
+    - reconcile_days=N : réconciliation historique glissante. Ce mode utilise
+      le même upsert idempotent mais possède un état de sync distinct afin de
+      ne pas masquer le résultat de la synchronisation quotidienne.
     """
+    if reconcile_days is not None:
+        if days is not None or date_from is not None or date_to is not None:
+            raise ValueError(
+                "reconcile_days est exclusif de days/date_from/date_to."
+            )
+
+        if reconcile_days <= 0:
+            raise ValueError(
+                "reconcile_days doit être un entier strictement positif."
+            )
+
+    sync_name = (
+        "reconciliation_sync"
+        if reconcile_days is not None
+        else "daily_sync"
+    )
+    sync_mode = (
+        "reconciliation"
+        if reconcile_days is not None
+        else "daily"
+    )
+    effective_days = (
+        reconcile_days
+        if reconcile_days is not None
+        else days
+    )
+
     app = create_app()
 
     with app.app_context():
         init_db()
 
         raw_transactions = get_transactions(
-            days=days,
+            days=effective_days,
             date_from=date_from,
             date_to=date_to,
         )
         safe_transactions = anonymize_transactions(raw_transactions)
-        written = insert_transactions(safe_transactions)
+        insert_stats = insert_transactions(
+            safe_transactions,
+            return_stats=True,
+        )
 
         fetched = len(raw_transactions)
+        upserted = insert_stats["upserted"]
+        inserted_new = insert_stats["inserted_new"]
+        existing = insert_stats["existing"]
 
         # INPUT001 reste un miroir de contrôle.
         #
@@ -131,27 +210,35 @@ def run_sync(days=None, date_from=None, date_to=None):
         save_sync_state(
             status="success",
             message=(
-                f"{written} transactions écrites / upsertées "
-                f"sur {fetched} transactions récupérées ; "
+                f"{upserted} transactions upsertées sur {fetched} récupérées ; "
+                f"{inserted_new} nouvelle(s), {existing} déjà présente(s) ; "
                 f"INPUT001 shadow={shadow_status}"
-            )
+            ),
+            sync_name=sync_name,
         )
 
         print(
             "SYNC OK - "
             f"{fetched} transactions récupérées, "
-            f"{written} transactions écrites / upsertées, "
+            f"{upserted} upsertées, "
+            f"{inserted_new} nouvelles, "
+            f"{existing} déjà présentes, "
             f"INPUT001 shadow={shadow_status}"
         )
 
         return {
+            "mode": sync_mode,
             "fetched": fetched,
-            "written": written,
+            # Compatibilité avec les consommateurs historiques.
+            "written": upserted,
+            "upserted": upserted,
+            "inserted_new": inserted_new,
+            "existing": existing,
             "input001_shadow": shadow_result,
         }
 
 
-def parse_args():
+def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         description="Synchronise les transactions Cyclos vers la base SQLite MLCFlux."
     )
@@ -173,6 +260,17 @@ def parse_args():
         help="Date de début, au format YYYY-MM-DD ou ISO 8601.",
     )
 
+    period_group.add_argument(
+        "--reconcile-days",
+        dest="reconcile_days",
+        type=int,
+        default=None,
+        help=(
+            "Réconcilie une fenêtre historique glissante de N jours afin de "
+            "rattraper les transactions devenues visibles tardivement."
+        ),
+    )
+
     parser.add_argument(
         "--date-to",
         dest="date_to",
@@ -181,10 +279,13 @@ def parse_args():
         help="Date de fin, au format YYYY-MM-DD ou ISO 8601. Requiert --date-from.",
     )
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.days is not None and args.days <= 0:
         parser.error("--days doit être un entier strictement positif.")
+
+    if args.reconcile_days is not None and args.reconcile_days <= 0:
+        parser.error("--reconcile-days doit être un entier strictement positif.")
 
     if args.date_to and not args.date_from:
         parser.error("--date-to nécessite --date-from.")
@@ -194,16 +295,26 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
+    sync_name = (
+        "reconciliation_sync"
+        if args.reconcile_days is not None
+        else "daily_sync"
+    )
 
     try:
         run_sync(
             days=args.days,
             date_from=args.date_from,
             date_to=args.date_to,
+            reconcile_days=args.reconcile_days,
         )
     except Exception as e:
         app = create_app()
         with app.app_context():
             init_db()
-            save_sync_state(status="error", message=str(e))
+            save_sync_state(
+                status="error",
+                message=str(e),
+                sync_name=sync_name,
+            )
         raise
