@@ -183,52 +183,14 @@ def _shadow_coverage_kwargs(raw_transactions):
     return kwargs
 
 
-def run_sync(
-    days=None,
-    date_from=None,
-    date_to=None,
-    reconcile_days=None,
+def _run_sync_locked(
+    *,
+    effective_days,
+    date_from,
+    date_to,
+    sync_name,
+    sync_mode,
 ):
-    """
-    Synchronise les transactions Cyclos vers SQLite.
-
-    Sans argument :
-    - comportement quotidien par défaut du client Cyclos, actuellement 48h.
-
-    Avec arguments :
-    - days=N : fenêtre glissante manuelle ;
-    - date_from/date_to : période calendaire explicite ;
-    - reconcile_days=N : réconciliation historique glissante. Ce mode utilise
-      le même upsert idempotent mais possède un état de sync distinct afin de
-      ne pas masquer le résultat de la synchronisation quotidienne.
-    """
-    if reconcile_days is not None:
-        if days is not None or date_from is not None or date_to is not None:
-            raise ValueError(
-                "reconcile_days est exclusif de days/date_from/date_to."
-            )
-
-        if reconcile_days <= 0:
-            raise ValueError(
-                "reconcile_days doit être un entier strictement positif."
-            )
-
-    sync_name = (
-        "reconciliation_sync"
-        if reconcile_days is not None
-        else "daily_sync"
-    )
-    sync_mode = (
-        "reconciliation"
-        if reconcile_days is not None
-        else "daily"
-    )
-    effective_days = (
-        reconcile_days
-        if reconcile_days is not None
-        else days
-    )
-
     app = create_app()
 
     with app.app_context():
@@ -311,7 +273,71 @@ def run_sync(
             "inserted_new": inserted_new,
             "existing": existing,
             "input001_shadow": shadow_result,
+            # Une absence dans un lot source n'entraîne jamais de suppression.
+            # Les annulations / suppressions source restent à spécifier avec le
+            # producteur avant toute politique destructive.
+            "source_absence_policy": "preserve",
         }
+
+
+def run_sync(
+    days=None,
+    date_from=None,
+    date_to=None,
+    reconcile_days=None,
+):
+    """
+    Synchronise les transactions Cyclos vers SQLite.
+
+    Sans argument :
+    - comportement quotidien par défaut du client Cyclos, actuellement 48h.
+
+    Avec arguments :
+    - days=N : fenêtre glissante manuelle ;
+    - date_from/date_to : période calendaire explicite ;
+    - reconcile_days=N : réconciliation historique glissante. Ce mode utilise
+      le même upsert idempotent mais possède un état de sync distinct afin de
+      ne pas masquer le résultat de la synchronisation quotidienne.
+
+    Toute exécution de ce service partagé prend le verrou transactionnel de
+    l'instance. Les routes HTTP qui appellent directement run_sync ne peuvent
+    donc plus contourner la sérialisation appliquée aux CLI.
+    """
+    if reconcile_days is not None:
+        if days is not None or date_from is not None or date_to is not None:
+            raise ValueError(
+                "reconcile_days est exclusif de days/date_from/date_to."
+            )
+
+        if reconcile_days <= 0:
+            raise ValueError(
+                "reconcile_days doit être un entier strictement positif."
+            )
+
+    sync_name = (
+        "reconciliation_sync"
+        if reconcile_days is not None
+        else "daily_sync"
+    )
+    sync_mode = (
+        "reconciliation"
+        if reconcile_days is not None
+        else "daily"
+    )
+    effective_days = (
+        reconcile_days
+        if reconcile_days is not None
+        else days
+    )
+
+    with exclusive_transaction_sync_lock(operation=sync_name):
+        return _run_sync_locked(
+            effective_days=effective_days,
+            date_from=date_from,
+            date_to=date_to,
+            sync_name=sync_name,
+            sync_mode=sync_mode,
+        )
 
 
 def parse_args(argv=None):
@@ -377,8 +403,9 @@ def main(argv=None):
         else "daily_sync"
     )
 
-    # Le verrou est pris avant toute initialisation / écriture. Si un autre
-    # writer détient déjà le verrou, l'échec ne touche donc pas sync_state.
+    # Le verrou extérieur garantit qu'un conflit est détecté avant même le
+    # bloc de gestion d'erreur / sync_state. run_sync reprend le même verrou de
+    # façon réentrante afin de protéger aussi ses appelants HTTP directs.
     with exclusive_transaction_sync_lock(operation=sync_name):
         try:
             run_sync(
