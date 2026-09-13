@@ -1,5 +1,6 @@
 from datetime import datetime, UTC
 import argparse
+import inspect
 
 from server import create_app
 from server.database import init_db, get_connection
@@ -114,6 +115,56 @@ def insert_transactions(transactions, *, return_stats=False):
     return upserted
 
 
+def _insert_transactions_for_sync(transactions):
+    """
+    Appelle l'écriture legacy en demandant les statistiques lorsqu'elles sont
+    supportées.
+
+    Certains tests historiques (et d'éventuels consommateurs externes qui
+    monkeypatchent cette fonction) exposent encore l'ancienne signature
+    insert_transactions(rows) -> int. On conserve cette compatibilité sans
+    masquer un TypeError réellement levé à l'intérieur de l'implémentation.
+    """
+    parameters = inspect.signature(insert_transactions).parameters
+
+    if "return_stats" in parameters:
+        result = insert_transactions(
+            transactions,
+            return_stats=True,
+        )
+    else:
+        result = insert_transactions(transactions)
+
+    if isinstance(result, dict):
+        return {
+            "upserted": int(result["upserted"]),
+            "inserted_new": int(result["inserted_new"]),
+            "existing": int(result["existing"]),
+        }
+
+    # Compatibilité ancienne : le nombre de lignes upsertées est connu,
+    # mais pas leur ventilation nouvelles / déjà présentes.
+    return {
+        "upserted": int(result),
+        "inserted_new": None,
+        "existing": None,
+    }
+
+
+def _sync_write_summary(insert_stats):
+    upserted = insert_stats["upserted"]
+    inserted_new = insert_stats["inserted_new"]
+    existing = insert_stats["existing"]
+
+    if inserted_new is None or existing is None:
+        return f"{upserted} transactions upsertées"
+
+    return (
+        f"{upserted} transactions upsertées ; "
+        f"{inserted_new} nouvelle(s), {existing} déjà présente(s)"
+    )
+
+
 def run_sync(
     days=None,
     date_from=None,
@@ -171,9 +222,8 @@ def run_sync(
             date_to=date_to,
         )
         safe_transactions = anonymize_transactions(raw_transactions)
-        insert_stats = insert_transactions(
-            safe_transactions,
-            return_stats=True,
+        insert_stats = _insert_transactions_for_sync(
+            safe_transactions
         )
 
         fetched = len(raw_transactions)
@@ -206,23 +256,30 @@ def run_sync(
             "status",
             "unknown",
         )
-
-        save_sync_state(
-            status="success",
-            message=(
-                f"{upserted} transactions upsertées sur {fetched} récupérées ; "
-                f"{inserted_new} nouvelle(s), {existing} déjà présente(s) ; "
-                f"INPUT001 shadow={shadow_status}"
-            ),
-            sync_name=sync_name,
+        write_summary = _sync_write_summary(insert_stats)
+        state_message = (
+            f"{write_summary} sur {fetched} récupérées ; "
+            f"INPUT001 shadow={shadow_status}"
         )
+
+        # Le chemin quotidien conserve l'appel historique à deux arguments.
+        # Le nom explicite n'est nécessaire que pour l'état de réconciliation.
+        if sync_name == "daily_sync":
+            save_sync_state(
+                status="success",
+                message=state_message,
+            )
+        else:
+            save_sync_state(
+                status="success",
+                message=state_message,
+                sync_name=sync_name,
+            )
 
         print(
             "SYNC OK - "
             f"{fetched} transactions récupérées, "
-            f"{upserted} upsertées, "
-            f"{inserted_new} nouvelles, "
-            f"{existing} déjà présentes, "
+            f"{write_summary}, "
             f"INPUT001 shadow={shadow_status}"
         )
 
@@ -312,9 +369,15 @@ if __name__ == "__main__":
         app = create_app()
         with app.app_context():
             init_db()
-            save_sync_state(
-                status="error",
-                message=str(e),
-                sync_name=sync_name,
-            )
+            if sync_name == "daily_sync":
+                save_sync_state(
+                    status="error",
+                    message=str(e),
+                )
+            else:
+                save_sync_state(
+                    status="error",
+                    message=str(e),
+                    sync_name=sync_name,
+                )
         raise
