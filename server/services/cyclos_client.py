@@ -10,6 +10,27 @@ from server.runtime_config import get_cyclos_config
 LOCAL_CALENDAR_TIMEZONE = ZoneInfo("Europe/Paris")
 
 
+class CyclosTransactionBatch(list):
+    """Liste de transactions Cyclos avec la couverture exacte de la requête.
+
+    Le type reste volontairement une sous-classe de ``list`` afin de préserver
+    le contrat historique de ``get_transactions()`` pour tous ses consommateurs.
+    Les bornes décrivent la période demandée à Cyclos, pas les dates min/max des
+    transactions effectivement retournées.
+    """
+
+    def __init__(
+        self,
+        transactions=(),
+        *,
+        coverage_from,
+        coverage_to,
+    ):
+        super().__init__(transactions)
+        self.coverage_from = coverage_from
+        self.coverage_to = coverage_to
+
+
 def build_basic_auth(username, password):
     raw = f"{username}:{password}"
     encoded = base64.b64encode(raw.encode("utf-8")).decode("utf-8")
@@ -124,6 +145,10 @@ def get_transactions(days=None, date_from=None, date_to=None, *, max_period_days
     - datePeriod : filtre temporel
     - page / pageSize : pagination
     - orderBy=dateDesc : transactions les plus récentes d'abord
+
+    Le résultat reste une ``list`` compatible, enrichie de ``coverage_from`` et
+    ``coverage_to``. Ces bornes reflètent la période effectivement demandée à
+    Cyclos et peuvent donc être propagées sans inférence vers INPUT001.
     """
     base_url = get_cyclos_config().base_url
 
@@ -244,7 +269,11 @@ def get_transactions(days=None, date_from=None, date_to=None, *, max_period_days
             "alors que la page est pleine."
         )
 
-    return all_transactions
+    return CyclosTransactionBatch(
+        all_transactions,
+        coverage_from=start_date,
+        coverage_to=(end_date if end_date is not None else now),
+    )
 
 
 class CyclosAddressError(RuntimeError):
