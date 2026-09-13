@@ -1,0 +1,11 @@
+[Unit]
+Description=MLCFlux standalone daily synchronization timer
+
+[Timer]
+OnCalendar=*-*-* 00:00:00 UTC
+Persistent=true
+AccuracySec=1min
+Unit=mlcflux-daily-sync.service
+
+[Install]
+WantedBy=timers.target
