@@ -130,6 +130,8 @@ def materialize_cyclos_shadow(
     *,
     config: CyclosShadowConfig | None = None,
     snapshot_ref: str | None = None,
+    coverage_from: datetime | None = None,
+    coverage_to: datetime | None = None,
 ) -> dict[str, Any]:
     """
     Matérialise le dernier lot Cyclos dans input001.db.
@@ -137,6 +139,10 @@ def materialize_cyclos_shadow(
     Le shadow est un miroir de contrôle :
     il ne remplace pas mlcflux.db et n'est pas encore utilisé
     par les analyses applicatives.
+
+    Les bornes de couverture ne sont jamais déduites des transactions du lot :
+    elles sont propagées uniquement lorsque l'appelant connaît explicitement la
+    période réellement demandée à la source.
     """
     resolved = (
         config
@@ -172,6 +178,8 @@ def materialize_cyclos_shadow(
             if snapshot_ref is not None
             else _default_snapshot_ref()
         ),
+        coverage_from=coverage_from,
+        coverage_to=coverage_to,
     )
 
     engine = create_input001_engine()
