@@ -27,18 +27,34 @@ Le producteur fournit une relation SQL normalisée `transactions_*`.
 
 ## Grain
 
-Le `hash` est l'identifiant de la transaction fourni par le backend
-financier.
+Le `hash` est l'identifiant de l'événement financier fourni par le backend.
 
-Le contrat cible est :
+Le grain financier est donc :
 
-> un hash = une transaction normalisée.
+> un hash = un événement financier.
 
-Pendant la correction de la fixture Lemanopolis, MLCFlux tolère
-uniquement plusieurs lignes strictement identiques.
+La relation SQL source peut cependant contenir plusieurs lignes portant le
+même hash lorsque le compte source ou destination est associé à plusieurs
+partenaires administratifs.
 
-Deux lignes divergentes avec le même hash constituent une ambiguïté
-et provoquent une erreur d'ingestion.
+Exemple :
+
+    hash ABC / sender_partner_id 10 / receiver_partner_id 30
+    hash ABC / sender_partner_id 20 / receiver_partner_id 30
+
+Ces deux lignes représentent un seul événement financier ABC, avec deux
+associations administratives côté sender.
+
+MLCFlux :
+
+- déduplique les doublons strictement identiques ;
+- accepte plusieurs partner_id pour un même hash ;
+- exige que amount, received_at, type, fn_abi et les flags external soient
+  identiques pour toutes les lignes portant le même hash ;
+- rejette explicitement un même hash portant des faits financiers divergents.
+
+Le comptage des transactions et des volumes est toujours effectué au grain
+du hash, jamais au grain des associations partenaires.
 
 ## Identité administrative
 
@@ -54,6 +70,27 @@ Les flags :
 - `is_receiver_external`
 
 sont conservés sans interprétation supplémentaire.
+
+
+## Comptes partagés et associations administratives
+
+CONTRACT001 ne suppose pas qu'un endpoint financier possède un unique
+propriétaire administratif.
+
+Une transaction peut être associée à zéro, un ou plusieurs partner_id de
+chaque côté.
+
+Le stockage local sépare donc :
+
+- `contract001_transactions` : un événement financier par hash ;
+- `contract001_transaction_partners` : les associations
+  `(hash, side, partner_id)`.
+
+Cette séparation permet à la fois :
+
+- de compter chaque transaction exactement une fois ;
+- de retrouver une transaction depuis chacun des propriétaires d'un compte
+  partagé.
 
 ## Ce qui est explicitement hors contrat
 
@@ -126,18 +163,19 @@ directement une catégorie métier MLCFlux.
 
 ## Projection Financial Core
 
-Le contrat ne fournit pas l'identité des comptes financiers natifs.
+Financial Core reste une projection optionnelle.
 
-MLCFlux ne fabrique donc pas `1 partner_id = 1 compte`.
+TRANSACTIONS001 ne fournit pas l'identité des comptes financiers natifs et
+MLCFlux ne fabrique pas `1 partner_id = 1 compte`.
 
-Chaque côté d'une transaction devient un endpoint financier
-analytique distinct.
+Lorsqu'une projection Financial Core est utilisée :
 
-Lorsqu'un `partner_id` existe :
+- un événement est créé une seule fois par hash ;
+- un endpoint analytique est créé une seule fois par côté ;
+- plusieurs partner_id peuvent produire plusieurs IdentityLinks vers le
+  même endpoint analytique ;
+- les AccountEffects ne sont jamais multipliés par le nombre de
+  propriétaires.
 
-endpoint transactionnel
-→ IdentityLink resolved
-→ Actor administratif
-
-Cela permet l'analyse par acteur sans prétendre connaître la structure
-native des comptes du backend financier.
+La couche contractuelle TRANSACTIONS001 reste la frontière principale du
+runtime normalisé.

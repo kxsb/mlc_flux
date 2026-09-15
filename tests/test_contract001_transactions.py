@@ -12,6 +12,7 @@ def _row(
     tx_hash="tx-1",
     *,
     amount=100,
+    received_at=1786711751,
     sender_partner_id=10,
     receiver_partner_id=20,
     sender_external=False,
@@ -19,7 +20,7 @@ def _row(
 ):
     return {
         "amount": amount,
-        "received_at": 1786711751,
+        "received_at": received_at,
         "hash": tx_hash,
         "fn_abi": "transfer",
         "type": "transfer",
@@ -64,28 +65,144 @@ def test_exact_duplicates_are_collapsed():
     row = _row()
 
     transactions = normalize_transaction_rows(
-        [row, dict(row), dict(row)]
+        [
+            row,
+            dict(row),
+            dict(row),
+        ]
     )
 
     assert len(transactions) == 1
 
 
-def test_same_hash_with_different_content_is_rejected():
+def test_same_hash_can_have_multiple_sender_owners():
+    first = _row(
+        tx_hash="shared",
+        sender_partner_id=10,
+        receiver_partner_id=30,
+    )
+
+    second = _row(
+        tx_hash="shared",
+        sender_partner_id=20,
+        receiver_partner_id=30,
+    )
+
+    transactions = normalize_transaction_rows(
+        [
+            first,
+            second,
+        ]
+    )
+
+    assert len(transactions) == 2
+
+    assert {
+        tx.sender_partner_id
+        for tx in transactions
+    } == {
+        10,
+        20,
+    }
+
+
+def test_same_hash_can_have_multiple_receiver_owners():
+    first = _row(
+        tx_hash="shared",
+        sender_partner_id=10,
+        receiver_partner_id=30,
+    )
+
+    second = _row(
+        tx_hash="shared",
+        sender_partner_id=10,
+        receiver_partner_id=40,
+    )
+
+    transactions = normalize_transaction_rows(
+        [
+            first,
+            second,
+        ]
+    )
+
+    assert len(transactions) == 2
+
+    assert {
+        tx.receiver_partner_id
+        for tx in transactions
+    } == {
+        30,
+        40,
+    }
+
+
+def test_same_hash_with_different_amount_is_rejected():
     first = _row(
         tx_hash="same",
-        sender_partner_id=10,
+        amount=100,
     )
+
     second = _row(
         tx_hash="same",
-        sender_partner_id=11,
+        amount=200,
     )
 
     with pytest.raises(
         TransactionContractError,
-        match="même hash",
+        match="faits financiers divergents",
     ):
         normalize_transaction_rows(
-            [first, second]
+            [
+                first,
+                second,
+            ]
+        )
+
+
+def test_same_hash_with_different_timestamp_is_rejected():
+    first = _row(
+        tx_hash="same",
+        received_at=1000,
+    )
+
+    second = _row(
+        tx_hash="same",
+        received_at=2000,
+    )
+
+    with pytest.raises(
+        TransactionContractError,
+        match="faits financiers divergents",
+    ):
+        normalize_transaction_rows(
+            [
+                first,
+                second,
+            ]
+        )
+
+
+def test_same_hash_with_different_external_flag_is_rejected():
+    first = _row(
+        tx_hash="same",
+        sender_external=False,
+    )
+
+    second = _row(
+        tx_hash="same",
+        sender_external=True,
+    )
+
+    with pytest.raises(
+        TransactionContractError,
+        match="faits financiers divergents",
+    ):
+        normalize_transaction_rows(
+            [
+                first,
+                second,
+            ]
         )
 
 
@@ -93,8 +210,12 @@ def test_bad_boolean_is_rejected():
     row = _row()
     row["is_sender_external"] = 0
 
-    with pytest.raises(TransactionContractError):
-        transaction_from_mapping(row)
+    with pytest.raises(
+        TransactionContractError
+    ):
+        transaction_from_mapping(
+            row
+        )
 
 
 def test_unknown_column_is_rejected():
@@ -105,7 +226,9 @@ def test_unknown_column_is_rejected():
         TransactionContractError,
         match="Colonnes inconnues",
     ):
-        transaction_from_mapping(row)
+        transaction_from_mapping(
+            row
+        )
 
 
 def test_missing_partner_does_not_imply_external():

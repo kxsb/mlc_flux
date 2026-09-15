@@ -51,8 +51,12 @@ class NormalizedTransactionsPostgresSource:
         """
         Lecture strictement READ ONLY.
 
-        SELECT DISTINCT élimine le bug actuel de fixture lorsque
-        plusieurs jointures produisent une ligne normalisée identique.
+        SELECT DISTINCT élimine uniquement les lignes strictement
+        identiques.
+
+        Des lignes de même hash portant des partner_id différents sont
+        volontairement conservées : elles peuvent représenter plusieurs
+        propriétaires administratifs d'un même endpoint financier.
         """
         self._validate_configuration()
 

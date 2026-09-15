@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Collection
 from typing import Any
 
 import psycopg
@@ -84,14 +85,48 @@ class OdooPartnersPostgresSource:
     def __init__(self, *, dsn: str):
         self.dsn = dsn
 
-    def fetch_raw_rows(self) -> list[dict[str, Any]]:
+    def fetch_raw_rows(
+        self,
+        *,
+        partner_ids: Collection[int] | None = None,
+    ) -> list[dict[str, Any]]:
+        query = _SQL
+        params = None
+
+        if partner_ids is not None:
+            normalized_partner_ids = tuple(
+                sorted(set(partner_ids))
+            )
+
+            if not normalized_partner_ids:
+                return []
+
+            query = _SQL.replace(
+                "ORDER BY p.id",
+                "WHERE p.id = ANY(%s)\n"
+                "ORDER BY p.id",
+                1,
+            )
+
+            params = (
+                list(normalized_partner_ids),
+            )
+
         with psycopg.connect(
             self.dsn,
             row_factory=dict_row,
         ) as connection:
             with connection.cursor() as cursor:
                 cursor.execute("SET TRANSACTION READ ONLY")
-                cursor.execute(_SQL)
+
+                if params is None:
+                    cursor.execute(query)
+                else:
+                    cursor.execute(
+                        query,
+                        params,
+                    )
+
                 source_rows = cursor.fetchall()
 
         rows: list[dict[str, Any]] = []
@@ -130,7 +165,11 @@ class OdooPartnersPostgresSource:
 
     def fetch_partners(
         self,
+        *,
+        partner_ids: Collection[int] | None = None,
     ) -> tuple[PartnerContractRow, ...]:
         return normalize_partner_rows(
-            self.fetch_raw_rows()
+            self.fetch_raw_rows(
+                partner_ids=partner_ids,
+            )
         )

@@ -26,16 +26,17 @@ class TransactionContractError(ValueError):
 @dataclass(frozen=True)
 class TransactionContractRow:
     """
-    Une transaction financière normalisée pour MLCFlux.
+    Une ligne de la relation SQL normalisée TRANSACTIONS001.
 
-    Ce contrat ne connaît pas :
-    - les wallets ComChain ;
-    - les comptes Cyclos ;
-    - res_partner_backend ;
-    - les détails du backend financier.
+    Le hash identifie l'événement financier.
 
-    Les partner_id sont les identifiants administratifs fournis
-    directement par le producteur du contrat.
+    sender_partner_id et receiver_partner_id décrivent les associations
+    administratives exposées par le producteur pour cette ligne.
+
+    Plusieurs lignes peuvent donc porter le même hash lorsqu'un endpoint
+    financier est associé à plusieurs partenaires administratifs.
+
+    Les faits financiers d'un même hash doivent rester identiques.
     """
 
     amount: int
@@ -174,41 +175,83 @@ def transaction_from_mapping(
     )
 
 
+def transaction_event_signature(
+    transaction: TransactionContractRow,
+) -> tuple:
+    """
+    Faits invariants de l'événement financier identifié par hash.
+
+    Les partner_id sont volontairement exclus : ils représentent
+    des associations administratives potentiellement multiples.
+    """
+    return (
+        transaction.amount,
+        transaction.received_at,
+        transaction.fn_abi,
+        transaction.type,
+        transaction.is_sender_external,
+        transaction.is_receiver_external,
+    )
+
+
 def normalize_transaction_rows(
     rows: Iterable[Mapping[str, Any]],
 ) -> tuple[TransactionContractRow, ...]:
     """
-    Valide les lignes et impose le grain contractuel par hash.
+    Valide les lignes SQL et les doublons.
 
-    Tolérance temporaire pour les fixtures Lokavaluto :
-    des doublons strictement identiques sont éliminés.
+    - doublons strictement identiques : éliminés ;
+    - même hash avec partner_id différents : autorisé ;
+    - même hash avec faits financiers divergents : rejeté.
 
-    Si un même hash porte deux contenus différents, le contrat est
-    ambigu et l'ingestion échoue explicitement.
+    Le grain financier reste un événement par hash.
     """
-    by_hash: dict[str, TransactionContractRow] = {}
+    event_signatures: dict[str, tuple] = {}
+    seen_rows: set[TransactionContractRow] = set()
+    normalized: list[TransactionContractRow] = []
 
     for row in rows:
         transaction = transaction_from_mapping(row)
 
-        previous = by_hash.get(transaction.hash)
+        signature = transaction_event_signature(
+            transaction
+        )
 
-        if previous is None:
-            by_hash[transaction.hash] = transaction
-            continue
+        previous_signature = event_signatures.get(
+            transaction.hash
+        )
 
-        if previous != transaction:
+        if previous_signature is None:
+            event_signatures[transaction.hash] = signature
+        elif previous_signature != signature:
             raise TransactionContractError(
-                "Plusieurs lignes divergentes portent le même hash : "
+                "Plusieurs lignes portant le même hash "
+                "contiennent des faits financiers divergents : "
                 f"{transaction.hash!r}."
             )
 
+        if transaction in seen_rows:
+            continue
+
+        seen_rows.add(transaction)
+        normalized.append(transaction)
+
     return tuple(
         sorted(
-            by_hash.values(),
+            normalized,
             key=lambda transaction: (
                 transaction.received_at,
                 transaction.hash,
+                (
+                    transaction.sender_partner_id
+                    if transaction.sender_partner_id is not None
+                    else -1
+                ),
+                (
+                    transaction.receiver_partner_id
+                    if transaction.receiver_partner_id is not None
+                    else -1
+                ),
             ),
         )
     )
