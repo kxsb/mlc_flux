@@ -103,3 +103,41 @@ des transactions avec `receiver_partner_id IS NULL` et
 
 Cette combinaison est donc valide au niveau CONTRACT001 tant que
 le producteur du contrat n'en précise pas une contrainte plus forte.
+
+
+## Sémantique de `type` et `fn_abi`
+
+`type` conserve la famille d'opération exposée par le producteur.
+
+`fn_abi` est conservé comme code/sous-type natif de l'opération.
+Malgré son nom historiquement lié à ComChain, MLCFlux ne l'interprète
+pas comme un concept blockchain.
+
+Il peut porter une information analytique importante.
+
+Exemples observés :
+
+- ComChain : `nantTransfer`, `transferNantOnBehalf`
+- Cyclos possède un concept analogue via le code natif du type
+  d'opération (`type.internalName`).
+
+CONTRACT001 conserve donc cette information sans lui attribuer
+directement une catégorie métier MLCFlux.
+
+## Projection Financial Core
+
+Le contrat ne fournit pas l'identité des comptes financiers natifs.
+
+MLCFlux ne fabrique donc pas `1 partner_id = 1 compte`.
+
+Chaque côté d'une transaction devient un endpoint financier
+analytique distinct.
+
+Lorsqu'un `partner_id` existe :
+
+endpoint transactionnel
+→ IdentityLink resolved
+→ Actor administratif
+
+Cela permet l'analyse par acteur sans prétendre connaître la structure
+native des comptes du backend financier.
