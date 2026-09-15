@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+  <title>MLCFlux — Aperçu neutre</title>
+
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family:
+        Inter,
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+      background: #101318;
+      color: #edf1f7;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(
+          circle at top left,
+          rgba(255, 140, 40, 0.08),
+          transparent 32rem
+        ),
+        #101318;
+    }
+
+    a {
+      color: inherit;
+    }
+
+    .page {
+      width: min(1380px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 28px 0 50px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 26px;
+    }
+
+    .eyebrow {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: #ff9b4a;
+      margin-bottom: 7px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(27px, 4vw, 42px);
+      letter-spacing: -.035em;
+    }
+
+    .subtitle {
+      max-width: 780px;
+      margin-top: 9px;
+      color: #98a2b3;
+      line-height: 1.5;
+    }
+
+    .back {
+      text-decoration: none;
+      color: #b7c0cf;
+      border: 1px solid #2b3340;
+      border-radius: 10px;
+      padding: 9px 13px;
+      white-space: nowrap;
+    }
+
+    .source-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 18px 0 24px;
+    }
+
+    .badge {
+      background: #171c24;
+      border: 1px solid #2a3340;
+      color: #b8c2d0;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+
+    .badge.good {
+      border-color: rgba(87, 204, 153, .35);
+      color: #83d8b1;
+    }
+
+    .warning {
+      background: rgba(255, 163, 67, .08);
+      border: 1px solid rgba(255, 163, 67, .25);
+      color: #f4bd86;
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-bottom: 20px;
+      line-height: 1.45;
+      font-size: 13px;
+    }
+
+    .filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: end;
+      margin-bottom: 20px;
+      padding: 14px;
+      background: #151a21;
+      border: 1px solid #242c37;
+      border-radius: 14px;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+    }
+
+    .field label {
+      color: #8e99aa;
+      font-size: 12px;
+    }
+
+    input,
+    button {
+      font: inherit;
+    }
+
+    input[type="date"] {
+      min-height: 39px;
+      color: #eaf0f8;
+      background: #0f1319;
+      border: 1px solid #303947;
+      border-radius: 8px;
+      padding: 8px 10px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 8px;
+      padding: 9px 14px;
+      min-height: 39px;
+      cursor: pointer;
+      font-weight: 650;
+    }
+
+    .primary {
+      background: #ef7f2d;
+      color: #16100b;
+    }
+
+    .secondary {
+      background: #242b35;
+      color: #dce3ed;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns:
+        repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .card,
+    .panel {
+      background: rgba(22, 27, 35, .94);
+      border: 1px solid #252e39;
+      border-radius: 14px;
+    }
+
+    .card {
+      padding: 16px;
+      min-height: 112px;
+    }
+
+    .card-label {
+      color: #8e99aa;
+      font-size: 12px;
+      margin-bottom: 10px;
+    }
+
+    .card-value {
+      font-size: 30px;
+      font-weight: 720;
+      letter-spacing: -.03em;
+    }
+
+    .card-detail {
+      color: #758195;
+      margin-top: 7px;
+      font-size: 12px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns:
+        minmax(0, 1.45fr)
+        minmax(320px, .8fr);
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    .panel {
+      padding: 17px;
+      min-width: 0;
+    }
+
+    .panel h2 {
+      margin: 0 0 5px;
+      font-size: 16px;
+    }
+
+    .panel-subtitle {
+      color: #7f8a9b;
+      font-size: 12px;
+      margin-bottom: 16px;
+    }
+
+    .chart-wrap {
+      height: 310px;
+      position: relative;
+    }
+
+    .table-wrap {
+      overflow: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th {
+      color: #8490a1;
+      font-size: 11px;
+      text-align: left;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      border-bottom: 1px solid #29323e;
+      padding: 9px 8px;
+    }
+
+    td {
+      padding: 10px 8px;
+      border-bottom: 1px solid #202833;
+      vertical-align: top;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .hash {
+      font-family:
+        ui-monospace,
+        SFMono-Regular,
+        Menlo,
+        monospace;
+      color: #aeb9c9;
+    }
+
+    .muted {
+      color: #778396;
+    }
+
+    .loading,
+    .error {
+      padding: 30px;
+      text-align: center;
+      color: #9aa5b5;
+    }
+
+    .error {
+      color: #f1a0a0;
+    }
+
+    @media (max-width: 950px) {
+      .cards {
+        grid-template-columns:
+          repeat(2, minmax(0, 1fr));
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .page {
+        width: min(100% - 22px, 1380px);
+      }
+
+      .cards {
+        grid-template-columns: 1fr;
+      }
+
+      .topbar {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="page">
+    <div class="topbar">
+      <div>
+        <div class="eyebrow">
+          Backend neutre — preview
+        </div>
+
+        <h1>
+          MLCFlux
+        </h1>
+
+        <div class="subtitle">
+          Première lecture directe des contrats normalisés.
+          Les indicateurs affichés ici ne dépendent ni des labels
+          Cyclos historiques, ni des classifications Gonette.
+        </div>
+      </div>
+
+      <a
+        class="back"
+        href="/"
+      >
+        ← Interface actuelle
+      </a>
+    </div>
+
+    <div
+      id="sourceRow"
+      class="source-row"
+    ></div>
+
+    <div class="warning">
+      Les montants monétaires sont volontairement masqués :
+      l’unité et son exposant ne sont pas encore formalisés dans
+      le runtime neutre. Les comptages de transactions sont faits
+      au grain du hash et ne doublent donc pas les comptes partagés.
+    </div>
+
+    <div class="filters">
+      <div class="field">
+        <label for="start">
+          Début
+        </label>
+        <input
+          id="start"
+          type="date"
+        >
+      </div>
+
+      <div class="field">
+        <label for="end">
+          Fin
+        </label>
+        <input
+          id="end"
+          type="date"
+        >
+      </div>
+
+      <button
+        id="apply"
+        class="primary"
+        type="button"
+      >
+        Appliquer
+      </button>
+
+      <button
+        id="reset"
+        class="secondary"
+        type="button"
+      >
+        Toute la période
+      </button>
+    </div>
+
+    <div
+      id="content"
+      class="loading"
+    >
+      Chargement…
+    </div>
+  </main>
+
+  <script src="/static/js/chart.js"></script>
+
+  <script>
+    let dailyChart = null;
+    let partnerChart = null;
+
+    function esc(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+
+    function fmtDateTime(value) {
+      if (!value) return "—";
+
+      const date = new Date(value);
+
+      if (Number.isNaN(date.getTime())) {
+        return value;
+      }
+
+      return date.toLocaleString("fr-FR", {
+        dateStyle: "short",
+        timeStyle: "short"
+      });
+    }
+
+    function shortHash(value) {
+      const text = String(value || "");
+
+      if (text.length <= 16) {
+        return text;
+      }
+
+      return (
+        text.slice(0, 8)
+        + "…"
+        + text.slice(-6)
+      );
+    }
+
+    function card(label, value, detail) {
+      return `
+        <div class="card">
+          <div class="card-label">
+            ${esc(label)}
+          </div>
+
+          <div class="card-value">
+            ${esc(value)}
+          </div>
+
+          <div class="card-detail">
+            ${esc(detail || "")}
+          </div>
+        </div>
+      `;
+    }
+
+    function destroyCharts() {
+      if (dailyChart) {
+        dailyChart.destroy();
+        dailyChart = null;
+      }
+
+      if (partnerChart) {
+        partnerChart.destroy();
+        partnerChart = null;
+      }
+    }
+
+    function renderSource(data) {
+      const source = data.source || {};
+      const states = source.states || {};
+      const txState = states.transactions || {};
+
+      document.getElementById(
+        "sourceRow"
+      ).innerHTML = [
+        `<span class="badge good">CONTRACT ${esc(
+          source.contract_version || "—"
+        )}</span>`,
+
+        `<span class="badge">Source : ${esc(
+          source.instance_id || "inconnue"
+        )}</span>`,
+
+        `<span class="badge">MAJ : ${esc(
+          fmtDateTime(source.refreshed_at)
+        )}</span>`,
+
+        `<span class="badge">État : ${esc(
+          txState.status || "—"
+        )}</span>`
+      ].join("");
+    }
+
+    function render(data) {
+      destroyCharts();
+      renderSource(data);
+
+      if (!data.available) {
+        document.getElementById(
+          "content"
+        ).innerHTML = `
+          <div class="error">
+            Runtime contractuel indisponible :
+            ${esc(data.reason || data.error || "erreur")}
+          </div>
+        `;
+        return;
+      }
+
+      const summary = data.summary || {};
+      const period = data.period || {};
+
+      const coverage = (
+        period.available_start
+        && period.available_end
+      )
+        ? (
+          period.available_start
+          + " → "
+          + period.available_end
+        )
+        : "aucune donnée";
+
+      const recentRows = (
+        data.recent || []
+      ).map(row => `
+        <tr>
+          <td>
+            ${esc(fmtDateTime(row.received_at))}
+          </td>
+
+          <td class="hash" title="${esc(row.hash)}">
+            ${esc(shortHash(row.hash))}
+          </td>
+
+          <td>
+            ${esc(row.type || "—")}
+            <div class="muted">
+              ${esc(row.subtype || "")}
+            </div>
+          </td>
+
+          <td>
+            ${esc(row.sender_partners || "—")}
+          </td>
+
+          <td>
+            ${esc(row.receiver_partners || "—")}
+          </td>
+        </tr>
+      `).join("");
+
+      const typeRows = (
+        data.native_types || []
+      ).map(row => `
+        <tr>
+          <td>${esc(row.type)}</td>
+          <td>${esc(row.subtype)}</td>
+          <td>${esc(row.transactions)}</td>
+        </tr>
+      `).join("");
+
+      document.getElementById(
+        "content"
+      ).className = "";
+
+      document.getElementById(
+        "content"
+      ).innerHTML = `
+        <section class="cards">
+          ${card(
+            "Transactions",
+            summary.transaction_count ?? 0,
+            "1 transaction = 1 hash"
+          )}
+
+          ${card(
+            "Jours actifs",
+            summary.active_days ?? 0,
+            coverage
+          )}
+
+          ${card(
+            "Partenaires",
+            summary.referenced_partners ?? 0,
+            (
+              (summary.resolved_partners ?? 0)
+              + " profils résolus"
+            )
+          )}
+
+          ${card(
+            "Comptes partagés",
+            summary.shared_transactions ?? 0,
+            (
+              (summary.shared_sides ?? 0)
+              + " côtés multi-propriétaires"
+            )
+          )}
+        </section>
+
+        <section class="grid">
+          <div class="panel">
+            <h2>
+              Transactions par jour
+            </h2>
+
+            <div class="panel-subtitle">
+              Comptage au grain de l’événement financier.
+            </div>
+
+            <div class="chart-wrap">
+              <canvas id="dailyChart"></canvas>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h2>
+              Activité par partenaire
+            </h2>
+
+            <div class="panel-subtitle">
+              Nombre de transactions distinctes impliquant
+              chaque partenaire.
+            </div>
+
+            <div class="chart-wrap">
+              <canvas id="partnerChart"></canvas>
+            </div>
+          </div>
+        </section>
+
+        <section class="grid">
+          <div class="panel">
+            <h2>
+              Dernières transactions
+            </h2>
+
+            <div class="panel-subtitle">
+              Propriétaires administratifs exposés par
+              le contrat source.
+            </div>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Hash</th>
+                    <th>Type natif</th>
+                    <th>Émetteur(s)</th>
+                    <th>Destinataire(s)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${recentRows}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h2>
+              Types natifs
+            </h2>
+
+            <div class="panel-subtitle">
+              Conservés tels qu’exposés par le producteur.
+            </div>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Sous-type</th>
+                    <th>Transactions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${typeRows}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      `;
+
+      const daily = data.daily || [];
+
+      dailyChart = new Chart(
+        document.getElementById("dailyChart"),
+        {
+          type: "line",
+          data: {
+            labels: daily.map(
+              item => item.date
+            ),
+            datasets: [{
+              label: "Transactions",
+              data: daily.map(
+                item => item.transactions
+              ),
+              borderWidth: 2,
+              tension: 0.25,
+              pointRadius: 4
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                display: false
+              }
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                ticks: {
+                  precision: 0
+                }
+              }
+            }
+          }
+        }
+      );
+
+      const partners = (
+        data.partner_activity || []
+      );
+
+      partnerChart = new Chart(
+        document.getElementById("partnerChart"),
+        {
+          type: "bar",
+          data: {
+            labels: partners.map(
+              item => item.name
+            ),
+            datasets: [{
+              label: "Transactions",
+              data: partners.map(
+                item => item.transactions
+              ),
+              borderWidth: 1
+            }]
+          },
+          options: {
+            indexAxis: "y",
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                display: false
+              }
+            },
+            scales: {
+              x: {
+                beginAtZero: true,
+                ticks: {
+                  precision: 0
+                }
+              }
+            }
+          }
+        }
+      );
+    }
+
+    async function load() {
+      const start = document.getElementById(
+        "start"
+      ).value;
+
+      const end = document.getElementById(
+        "end"
+      ).value;
+
+      const params = new URLSearchParams();
+
+      if (start) {
+        params.set("start", start);
+      }
+
+      if (end) {
+        params.set("end", end);
+      }
+
+      document.getElementById(
+        "content"
+      ).className = "loading";
+
+      document.getElementById(
+        "content"
+      ).textContent = "Chargement…";
+
+      const response = await fetch(
+        "/api/neutral/overview?"
+        + params.toString()
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error
+          || "Erreur API"
+        );
+      }
+
+      render(data);
+    }
+
+    document.getElementById(
+      "apply"
+    ).addEventListener(
+      "click",
+      () => {
+        load().catch(showError);
+      }
+    );
+
+    document.getElementById(
+      "reset"
+    ).addEventListener(
+      "click",
+      () => {
+        document.getElementById(
+          "start"
+        ).value = "";
+
+        document.getElementById(
+          "end"
+        ).value = "";
+
+        load().catch(showError);
+      }
+    );
+
+    function showError(error) {
+      document.getElementById(
+        "content"
+      ).className = "error";
+
+      document.getElementById(
+        "content"
+      ).textContent = error.message;
+    }
+
+    load().catch(showError);
+  </script>
+</body>
+</html>

@@ -3,8 +3,18 @@ from server.routes.current_mlc import current_mlc
 
 
 def test_route_count_characterization():
-    # Baseline Neutral après suppression du portail multi-instance.
-    assert len(list(app.url_map.iter_rules())) == 76
+    # Baseline Neutral avec preview analytique contractuelle.
+    assert len(list(app.url_map.iter_rules())) == 78
+
+
+def test_neutral_contract_preview_routes_exist():
+    routes = {
+        str(rule)
+        for rule in app.url_map.iter_rules()
+    }
+
+    assert "/api/neutral/overview" in routes
+    assert "/neutral-preview" in routes
 
 
 def test_root_requires_authentication():
