@@ -398,6 +398,34 @@ def _validate_payload(payload: FinancialCorePayload) -> dict[str, Any]:
     }
 
 
+
+def validate_financial_core_payload(
+    payload: FinancialCorePayload,
+) -> dict[str, Any]:
+    """
+    Valide intégralement un payload Financial Core sans écrire en base.
+
+    La validation publique réutilise exactement les invariants du writer.
+    Elle sert notamment au lifecycle de publication afin de séparer
+    explicitement préparation, validation et publication.
+
+    Le résultat ne constitue pas une représentation canonique persistable :
+    il fournit seulement un diagnostic synthétique du payload validé.
+    """
+    normalized = _validate_payload(payload)
+
+    relation_counts: dict[str, int] = {}
+
+    for name, value in normalized.items():
+        if isinstance(value, list):
+            relation_counts[name] = len(value)
+
+    return {
+        "valid": True,
+        "relation_counts": relation_counts,
+    }
+
+
 def publish_financial_core(engine: Engine, payload: FinancialCorePayload) -> str:
     """Validate and atomically publish one coherent Financial Core snapshot.
 
