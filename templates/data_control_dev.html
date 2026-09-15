@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MLCFlux — Contrôle des données</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/data_control_dev.css') }}" />
+</head>
+<body>
+  <main class="data-control-shell">
+    <header class="data-control-header">
+      <div>
+        <a class="back-link" href="/">← Retour à MLCFlux</a>
+        <p class="eyebrow">DATACTRL001 · vue de développement</p>
+        <h1>Contrôle des données</h1>
+        <p class="intro">
+          Cartographie des données nécessaires à MLCFlux, de leurs usages dans
+          l’application et de leur état de collecte dans l’architecture Neutral.
+          Le classement privilégie les données les plus sollicitées.
+        </p>
+      </div>
+    </header>
+
+    <section class="status-summary" aria-label="Résumé de l’audit">
+      <div class="summary-card summary-card-main">
+        <span class="summary-value">{{ summary.total }}</span>
+        <span class="summary-label">données suivies</span>
+      </div>
+
+      {% for status_key, meta in status_meta.items() %}
+      <button
+        class="summary-card status-filter-card"
+        type="button"
+        data-filter-status="{{ status_key }}"
+        aria-pressed="false"
+      >
+        <span class="status-dot status-{{ meta.color }}" aria-hidden="true"></span>
+        <span class="summary-value">{{ summary.status_counts[status_key] }}</span>
+        <span class="summary-label">{{ meta.short_label }}</span>
+      </button>
+      {% endfor %}
+    </section>
+
+    <section class="controls" aria-label="Filtres">
+      <label class="search-field">
+        <span>Rechercher</span>
+        <input
+          id="dataControlSearch"
+          type="search"
+          placeholder="Donnée, source, graphique, indicateur…"
+          autocomplete="off"
+        />
+      </label>
+
+      <div class="audit-progress">
+        <span>{{ summary.audited }} / {{ summary.total }} auditées</span>
+        <div class="progress-track" aria-hidden="true">
+          <div
+            class="progress-bar"
+            style="width: {{ ((summary.audited / summary.total) * 100) if summary.total else 0 }}%"
+          ></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="table-card">
+      <table class="data-control-table">
+        <thead>
+          <tr>
+            <th scope="col">Donnée</th>
+            <th scope="col">Branchée sur</th>
+            <th scope="col">Contrôle</th>
+          </tr>
+        </thead>
+        <tbody id="dataControlRows">
+          {% for row in rows %}
+          <tr
+            data-status="{{ row.status }}"
+            data-search="{{ (row.label ~ ' ' ~ row.key ~ ' ' ~ row.domain ~ ' ' ~ row.source ~ ' ' ~ row.consumers|join(' ') ~ ' ' ~ row.note)|lower }}"
+          >
+            <td class="data-cell">
+              <div class="data-title-row">
+                <strong>{{ row.label }}</strong>
+                <span class="usage-count" title="Nombre d’usages déclarés">{{ row.usage_count }} usages</span>
+              </div>
+              <code>{{ row.key }}</code>
+              <div class="data-meta">
+                <span>{{ row.domain }}</span>
+                <span class="meta-separator">·</span>
+                <span>{{ row.source }}</span>
+              </div>
+              {% if row.note %}
+              <details class="data-note">
+                <summary>Détail</summary>
+                <p>{{ row.note }}</p>
+              </details>
+              {% endif %}
+            </td>
+
+            <td class="consumers-cell">
+              <div class="consumer-list">
+                {% for consumer in row.consumers %}
+                <span class="consumer-chip">{{ consumer }}</span>
+                {% endfor %}
+              </div>
+            </td>
+
+            <td class="status-cell">
+              <div class="status-badge status-badge-{{ row.status }}">
+                <span class="status-dot status-{{ row.status_color }}" aria-hidden="true"></span>
+                <span>{{ row.status_short_label }}</span>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <div id="dataControlEmpty" class="empty-state" hidden>
+        Aucune donnée ne correspond au filtre courant.
+      </div>
+    </section>
+
+    <section class="legend" aria-label="Légende des états">
+      {% for status_key, meta in status_meta.items() %}
+      <div>
+        <span class="status-dot status-{{ meta.color }}" aria-hidden="true"></span>
+        <strong>{{ meta.short_label }}</strong>
+        <span>{{ meta.label }}</span>
+      </div>
+      {% endfor %}
+    </section>
+  </main>
+
+  <script src="{{ url_for('static', filename='js/data_control_dev.js') }}"></script>
+</body>
+</html>
