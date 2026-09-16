@@ -8,6 +8,10 @@ from server.data_control_registry import (
     get_data_control_rows,
     get_data_control_summary,
 )
+from server.data_control_raw import (
+    available_raw_keys,
+    fetch_raw_preview,
+)
 from server.services.monetary_indicators_adaptive import (
     get_adaptive_monetary_indicators,
 )
@@ -60,7 +64,32 @@ def data_control_dev():
         rows=get_data_control_rows(),
         summary=get_data_control_summary(),
         status_meta=DATA_CONTROL_STATUS_META,
+        raw_keys=available_raw_keys(),
     )
+
+
+@app.route("/api/dev/data-control/raw/<key>")
+def api_data_control_raw(key):
+    if key not in available_raw_keys():
+        return jsonify({
+            "available": False,
+            "error": "Source PostgreSQL brute non branchée pour cette donnée.",
+        }), 404
+
+    try:
+        result = fetch_raw_preview(key)
+    except Exception:
+        app.logger.exception(
+            "DATACTRL002 raw preview failed for %s",
+            key,
+        )
+        return jsonify({
+            "available": False,
+            "error": "Lecture PostgreSQL impossible.",
+        }), 503
+
+    result["available"] = True
+    return jsonify(result)
 
 
 @app.route("/api/monetary-indicators")

@@ -408,3 +408,145 @@ button.summary-card[aria-pressed="true"] {
     min-width: 920px;
   }
 }
+
+
+/* DATACTRL002 — aperçu PostgreSQL brut */
+
+.raw-data-control {
+  margin-top: 12px;
+}
+
+.raw-data-toggle {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #d3d7de;
+  cursor: pointer;
+  font-size: 0.78rem;
+  text-align: left;
+}
+
+.raw-data-toggle:hover {
+  color: var(--accent);
+}
+
+.raw-data-unavailable {
+  color: #6f757e;
+  font-size: 0.75rem;
+}
+
+.raw-preview-row td {
+  padding: 0 !important;
+  background: #101215;
+}
+
+.raw-preview {
+  padding: 18px;
+  border-top: 1px solid #252a30;
+  border-bottom: 1px solid #252a30;
+}
+
+.raw-preview-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.raw-preview-source {
+  min-width: 0;
+}
+
+.raw-preview-source code {
+  color: #e1e4e8;
+}
+
+.raw-preview-count {
+  flex: 0 0 auto;
+}
+
+.raw-preview-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+
+.raw-data-table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  background: #0d0f11;
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    monospace;
+  font-size: 0.74rem;
+}
+
+.raw-data-table th,
+.raw-data-table td {
+  min-width: 130px;
+  max-width: 360px;
+  padding: 9px 11px !important;
+  border-right: 1px solid #252a30;
+  border-bottom: 1px solid #252a30;
+  vertical-align: top;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.raw-data-table th {
+  position: static;
+  background: #181b1f;
+  color: #c9ced6;
+  font-family: inherit;
+  font-size: 0.71rem;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.raw-data-table td {
+  color: #e4e6e9;
+}
+
+.raw-data-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.raw-data-table th:last-child,
+.raw-data-table td:last-child {
+  border-right: 0;
+}
+
+.raw-null {
+  color: #737983 !important;
+  font-style: italic;
+}
+
+.raw-preview-loading,
+.raw-preview-empty {
+  padding: 20px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.raw-preview-error {
+  padding: 14px 16px;
+  border: 1px solid rgb(239 68 68 / 0.35);
+  border-radius: 8px;
+  background: rgb(239 68 68 / 0.07);
+  color: #fca5a5;
+}
+
+@media (max-width: 760px) {
+  .raw-preview-meta {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

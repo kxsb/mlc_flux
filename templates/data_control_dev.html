@@ -76,6 +76,7 @@
           {% for row in rows %}
           <tr
             data-status="{{ row.status }}"
+            data-key="{{ row.key }}"
             data-search="{{ (row.label ~ ' ' ~ row.key ~ ' ' ~ row.domain ~ ' ' ~ row.source ~ ' ' ~ row.consumers|join(' ') ~ ' ' ~ row.note)|lower }}"
           >
             <td class="data-cell">
@@ -95,6 +96,23 @@
                 <p>{{ row.note }}</p>
               </details>
               {% endif %}
+
+              <div class="raw-data-control">
+                {% if row.key in raw_keys %}
+                <button
+                  class="raw-data-toggle"
+                  type="button"
+                  data-raw-key="{{ row.key }}"
+                  aria-expanded="false"
+                >
+                  ▸ Voir les données brutes PostgreSQL
+                </button>
+                {% else %}
+                <span class="raw-data-unavailable">
+                  Source brute PostgreSQL non branchée
+                </span>
+                {% endif %}
+              </div>
             </td>
 
             <td class="consumers-cell">
@@ -112,6 +130,21 @@
               </div>
             </td>
           </tr>
+
+          {% if row.key in raw_keys %}
+          <tr
+            class="raw-preview-row"
+            data-raw-for="{{ row.key }}"
+            hidden
+          >
+            <td colspan="3">
+              <div
+                class="raw-preview"
+                data-raw-preview="{{ row.key }}"
+              ></div>
+            </td>
+          </tr>
+          {% endif %}
           {% endfor %}
         </tbody>
       </table>
