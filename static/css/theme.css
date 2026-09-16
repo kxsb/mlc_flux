@@ -1,0 +1,481 @@
+/* ==========================================================================
+   THEME001A — Contrat de thème central MLCFlux
+
+   Les composants doivent consommer les tokens --ui-*.
+   Le mode clair / sombre ne change que leur valeur.
+
+   Les anciens tokens restent exposés comme alias pendant la migration.
+   ========================================================================== */
+
+:root {
+  color-scheme: light;
+
+  /* Page */
+  --ui-bg: #f5f6f8;
+
+  /* Surfaces */
+  --ui-surface: #ffffff;
+  --ui-surface-raised: #ffffff;
+  --ui-surface-soft: #f8fafc;
+  --ui-surface-muted: #f1f5f9;
+
+  /* Bordures */
+  --ui-border: #e5e7eb;
+  --ui-border-strong: #d1d5db;
+
+  /* Texte */
+  --ui-text: #222222;
+  --ui-text-strong: #111827;
+  --ui-text-muted: #6b7280;
+  --ui-text-subtle: #94a3b8;
+
+  /* Contrôles */
+  --ui-input-bg: #ffffff;
+  --ui-input-border: #d1d5db;
+  --ui-secondary-bg: #e5e7eb;
+  --ui-secondary-text: #111827;
+
+  /* Ombres */
+  --ui-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+
+  /* Réseau / cartes */
+  --ui-network-panel-bg: #f8fafc;
+  --ui-network-panel-border: #e2e8f0;
+  --ui-network-graph-bg:
+    linear-gradient(180deg, #fcfdff 0%, #f8fafc 100%);
+  --ui-network-graph-border: #dbe3ee;
+
+
+  /* ------------------------------------------------------------------------
+     Alias historiques
+     ------------------------------------------------------------------------ */
+
+  --bg: var(--ui-bg);
+
+  --text: var(--ui-text);
+  --text-strong: var(--ui-text-strong);
+  --muted: var(--ui-text-muted);
+
+  --card-bg: var(--ui-surface);
+  --card-border: var(--ui-border);
+  --card-shadow: var(--ui-shadow);
+
+  --table-head-bg: var(--ui-surface-muted);
+  --table-row-hover: var(--ui-surface-soft);
+
+  --input-bg: var(--ui-input-bg);
+  --input-border: var(--ui-input-border);
+
+  --secondary-bg: var(--ui-secondary-bg);
+  --secondary-text: var(--ui-secondary-text);
+
+  --network-panel-bg: var(--ui-network-panel-bg);
+  --network-panel-border: var(--ui-network-panel-border);
+  --network-graph-bg: var(--ui-network-graph-bg);
+  --network-graph-border: var(--ui-network-graph-border);
+}
+
+
+/* ==========================================================================
+   MODE SOMBRE
+
+   C'est désormais ici que se définit la signification globale du dark mode.
+   ========================================================================== */
+
+body.dark-mode {
+  color-scheme: dark;
+
+  /* Page */
+  --ui-bg: #0f172a;
+
+  /* Surfaces */
+  --ui-surface: #111827;
+  --ui-surface-raised: #172033;
+  --ui-surface-soft: #0f172a;
+  --ui-surface-muted: #172033;
+
+  /* Bordures */
+  --ui-border: #253043;
+  --ui-border-strong: #334155;
+
+  /* Texte */
+  --ui-text: #e5e7eb;
+  --ui-text-strong: #f8fafc;
+  --ui-text-muted: #94a3b8;
+  --ui-text-subtle: #64748b;
+
+  /* Contrôles */
+  --ui-input-bg: #0f172a;
+  --ui-input-border: #334155;
+  --ui-secondary-bg: #1e293b;
+  --ui-secondary-text: #e5e7eb;
+
+  /* Ombres */
+  --ui-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+
+  /* Réseau / cartes */
+  --ui-network-panel-bg: #111827;
+  --ui-network-panel-border: #253043;
+  --ui-network-graph-bg:
+    linear-gradient(180deg, #0b1220 0%, #0f172a 100%);
+  --ui-network-graph-border: #253043;
+
+
+  /* Alias historiques */
+  --bg: var(--ui-bg);
+
+  --text: var(--ui-text);
+  --text-strong: var(--ui-text-strong);
+  --muted: var(--ui-text-muted);
+
+  --card-bg: var(--ui-surface);
+  --card-border: var(--ui-border);
+  --card-shadow: var(--ui-shadow);
+
+  --table-head-bg: var(--ui-surface-muted);
+  --table-row-hover: var(--ui-surface-raised);
+
+  --input-bg: var(--ui-input-bg);
+  --input-border: var(--ui-input-border);
+
+  --secondary-bg: var(--ui-secondary-bg);
+  --secondary-text: var(--ui-secondary-text);
+
+  --network-panel-bg: var(--ui-network-panel-bg);
+  --network-panel-border: var(--ui-network-panel-border);
+  --network-graph-bg: var(--ui-network-graph-bg);
+  --network-graph-border: var(--ui-network-graph-border);
+}
+
+
+/* ==========================================================================
+   SURFACES GÉNÉRIQUES
+
+   Première migration : les composants ne connaissent plus explicitement
+   light/dark. Ils consomment simplement la palette.
+   ========================================================================== */
+
+body {
+  background: var(--ui-bg);
+  color: var(--ui-text);
+}
+
+
+/* Cards génériques */
+
+.card,
+.stat-card,
+.kpi-card,
+.metric-card,
+.pilotage-card,
+.professional-analysis-card,
+.professional-profile-card {
+  background-color: var(--ui-surface);
+  border-color: var(--ui-border);
+  color: var(--ui-text);
+}
+
+
+/* Valeurs / titres */
+
+.stat-value,
+.kpi-value,
+.metric-value,
+.card h1,
+.card h2,
+.card h3,
+.card h4 {
+  color: var(--ui-text-strong);
+}
+
+
+/* Textes secondaires */
+
+.stat-label,
+.card small,
+.card .muted {
+  color: var(--ui-text-muted);
+}
+
+
+/* ==========================================================================
+   COMPOSANTS D'ANALYSE
+   ========================================================================== */
+
+.analysis-view-masthead-kpi,
+.analysis-view-masthead-note {
+  background: var(--ui-surface-raised);
+  border-color: var(--ui-border);
+  color: var(--ui-text);
+}
+
+.analysis-view-masthead-kpi strong {
+  color: var(--ui-text-strong);
+}
+
+.analysis-view-masthead-kpi span,
+.analysis-view-masthead-note {
+  color: var(--ui-text-muted);
+}
+
+
+/* ==========================================================================
+   SYNTHÈSE PROFESSIONNELS
+   ========================================================================== */
+
+.professional-summary-kpi-card,
+.professional-summary-reference-card,
+.professional-summary-reading-card,
+.professional-summary-reuse-card,
+.professional-summary-reference-block {
+  background: var(--ui-surface);
+  border-color: var(--ui-border);
+  color: var(--ui-text);
+}
+
+.professional-summary-kpi-card strong,
+.professional-summary-reference-card strong,
+.professional-summary-reading-card h3,
+.professional-summary-reading-card strong,
+.professional-summary-reuse-card h3,
+.professional-summary-reuse-card strong,
+.professional-summary-reference-block h3,
+.professional-summary-reference-block strong {
+  color: var(--ui-text-strong);
+}
+
+.professional-summary-kpi-card .stat-label,
+.professional-summary-reference-card span,
+.professional-summary-reading-card p,
+.professional-summary-reuse-card p,
+.professional-summary-reference-block p {
+  color: var(--ui-text-muted);
+}
+
+/* ==========================================================================
+   THEME001B1 — Surfaces applicatives centralisées
+
+   Aucun composant ci-dessous ne connaît le mode clair ou sombre.
+   Tous consomment exclusivement le contrat --ui-*.
+   ========================================================================== */
+
+
+/* ==========================================================================
+   NAVIGATION HAUTE / ONGLETS D'ANALYSE
+   ========================================================================== */
+
+.analysis-view-tabs {
+  color: var(--ui-text);
+}
+
+.analysis-view-tabs button {
+  border-color: var(--ui-border-strong);
+  color: var(--ui-text-strong);
+}
+
+
+/* ==========================================================================
+   SIDEBAR
+   ========================================================================== */
+
+.sidebar #themeToggleBtn,
+.sidebar .period-active-summary,
+.sidebar .period-picker-panel,
+.sidebar .sidebar-select,
+.sidebar .sidebar-date-input,
+.sidebar .period-quick-preset-btn,
+.sidebar .sidebar-collapsed-period,
+.sidebar .sidebar-collapsed-nav-btn {
+  background: var(--ui-surface);
+  border-color: var(--ui-border);
+  color: var(--ui-text);
+}
+
+
+/* Navigation principale */
+
+.sidebar .sidebar-view-option,
+.sidebar label:has(input[type="radio"]) {
+  background: var(--ui-surface);
+  border-color: var(--ui-border);
+  color: var(--ui-text);
+}
+
+
+/* Vue sélectionnée : conserve l'accent de l'instance */
+
+.sidebar .sidebar-view-option.is-active,
+.sidebar label:has(input[type="radio"]:checked) {
+  background: var(--ui-surface-raised);
+  color: var(--gonette-orange, currentColor);
+}
+
+
+/* Texte secondaire sidebar */
+
+.sidebar .period-active-label,
+.sidebar .sidebar-field-label,
+.sidebar .sidebar-hint,
+.sidebar .period-autorefresh-note,
+.sidebar .period-mini-timeline-bound {
+  color: var(--ui-text-muted);
+}
+
+
+/* Timeline période */
+
+.sidebar .period-mini-timeline-track {
+  background: var(--ui-surface-muted);
+}
+
+
+/* ==========================================================================
+   SYNTHÈSE PROFESSIONNELS / PARTICULIERS
+   ========================================================================== */
+
+.main-content .professional-summary-kpi-card,
+.main-content .professional-summary-reference-card,
+.main-content .professional-summary-reading-card,
+.main-content .professional-summary-reuse-card,
+.main-content .professional-summary-reference-block {
+  background: var(--ui-surface);
+  border-color: var(--ui-border);
+  color: var(--ui-text);
+}
+
+
+/* Valeurs qui conservaient encore une couleur sombre locale */
+
+.main-content .professional-summary-kpi-value,
+.main-content .professional-summary-reference-card strong {
+  color: var(--ui-text-strong);
+}
+
+
+.main-content .professional-summary-kpi-card p,
+.main-content .professional-summary-reference-card span,
+.main-content .professional-summary-reading-card p,
+.main-content .professional-summary-reuse-card p,
+.main-content .professional-summary-reference-block p {
+  color: var(--ui-text-muted);
+}
+
+
+/* ==========================================================================
+   PILOTAGE — SURFACES HTML
+
+   Le radar Chart.js est volontairement exclu ici.
+   Il recevra sa palette dans THEME001B2.
+   ========================================================================== */
+
+.main-content .pilotage-primary-kpi-card,
+.main-content .pilotage-instrument-card,
+.main-content .pilotage-trajectory-digest-card,
+.main-content .pilotage-trajectory-digest-grid article,
+.main-content .pilotage-trajectory-visual-card,
+.main-content .pilotage-trajectory-visual-item,
+.main-content .pilotage-trajectory-global,
+.main-content .pilotage-trajectory-radar-values li,
+.main-content .pilotage-trajectory-radar-method,
+.main-content .pilotage-radar-period-bubble,
+.main-content .pilotage-trajectory-axis-kpis {
+  background: var(--ui-surface);
+  border-color: var(--ui-border);
+  color: var(--ui-text);
+}
+
+
+/* Surfaces légèrement en retrait */
+
+.main-content .pilotage-instrument-insight,
+.main-content .pilotage-trajectory-visual-state,
+.main-content .pilotage-trajectory-period-line {
+  background: var(--ui-surface-soft);
+  border-color: var(--ui-border);
+  color: var(--ui-text);
+}
+
+
+/* Titres / valeurs */
+
+.main-content .pilotage-primary-value,
+.main-content .pilotage-primary-value span,
+.main-content .pilotage-instrument-card strong,
+.main-content .pilotage-trajectory-heading h3,
+.main-content .pilotage-trajectory-digest-grid strong,
+.main-content .pilotage-trajectory-visual-topline strong,
+.main-content .pilotage-trajectory-visual-state strong,
+.main-content .pilotage-trajectory-global strong,
+.main-content .pilotage-trajectory-radar-values strong,
+.main-content .pilotage-radar-period-bubble b,
+.main-content .pilotage-trajectory-axis-kpis strong,
+.main-content .pilotage-trajectory-axis-kpis b {
+  color: var(--ui-text-strong);
+}
+
+
+/* Libellés secondaires */
+
+.main-content .pilotage-trajectory-heading p,
+.main-content .pilotage-trajectory-digest-grid span,
+.main-content .pilotage-trajectory-digest-grid small,
+.main-content .pilotage-trajectory-visual-topline span,
+.main-content .pilotage-trajectory-visual-state small,
+.main-content .pilotage-trajectory-visual-item p,
+.main-content .pilotage-trajectory-global span,
+.main-content .pilotage-trajectory-global small,
+.main-content .pilotage-trajectory-radar-values span,
+.main-content .pilotage-trajectory-radar-values small,
+.main-content .pilotage-trajectory-radar-values em,
+.main-content .pilotage-trajectory-axis-kpis span {
+  color: var(--ui-text-muted);
+}
+
+/* ==========================================================================
+   THEME002A — Tokens graphiques centralisés
+
+   Les visualisations JS lisent cette palette via getUiThemePalette().
+   Elles ne testent jamais directement body.dark-mode.
+   ========================================================================== */
+
+:root {
+  --ui-chart-current: rgba(14, 165, 233, 0.96);
+  --ui-chart-current-fill: rgba(14, 165, 233, 0.22);
+
+  --ui-chart-previous: rgba(100, 116, 139, 0.82);
+  --ui-chart-previous-fill: rgba(100, 116, 139, 0.10);
+
+  --ui-chart-reference: rgba(148, 163, 184, 0.34);
+  --ui-chart-reference-fill: rgba(148, 163, 184, 0.055);
+
+  --ui-chart-point-border: #ffffff;
+
+  --ui-chart-grid: rgba(148, 163, 184, 0.22);
+  --ui-chart-grid-strong: rgba(100, 116, 139, 0.36);
+
+  --ui-chart-tick-bg: rgba(255, 255, 255, 0.72);
+
+  --ui-chart-tooltip-bg: rgba(15, 23, 42, 0.94);
+  --ui-chart-tooltip-text: #f8fafc;
+}
+
+body.dark-mode {
+  --ui-chart-current: rgba(56, 189, 248, 0.96);
+  --ui-chart-current-fill: rgba(14, 165, 233, 0.24);
+
+  --ui-chart-previous: rgba(148, 163, 184, 0.88);
+  --ui-chart-previous-fill: rgba(148, 163, 184, 0.11);
+
+  --ui-chart-reference: rgba(148, 163, 184, 0.42);
+  --ui-chart-reference-fill: rgba(148, 163, 184, 0.07);
+
+  --ui-chart-point-border: #0f172a;
+
+  --ui-chart-grid: rgba(148, 163, 184, 0.20);
+  --ui-chart-grid-strong: rgba(203, 213, 225, 0.34);
+
+  --ui-chart-tick-bg: rgba(15, 23, 42, 0.78);
+
+  --ui-chart-tooltip-bg: rgba(2, 6, 23, 0.96);
+  --ui-chart-tooltip-text: #f8fafc;
+}

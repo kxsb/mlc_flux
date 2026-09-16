@@ -6270,127 +6270,7 @@ function schedulePilotageTrajectoryRadarChart(payload) {
 
 
 /* PILOTAGEVISU008E-FIX2 — zoom dédié du radar pilotage */
-function renderPilotageTrajectoryRadarZoomChart(payload) {
-  const canvas = document.getElementById("pilotageTrajectoryRadarZoomChart");
-
-  if (!canvas || !payload || typeof Chart === "undefined") {
-    return;
-  }
-
-  if (appState.statsZoomChart && typeof appState.statsZoomChart.destroy === "function") {
-    appState.statsZoomChart.destroy();
-    appState.statsZoomChart = null;
-  }
-
-  appState.statsZoomChart = new Chart(canvas, {
-    type: "radar",
-    data: {
-      labels: payload.axes.map((axis) => axis.label),
-      datasets: [
-        {
-          label: "Période affichée",
-          data: payload.currentScores,
-          borderColor: "rgba(14, 165, 233, 0.95)",
-          backgroundColor: "rgba(14, 165, 233, 0.20)",
-          pointBackgroundColor: "rgba(14, 165, 233, 0.98)",
-          pointBorderColor: "#ffffff",
-          pointBorderWidth: 2,
-          pointRadius: 5,
-          borderWidth: 3
-        },
-        {
-          label: "Période équivalente",
-          data: payload.previousScores,
-          borderColor: "rgba(100, 116, 139, 0.78)",
-          backgroundColor: "rgba(100, 116, 139, 0.10)",
-          pointBackgroundColor: "rgba(100, 116, 139, 0.84)",
-          pointBorderColor: "#ffffff",
-          pointBorderWidth: 2,
-          pointRadius: 4,
-          borderWidth: 2.4,
-          borderDash: [6, 4]
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: {
-        duration: 520,
-        easing: "easeOutQuart"
-      },
-      plugins: {
-        legend: {
-          position: "bottom",
-          labels: {
-            boxWidth: 12,
-            boxHeight: 12,
-            usePointStyle: true,
-            padding: 18,
-            font: {
-              size: 13,
-              weight: "800"
-            }
-          }
-        },
-        tooltip: {
-          callbacks: {
-            title(items) {
-              const item = items?.[0];
-              return item ? payload.axes[item.dataIndex]?.label || "" : "";
-            },
-            label(context) {
-              const axis = payload.axes[context.dataIndex];
-              const values = context.datasetIndex === 0
-                ? payload.currentValues
-                : payload.previousValues;
-              const rawValue = values[context.dataIndex];
-              const normalized = Math.round(context.parsed.r);
-
-              return `${context.dataset.label} : ${axis.formatter(rawValue)} · score normalisé ${normalized}/100`;
-            },
-            afterLabel(context) {
-              const axis = payload.axes[context.dataIndex];
-              return `Borne : ${axis.boundsLabel}`;
-            }
-          }
-        }
-      },
-      scales: {
-        r: {
-          min: 0,
-          max: 100,
-          ticks: {
-            backdropColor: "rgba(255, 255, 255, 0.72)",
-            color: "#64748b",
-            display: true,
-            stepSize: 20,
-            callback(value) {
-              return `${value}`;
-            },
-            font: {
-              size: 11,
-              weight: "700"
-            }
-          },
-          pointLabels: {
-            color: "#334155",
-            font: {
-              size: 15,
-              weight: "900"
-            }
-          },
-          grid: {
-            color: "rgba(148, 163, 184, 0.30)"
-          },
-          angleLines: {
-            color: "rgba(148, 163, 184, 0.26)"
-          }
-        }
-      }
-    }
-  });
-}
+/* THEME002A — ancienne implémentation radar zoom supprimée */
 
 function openPilotageTrajectoryRadarZoom() {
   const payload = window.__pilotageTrajectoryRadarPayload;
@@ -6462,120 +6342,7 @@ function openPilotageTrajectoryRadarZoom() {
 }
 
 
-function renderPilotageTrajectoryRadarChart(payload) {
-  const canvas = document.getElementById("pilotageTrajectoryRadarChart");
-
-  if (!canvas || !payload || typeof Chart === "undefined") {
-    return;
-  }
-
-  const existingChart = appState.charts?.pilotageTrajectoryRadar;
-
-  if (existingChart && typeof existingChart.destroy === "function") {
-    existingChart.destroy();
-  }
-
-  const axisLabels = payload.axes.map((axis) => axis.label);
-
-  appState.charts.pilotageTrajectoryRadar = new Chart(canvas, {
-    type: "radar",
-    data: {
-      labels: axisLabels,
-      datasets: [
-        {
-          label: "Période affichée",
-          data: payload.currentScores,
-          borderColor: "rgba(14, 165, 233, 0.92)",
-          backgroundColor: "rgba(14, 165, 233, 0.18)",
-          pointBackgroundColor: "rgba(14, 165, 233, 0.95)",
-          pointBorderColor: "#ffffff",
-          pointBorderWidth: 2,
-          pointRadius: 4,
-          borderWidth: 2.5
-        },
-        {
-          label: "Période équivalente",
-          data: payload.previousScores,
-          borderColor: "rgba(100, 116, 139, 0.72)",
-          backgroundColor: "rgba(100, 116, 139, 0.10)",
-          pointBackgroundColor: "rgba(100, 116, 139, 0.82)",
-          pointBorderColor: "#ffffff",
-          pointBorderWidth: 2,
-          pointRadius: 3,
-          borderWidth: 2,
-          borderDash: [5, 4]
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: {
-        duration: 520,
-        easing: "easeOutQuart"
-      },
-      plugins: {
-        legend: {
-          position: "bottom",
-          labels: {
-            boxWidth: 10,
-            boxHeight: 10,
-            usePointStyle: true,
-            font: {
-              size: 11,
-              weight: "700"
-            }
-          }
-        },
-        tooltip: {
-          callbacks: {
-            title(items) {
-              const item = items?.[0];
-              return item ? payload.axes[item.dataIndex]?.label || "" : "";
-            },
-            label(context) {
-              const axis = payload.axes[context.dataIndex];
-              const values = context.datasetIndex === 0
-                ? payload.currentValues
-                : payload.previousValues;
-              const rawValue = values[context.dataIndex];
-              const normalized = Math.round(context.parsed.r);
-
-              return `${context.dataset.label} : ${axis.formatter(rawValue)} · score normalisé ${normalized}/100`;
-            },
-            afterLabel(context) {
-              const axis = payload.axes[context.dataIndex];
-              return `Borne : ${axis.boundsLabel}`;
-            }
-          }
-        }
-      },
-      scales: {
-        r: {
-          min: 0,
-          max: 100,
-          ticks: {
-            display: false,
-            stepSize: 20
-          },
-          pointLabels: {
-            color: "#475569",
-            font: {
-              size: 12,
-              weight: "800"
-            }
-          },
-          grid: {
-            color: "rgba(148, 163, 184, 0.28)"
-          },
-          angleLines: {
-            color: "rgba(148, 163, 184, 0.24)"
-          }
-        }
-      }
-    }
-  });
-}
+/* THEME002A — ancienne implémentation radar principal supprimée */
 
 function buildPilotageTrajectoryRadar(data = {}, previousData = null, previousPeriod = null) {
   const payload = buildPilotageTrajectoryRadarPayload(data, previousData, previousPeriod);
@@ -27417,6 +27184,40 @@ function syncSidebarView(view) {
   syncCollapsedSidebarState(targetValue);
 }
 
+function refreshThemeSensitiveVisuals() {
+  refreshThemeSensitiveVisuals();
+
+  const pilotagePayload =
+    window.__pilotageTrajectoryRadarPayload;
+
+  if (!pilotagePayload) {
+    return;
+  }
+
+  window.requestAnimationFrame(() => {
+    if (
+      document.getElementById(
+        "pilotageTrajectoryRadarChart"
+      )
+    ) {
+      renderPilotageTrajectoryRadarChart(
+        pilotagePayload
+      );
+    }
+
+    if (
+      document.getElementById(
+        "pilotageTrajectoryRadarZoomChart"
+      )
+    ) {
+      renderPilotageTrajectoryRadarZoomChart(
+        pilotagePayload
+      );
+    }
+  });
+}
+
+
 function applyTheme(theme, persist = true) {
   const isDark = theme === "dark";
   document.body.classList.toggle("dark-mode", isDark);
@@ -28883,25 +28684,117 @@ function buildPilotageRadarTechnicalScores(payload) {
   `;
 }
 
+function getUiThemePalette() {
+  const styles = window.getComputedStyle(document.body);
+
+  const readToken = (name, fallback) => {
+    const value = styles.getPropertyValue(name).trim();
+    return value || fallback;
+  };
+
+  return {
+    background: readToken("--ui-bg", "#f5f6f8"),
+
+    surface: readToken("--ui-surface", "#ffffff"),
+    surfaceRaised: readToken("--ui-surface-raised", "#ffffff"),
+
+    border: readToken("--ui-border", "#e5e7eb"),
+    borderStrong: readToken("--ui-border-strong", "#d1d5db"),
+
+    text: readToken("--ui-text", "#222222"),
+    textStrong: readToken("--ui-text-strong", "#111827"),
+    textMuted: readToken("--ui-text-muted", "#6b7280"),
+    textSubtle: readToken("--ui-text-subtle", "#94a3b8"),
+
+    chartCurrent: readToken(
+      "--ui-chart-current",
+      "rgba(14, 165, 233, 0.96)"
+    ),
+
+    chartCurrentFill: readToken(
+      "--ui-chart-current-fill",
+      "rgba(14, 165, 233, 0.22)"
+    ),
+
+    chartPrevious: readToken(
+      "--ui-chart-previous",
+      "rgba(100, 116, 139, 0.82)"
+    ),
+
+    chartPreviousFill: readToken(
+      "--ui-chart-previous-fill",
+      "rgba(100, 116, 139, 0.10)"
+    ),
+
+    chartReference: readToken(
+      "--ui-chart-reference",
+      "rgba(148, 163, 184, 0.34)"
+    ),
+
+    chartReferenceFill: readToken(
+      "--ui-chart-reference-fill",
+      "rgba(148, 163, 184, 0.055)"
+    ),
+
+    chartPointBorder: readToken(
+      "--ui-chart-point-border",
+      "#ffffff"
+    ),
+
+    chartGrid: readToken(
+      "--ui-chart-grid",
+      "rgba(148, 163, 184, 0.22)"
+    ),
+
+    chartGridStrong: readToken(
+      "--ui-chart-grid-strong",
+      "rgba(100, 116, 139, 0.36)"
+    ),
+
+    chartTickBackground: readToken(
+      "--ui-chart-tick-bg",
+      "rgba(255, 255, 255, 0.72)"
+    ),
+
+    chartTooltipBackground: readToken(
+      "--ui-chart-tooltip-bg",
+      "rgba(15, 23, 42, 0.94)"
+    ),
+
+    chartTooltipText: readToken(
+      "--ui-chart-tooltip-text",
+      "#f8fafc"
+    )
+  };
+}
+
+
 function getPilotageTechnicalRadarDatasets(payload) {
+  const palette = getUiThemePalette();
+
   return [
     {
       label: "Zone médiane 50/100",
       data: payload.axes.map(() => 50),
-      borderColor: "rgba(148, 163, 184, 0.34)",
-      backgroundColor: "rgba(148, 163, 184, 0.055)",
+
+      borderColor: palette.chartReference,
+      backgroundColor: palette.chartReferenceFill,
+
       pointRadius: 0,
       borderWidth: 1.4,
       borderDash: [3, 5],
       order: 3
     },
+
     {
       label: "Période équivalente",
       data: payload.previousScores,
-      borderColor: "rgba(100, 116, 139, 0.82)",
-      backgroundColor: "rgba(100, 116, 139, 0.10)",
-      pointBackgroundColor: "rgba(100, 116, 139, 0.92)",
-      pointBorderColor: "#ffffff",
+
+      borderColor: palette.chartPrevious,
+      backgroundColor: palette.chartPreviousFill,
+      pointBackgroundColor: palette.chartPrevious,
+      pointBorderColor: palette.chartPointBorder,
+
       pointBorderWidth: 2,
       pointRadius: 4,
       pointHoverRadius: 6,
@@ -28909,13 +28802,16 @@ function getPilotageTechnicalRadarDatasets(payload) {
       borderDash: [6, 4],
       order: 2
     },
+
     {
       label: "Période affichée",
       data: payload.currentScores,
-      borderColor: "rgba(14, 165, 233, 0.96)",
-      backgroundColor: "rgba(14, 165, 233, 0.22)",
-      pointBackgroundColor: "rgba(14, 165, 233, 1)",
-      pointBorderColor: "#ffffff",
+
+      borderColor: palette.chartCurrent,
+      backgroundColor: palette.chartCurrentFill,
+      pointBackgroundColor: palette.chartCurrent,
+      pointBorderColor: palette.chartPointBorder,
+
       pointBorderWidth: 2.5,
       pointRadius: 5.5,
       pointHoverRadius: 7,
@@ -28925,66 +28821,125 @@ function getPilotageTechnicalRadarDatasets(payload) {
   ];
 }
 
+
 function getPilotageTechnicalRadarOptions(payload, { zoom = false } = {}) {
+  const palette = getUiThemePalette();
+
   return {
     responsive: true,
     maintainAspectRatio: false,
+
     animation: {
       duration: 520,
       easing: "easeOutQuart"
     },
+
     interaction: {
       mode: "nearest",
       intersect: false
     },
+
     plugins: {
       legend: {
         position: "bottom",
+
         labels: {
+          color: palette.textMuted,
+
           boxWidth: 12,
           boxHeight: 12,
           usePointStyle: true,
           padding: zoom ? 20 : 14,
+
           filter(item) {
             return item.text !== "Zone médiane 50/100";
           },
+
           font: {
             size: zoom ? 13 : 11,
             weight: "800"
           }
         }
       },
+
       tooltip: {
-        backgroundColor: "rgba(15, 23, 42, 0.94)",
+        backgroundColor: palette.chartTooltipBackground,
+        titleColor: palette.chartTooltipText,
+        bodyColor: palette.chartTooltipText,
+
+        borderColor: palette.borderStrong,
+        borderWidth: 1,
+
         padding: 11,
         displayColors: true,
+
         callbacks: {
           title(items) {
             const item = items?.[0];
-            const axis = item ? payload.axes[item.dataIndex] : null;
-            return axis ? `${axis.label} · score radar` : "";
+            const axis = item
+              ? payload.axes[item.dataIndex]
+              : null;
+
+            return axis
+              ? `${axis.label} · score radar`
+              : "";
           },
+
           label(context) {
-            if (context.dataset.label === "Zone médiane 50/100") {
+            if (
+              context.dataset.label
+              === "Zone médiane 50/100"
+            ) {
               return "Repère médian : 50/100";
             }
 
-            const axis = payload.axes[context.dataIndex];
-            const values = context.dataset.label === "Période affichée"
-              ? payload.currentValues
-              : payload.previousValues;
+            const axis =
+              payload.axes[context.dataIndex];
 
-            const rawValue = values[context.dataIndex];
-            const score = Math.round(context.parsed.r);
+            const values =
+              context.dataset.label
+                === "Période affichée"
+                ? payload.currentValues
+                : payload.previousValues;
 
-            return `${context.dataset.label} : ${axis.formatter(rawValue)} · ${score}/100`;
+            const rawValue =
+              values[context.dataIndex];
+
+            const score =
+              Math.round(context.parsed.r);
+
+            return (
+              `${context.dataset.label} : `
+              + `${axis.formatter(rawValue)} · `
+              + `${score}/100`
+            );
           },
+
           afterLabel(context) {
-            const axis = payload.axes[context.dataIndex];
-            const currentScore = Math.round(Number(payload.currentScores?.[context.dataIndex] || 0));
-            const previousScore = Math.round(Number(payload.previousScores?.[context.dataIndex] || 0));
-            const delta = currentScore - previousScore;
-            const sign = delta > 0 ? "+" : "";
+            const axis =
+              payload.axes[context.dataIndex];
+
+            const currentScore =
+              Math.round(
+                Number(
+                  payload.currentScores
+                    ?.[context.dataIndex] || 0
+                )
+              );
+
+            const previousScore =
+              Math.round(
+                Number(
+                  payload.previousScores
+                    ?.[context.dataIndex] || 0
+                )
+              );
+
+            const delta =
+              currentScore - previousScore;
+
+            const sign =
+              delta > 0 ? "+" : "";
 
             return [
               `Borne : ${axis.boundsLabel}`,
@@ -28994,53 +28949,69 @@ function getPilotageTechnicalRadarOptions(payload, { zoom = false } = {}) {
         }
       }
     },
+
     scales: {
       r: {
         min: 0,
         max: 100,
         beginAtZero: true,
+
         ticks: {
-          backdropColor: "rgba(255, 255, 255, 0.72)",
-          color: "#64748b",
+          backdropColor:
+            palette.chartTickBackground,
+
+          color: palette.textMuted,
+
           display: true,
           stepSize: 20,
           showLabelBackdrop: true,
           z: 2,
+
           callback(value) {
             return `${value}`;
           },
+
           font: {
             size: zoom ? 11 : 9,
             weight: "800"
           }
         },
+
         pointLabels: {
-          color: "#334155",
+          color: palette.textStrong,
           padding: zoom ? 20 : 14,
+
           font: {
             size: zoom ? 15 : 12,
             weight: "900"
           }
         },
+
         grid: {
           circular: false,
+
           color(context) {
             return context.tick?.value === 50
-              ? "rgba(100, 116, 139, 0.36)"
-              : "rgba(148, 163, 184, 0.22)";
+              ? palette.chartGridStrong
+              : palette.chartGrid;
           },
+
           lineWidth(context) {
-            return context.tick?.value === 50 ? 1.4 : 1;
+            return context.tick?.value === 50
+              ? 1.4
+              : 1;
           }
         },
+
         angleLines: {
-          color: "rgba(148, 163, 184, 0.26)",
+          color: palette.chartGrid,
           lineWidth: 1
         }
       }
     }
   };
 }
+
 
 function renderPilotageTrajectoryRadarChart(payload) {
   const canvas = document.getElementById("pilotageTrajectoryRadarChart");
@@ -30555,14 +30526,14 @@ function getProfessionalConsumptionMapLeanInitialQuery(baseQuery) {
         min-width: 110px;
         padding: 0.65rem 0.75rem;
         border-radius: 0.9rem;
-        background: rgba(148, 163, 184, 0.10);
-        border: 1px solid rgba(148, 163, 184, 0.22);
+        background: var(--ui-surface-soft);
+        border: 1px solid var(--ui-border);
       }
 
       .sector-compact-kpi span {
         display: block;
         font-size: 0.72rem;
-        color: var(--muted-text, #64748b);
+        color: var(--ui-text-muted);
       }
 
       .sector-compact-kpi strong {
@@ -30577,7 +30548,7 @@ function getProfessionalConsumptionMapLeanInitialQuery(baseQuery) {
         grid-template-columns: repeat(4, minmax(130px, 1fr));
         gap: 0.55rem;
         padding-top: 0.75rem;
-        border-top: 1px solid rgba(148, 163, 184, 0.18);
+        border-top: 1px solid var(--ui-border);
       }
 
       .sector-quality-item {
@@ -30587,8 +30558,8 @@ function getProfessionalConsumptionMapLeanInitialQuery(baseQuery) {
         align-items: start;
         padding: 0.55rem 0.65rem;
         border-radius: 0.85rem;
-        background: rgba(255, 255, 255, 0.58);
-        border: 1px solid rgba(148, 163, 184, 0.16);
+        background: var(--ui-surface-raised);
+        border: 1px solid var(--ui-border);
       }
 
       .sector-quality-dot {
@@ -30610,20 +30581,20 @@ function getProfessionalConsumptionMapLeanInitialQuery(baseQuery) {
         align-items: baseline;
         justify-content: space-between;
         font-size: 0.78rem;
-        color: var(--muted-text, #64748b);
+        color: var(--ui-text-muted);
         font-weight: 700;
       }
 
       .sector-quality-value {
         font-size: 1rem;
-        color: var(--text-primary, #0f172a);
+        color: var(--ui-text-strong);
         font-weight: 850;
       }
 
       .sector-quality-detail {
         margin-top: 0.12rem;
         font-size: 0.73rem;
-        color: var(--muted-text, #64748b);
+        color: var(--ui-text-muted);
         line-height: 1.25;
       }
 
@@ -30655,8 +30626,8 @@ function getProfessionalConsumptionMapLeanInitialQuery(baseQuery) {
       .sector-compact-graph-card {
         padding: 1rem 1.05rem !important;
         border-radius: 1rem;
-        background: rgba(255, 255, 255, 0.94);
-        border: 1px solid rgba(148, 163, 184, 0.18);
+        background: var(--ui-surface-raised);
+        border: 1px solid var(--ui-border);
         box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
         overflow: hidden;
       }
