@@ -10,8 +10,6 @@ from server.routes.transactions import transactions_bp
 from server.routes.legacy_api import legacy_api_bp
 from server.routes.status import status_bp
 from server.routes.info_content import info_content_bp
-from server.routes.admin_accounts import admin_accounts_bp
-from server.routes.account_requests import account_requests_bp
 from server.routes.monetary_indicators import monetary_indicators_bp
 from server.routes.individual_balances import individual_balances_bp
 from server.routes.professional_detail_dynamics import professional_detail_dynamics_bp
@@ -44,8 +42,6 @@ def create_app():
     app.register_blueprint(legacy_api_bp)
     app.register_blueprint(status_bp)
     app.register_blueprint(info_content_bp)
-    app.register_blueprint(admin_accounts_bp)
-    app.register_blueprint(account_requests_bp)
     app.register_blueprint(monetary_indicators_bp)
     app.register_blueprint(individual_balances_bp)
     app.register_blueprint(professional_detail_dynamics_bp)

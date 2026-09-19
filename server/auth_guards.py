@@ -11,7 +11,6 @@ PUBLIC_PATHS = {
     "/api/v2/health",
     "/api/me",
     "/api/version",
-    "/api/account-requests",
     "/favicon.ico",
     "/robots.txt",
 }
@@ -25,7 +24,6 @@ PUBLIC_ENDPOINTS = {
     "auth.login",
     "auth.logout",
     "auth.api_me",
-    "account_requests.create_account_request",
 
     # Lecture publique de la documentation méthodologique.
     # Les routes POST d'édition restent protégées.

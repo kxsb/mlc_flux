@@ -4,8 +4,21 @@ from server.routes.current_mlc import current_mlc
 
 
 def test_route_count_characterization():
-    # Baseline LKVLT-LITE après CLEAN001.
-    assert len(list(app.url_map.iter_rules())) == 63
+    # Baseline LKVLT-LITE après CLEAN002A.
+    assert len(list(app.url_map.iter_rules())) == 56
+
+
+def test_administration_backend_routes_are_removed():
+    routes = {
+        str(rule)
+        for rule in app.url_map.iter_rules()
+    }
+
+    assert "/api/account-requests" not in routes
+    assert not any(
+        route.startswith("/api/admin/")
+        for route in routes
+    )
 
 
 def test_neutral_contract_preview_routes_are_removed():
@@ -206,3 +219,52 @@ def test_ticket_routes_are_removed():
         route.startswith("/api/tickets")
         for route in routes
     )
+
+
+def test_frontend_does_not_reference_removed_backend_routes():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    app_js = (root / "static/js/app.js").read_text(
+        encoding="utf-8"
+    )
+
+    removed_routes = {
+        "/api/professionals-map",
+        "/api/user-postal-clusters",
+        "/api/user-to-professional-map",
+        "/api/reload",
+        "/api/mlc/current",
+    }
+
+    for route in removed_routes:
+        assert route not in app_js
+
+
+def test_frontend_bootstrap_isolated_from_removed_map_theme_hook():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    app_js = (root / "static/js/app.js").read_text(
+        encoding="utf-8"
+    )
+
+    assert (
+        "refreshProfessionalConsumptionMapThemeRendering();"
+        not in app_js
+    )
+
+    assert (
+        "function bootstrapMlcFluxFrontend()"
+        in app_js
+    )
+
+    assert (
+        "void bootstrapMlcFluxFrontend();"
+        in app_js
+    )
+
+    recursive_theme_bug = """function refreshThemeSensitiveVisuals() {
+  refreshThemeSensitiveVisuals();"""
+
+    assert recursive_theme_bug not in app_js

@@ -691,63 +691,31 @@ function formatMlcAmount(value, options = {}) {
 }
 
 async function loadActiveMlcContext() {
-  const candidates = [
-    "/api/current-mlc",
-    "/api/mlc/current",
-    "/api/me",
-  ];
+  try {
+    const response = await fetch("/api/current-mlc", {
+      credentials: "same-origin",
+      cache: "no-store"
+    });
 
-  for (const url of candidates) {
-    try {
-      const response = await fetch(url, { credentials: "same-origin" });
-      if (!response.ok) continue;
-
-      const payload = await response.json();
-
-      if (payload?.active_mlc) {
-        return normalizeMlcProfile(payload.active_mlc);
-      }
-
-      if (payload?.active_mlc_id && payload?.mlc_access) {
-        const item = payload.mlc_access.find((entry) => entry.id === payload.active_mlc_id || entry.mlc_id === payload.active_mlc_id);
-        if (item) return normalizeMlcProfile(item);
-      }
-
-      if (payload?.id && (payload?.currency_symbol || payload?.currency_name)) {
-        return normalizeMlcProfile(payload);
-      }
-    } catch (error) {
-      // On garde le contexte par défaut.
+    if (!response.ok) {
+      return MLCFLUX_MLC_CONTEXT;
     }
+
+    const payload = await response.json();
+
+    if (payload?.active_mlc) {
+      return normalizeMlcProfile(payload.active_mlc);
+    }
+  } catch (error) {
+    console.warn(
+      "Contexte MLC indisponible via /api/current-mlc.",
+      error
+    );
   }
 
   return MLCFLUX_MLC_CONTEXT;
 }
 
-
-function replaceMlcVisibleText(text) {
-  const replaced = replaceMlcTokens(text);
-  return replaced.replace(/(\d[\d\s\u00A0.,]*)\s*€/g, `$1 ${getCurrencySymbol()}`);
-}
-
-function applyMlcLabelsToDom(root = document.body) {
-  if (!root) return;
-
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  const nodes = [];
-
-  while (walker.nextNode()) {
-    nodes.push(walker.currentNode);
-  }
-
-  for (const node of nodes) {
-    const before = node.nodeValue || "";
-    const after = replaceMlcVisibleText(before);
-    if (after !== before) {
-      node.nodeValue = after;
-    }
-  }
-}
 
 const MLCFLUX_MLC_CONTEXT_READY = loadActiveMlcContext().then(() => {
   applyMlcLabelsToDom(document.body);
@@ -778,7 +746,6 @@ const MLCFLUX_MLC_CONTEXT_READY = loadActiveMlcContext().then(() => {
 
 const content = document.getElementById("content");
 const pageTitle = document.getElementById("pageTitle");
-const reloadButton = document.getElementById("reloadButton");
 
 const appState = {
   currentView: "stats",
@@ -2454,89 +2421,26 @@ async function renderTerritoriesView(forceReload = false) {
 }
 
 
-async function renderCartographyView(forceReload = false) {
-  const preserveVisibleView = shouldPreservePeriodRefreshView("cartography", forceReload);
-
-  if (!preserveVisibleView) {
-    destroyCartographyMap();
-  }
-
+async function renderCartographyView(_forceReload = false) {
+  destroyCartographyMap();
   cleanupPilotageTrajectoryConnectorsIfLeaving("cartography");
+
   appState.currentView = "cartography";
   syncSidebarView("cartography");
-  setTitle("Cartographie des professionnels");
-
-  if (!preserveVisibleView) {
-    content.innerHTML = `<div class="card">Chargement de la cartographie...</div>`;
-  }
-
-  if (!appState.cartography.data || forceReload) {
-    appState.cartography.data = await apiGet(`/api/professionals-map${getPeriodQueryParam()}`);
-  }
-
-  const data = appState.cartography.data || {};
-  const summary = data.summary || {};
-  const professionals = Array.isArray(data.professionals) ? data.professionals : [];
-
-  if (preserveVisibleView) {
-    destroyCartographyMap();
-  }
+  setTitle("Cartographie");
 
   content.innerHTML = `
-    <section class="card cartography-overview-card">
-      <div class="cartography-overview-header">
-        <div>
-          <div class="stat-label">Référentiel géographique confirmé</div>
-          <h2>${summary.cartographiable_count ?? professionals.length} professionnels affichés</h2>
-          <p>
-            La carte montre les professionnels dont la position Odoo est confirmée
-            par Cyclos avec un écart inférieur ou égal à 1 km.
-            Le relief 3D représente la concentration du volume monétaire brassé
-            sur la période sélectionnée.
-          </p>
-        </div>
-
-        <div class="cartography-kpis">
-          <div class="cartography-kpi">
-            <strong>${summary.total_enriched ?? 0}</strong>
-            <span>pros enrichis</span>
-          </div>
-          <div class="cartography-kpi">
-            <strong>${summary.confirmed ?? 0}</strong>
-            <span>confirmés</span>
-          </div>
-          <div class="cartography-kpi">
-            <strong>${summary.mismatch ?? 0}</strong>
-            <span>divergences</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="cartography-quality-note">
-        Non affichés :
-        ${summary.no_odoo_coordinates ?? 0} sans coordonnées Odoo,
-        ${summary.no_cyclos_coordinates ?? 0} sans coordonnées Cyclos,
-        ${summary.no_cyclos_address ?? 0} sans adresse Cyclos.
-      </div>
-    </section>
-
-    <section class="card cartography-map-card">
-      <div class="cartography-map-toolbar">
-        <div>
-          <strong>${professionals.length}</strong> points confirmés · relief d’activité monétaire.
-        </div>
-        <button id="cartographyFitBtn" class="secondary-btn" type="button">
-          Recentrer
-        </button>
-      </div>
-
-      <div id="professionalsMap" class="cartography-map"></div>
+    <section class="card">
+      <div class="stat-label">Cartographie</div>
+      <h2>Vue à reconstruire</h2>
+      <p>
+        L’ancienne cartographie a été retirée de la baseline LKVLT-LITE.
+        La future couche géographique sera reconstruite séparément sur
+        le modèle de données neutre.
+      </p>
     </section>
   `;
-
-  initializeProfessionalsMap(professionals);
 }
-
 
 
 function ensureNetworkConstellationStyles() {
@@ -9255,609 +9159,20 @@ async function renderInfoView(forceReload = false, requestedPageSlug = null) {
 
 
 
-const ADMIN_TOKEN_SESSION_KEY = "mlcflux.admin.token";
-let administrationIntegrityPollTimer = null;
-
-function getAdministrationToken() {
-  return sessionStorage.getItem(ADMIN_TOKEN_SESSION_KEY) || "";
-}
-
-function storeAdministrationToken(token) {
-  const normalized = String(token || "").trim();
-
-  if (!normalized) {
-    sessionStorage.removeItem(ADMIN_TOKEN_SESSION_KEY);
-    return "";
-  }
-
-  sessionStorage.setItem(ADMIN_TOKEN_SESSION_KEY, normalized);
-  return normalized;
-}
-
-function clearAdministrationToken() {
-  sessionStorage.removeItem(ADMIN_TOKEN_SESSION_KEY);
-}
-
-function setAdministrationFeedback(message, isError = false) {
-  const feedback = document.getElementById("administrationFeedback");
-  if (!feedback) return;
-
-  feedback.textContent = message || "";
-  feedback.classList.toggle("hidden", !message);
-  feedback.classList.toggle("is-error", Boolean(isError));
-  feedback.classList.toggle("is-success", Boolean(message) && !isError);
-}
-
-function formatAdministrationDate(value) {
-  if (!value) {
-    return "—";
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return escapeHtml(String(value));
-  }
-
-  return new Intl.DateTimeFormat("fr-FR", {
-    dateStyle: "medium",
-    timeStyle: "short"
-  }).format(date);
-}
-
-function formatAdministrationBoolean(value) {
-  if (value === true) return "Oui";
-  if (value === false) return "Non";
-  return "—";
-}
-
-function formatAdministrationSize(bytes) {
-  const value = Number(bytes);
-
-  if (!Number.isFinite(value) || value < 0) {
-    return "—";
-  }
-
-  if (value < 1024) {
-    return `${value.toLocaleString("fr-FR")} o`;
-  }
-
-  const units = ["Ko", "Mo", "Go"];
-  let scaled = value / 1024;
-  let unit = units[0];
-
-  for (let index = 1; index < units.length && scaled >= 1024; index += 1) {
-    scaled /= 1024;
-    unit = units[index];
-  }
-
-  return `${scaled.toLocaleString("fr-FR", {
-    maximumFractionDigits: scaled >= 100 ? 0 : 1
-  })} ${unit}`;
-}
-
-async function administrationApiJson(endpoint, options = {}) {
-  const token = getAdministrationToken();
-  const headers = {
-    Accept: "application/json",
-    ...(options.headers || {})
-  };
-
-  if (token) {
-    headers["X-MLCFlux-Admin-Token"] = token;
-  }
-
-  if (options.body !== undefined && !headers["Content-Type"]) {
-    headers["Content-Type"] = "application/json";
-  }
-
-  const response = await fetch(endpoint, {
-    ...options,
-    headers
-  });
-
-  let payload = null;
-  try {
-    payload = await response.json();
-  } catch (_err) {
-    payload = null;
-  }
-
-  if (!response.ok) {
-    const message = payload?.error || `Erreur HTTP ${response.status}`;
-    const error = new Error(message);
-    error.status = response.status;
-    error.payload = payload;
-    throw error;
-  }
-
-  return payload || {};
-}
-
-async function administrationApiText(endpoint) {
-  const token = getAdministrationToken();
-  const headers = {};
-
-  if (token) {
-    headers["X-MLCFlux-Admin-Token"] = token;
-  }
-
-  const response = await fetch(endpoint, { headers });
-
-  if (!response.ok) {
-    let message = `Erreur HTTP ${response.status}`;
-    try {
-      const payload = await response.json();
-      message = payload?.error || message;
-    } catch (_err) {
-      // Rien à faire : on conserve le message HTTP générique.
-    }
-
-    const error = new Error(message);
-    error.status = response.status;
-    throw error;
-  }
-
-  return response.text();
-}
-
-function renderAdministrationAuthCard() {
-  const hasToken = Boolean(getAdministrationToken());
-
-  return `
-    <section class="card">
-      <p class="info-view-kicker">Accès protégé</p>
-      <h2>Administration & paramètres</h2>
-      <p>
-        Les opérations d’administration sensibles utilisent un jeton transmis uniquement
-        dans l’en-tête <code>X-MLCFlux-Admin-Token</code>. Le jeton saisi ici est conservé
-        dans la session du navigateur, jamais dans le stockage persistant.
-      </p>
-
-      <form id="administrationTokenForm" class="ticket-form">
-        <div class="ticket-form-grid">
-          <div class="ticket-form-field ticket-form-field-full">
-            <label for="administrationTokenInput">Jeton administrateur</label>
-            <input
-              id="administrationTokenInput"
-              type="password"
-              autocomplete="off"
-              spellcheck="false"
-              value="${hasToken ? escapeHtml(getAdministrationToken()) : ""}"
-              placeholder="Coller le jeton ADMIN_API_TOKEN"
-            >
-          </div>
-        </div>
-
-        <div class="ticket-form-actions">
-          <button class="primary-btn" type="submit">
-            Enregistrer dans la session
-          </button>
-          <button id="administrationTokenTestButton" class="secondary-btn" type="button">
-            Tester l’accès
-          </button>
-          <button id="administrationTokenClearButton" class="secondary-btn" type="button">
-            Effacer le jeton
-          </button>
-        </div>
-      </form>
-
-      <div id="administrationFeedback" class="ticket-feedback hidden"></div>
-    </section>
-  `;
-}
-
-function renderAdministrationLockedIntegrityCard(message = "") {
-  const detail = message
-    ? `<p class="ticket-card-excerpt">${escapeHtml(message)}</p>`
-    : "";
-
-  return `
-    <section class="card">
-      <p class="info-view-kicker">Audit d’intégrité</p>
-      <h3>Accès administrateur requis</h3>
-      <p>
-        Renseignez un jeton valide pour consulter les rapports, suivre les jobs
-        d’audit et déclencher un nouveau contrôle d’intégrité.
-      </p>
-      ${detail}
-    </section>
-  `;
-}
-
-function renderAdministrationLatestReport(data) {
-  const latest = data?.latest || null;
-
-  if (!latest) {
-    return `
-      <section class="card">
-        <p class="info-view-kicker">Dernier rapport</p>
-        <h3>Aucun rapport disponible</h3>
-        <p>Aucun audit d’intégrité JSON n’a encore été trouvé dans <code>_audits/</code>.</p>
-      </section>
-    `;
-  }
-
-  const statusLabel = latest.status || (latest.ok ? "healthy" : "unknown");
-  const warningCount = Number(latest.warnings_count || 0);
-  const errorCount = Number(latest.errors_count || 0);
-
-  return `
-    <section class="card">
-      <p class="info-view-kicker">Dernier rapport</p>
-      <h3>${escapeHtml(latest.filename || "Rapport d’intégrité")}</h3>
-
-      <div class="ticket-card-meta">
-        <span>Statut : <strong>${escapeHtml(statusLabel)}</strong></span>
-        <span>Généré le : <strong>${formatAdministrationDate(latest.generated_at)}</strong></span>
-        <span>${warningCount.toLocaleString("fr-FR")} avertissement${warningCount > 1 ? "s" : ""}</span>
-        <span>${errorCount.toLocaleString("fr-FR")} erreur${errorCount > 1 ? "s" : ""}</span>
-      </div>
-
-      <div class="ticket-card-meta">
-        <span>Base présente : <strong>${formatAdministrationBoolean(latest.database?.exists)}</strong></span>
-        <span>Base ouvrable : <strong>${formatAdministrationBoolean(latest.database?.openable)}</strong></span>
-        <span>Taille : <strong>${formatAdministrationSize(latest.database?.size_bytes)}</strong></span>
-      </div>
-
-      <div class="ticket-card-meta">
-        <span>Transactions : <strong>${Number(latest.transactions?.count || 0).toLocaleString("fr-FR")}</strong></span>
-        <span>Période : <strong>${escapeHtml(latest.transactions?.min_date || "—")} → ${escapeHtml(latest.transactions?.max_date || "—")}</strong></span>
-        <span>Doublons <code>cyclos_id</code> : <strong>${Number(latest.transactions?.duplicate_cyclos_id_groups || 0).toLocaleString("fr-FR")}</strong></span>
-      </div>
-    </section>
-  `;
-}
-
-function renderAdministrationJobCard(jobPayload) {
-  const job = jobPayload?.job || jobPayload || {};
-  const running = Boolean(job.running);
-  const status = job.status || "idle";
-
-  return `
-    <section class="card">
-      <p class="info-view-kicker">Job d’audit</p>
-      <h3>${running ? "Audit en cours" : "État du dernier job"}</h3>
-
-      <div class="ticket-card-meta">
-        <span>Statut : <strong>${escapeHtml(status)}</strong></span>
-        <span>Niveau : <strong>${escapeHtml(job.level || "—")}</strong></span>
-        <span>Préfixe : <strong>${escapeHtml(job.prefix || "—")}</strong></span>
-      </div>
-
-      <div class="ticket-card-meta">
-        <span>Demandé le : <strong>${formatAdministrationDate(job.requested_at)}</strong></span>
-        <span>Démarré le : <strong>${formatAdministrationDate(job.started_at)}</strong></span>
-        <span>Terminé le : <strong>${formatAdministrationDate(job.completed_at)}</strong></span>
-      </div>
-
-      ${job.error_message ? `
-        <p class="ticket-card-excerpt">
-          ${escapeHtml(job.error_message)}
-        </p>
-      ` : ""}
-
-      ${job.report_txt_filename || job.report_json_filename ? `
-        <div class="ticket-card-meta">
-          <span>Rapport TXT : <strong>${escapeHtml(job.report_txt_filename || "—")}</strong></span>
-          <span>Rapport JSON : <strong>${escapeHtml(job.report_json_filename || "—")}</strong></span>
-        </div>
-      ` : ""}
-    </section>
-  `;
-}
-
-function renderAdministrationReportsList(data) {
-  const reports = Array.isArray(data?.reports) ? data.reports : [];
-
-  if (!reports.length) {
-    return `
-      <section class="card">
-        <p class="info-view-kicker">Historique</p>
-        <h3>Aucun rapport d’intégrité listé</h3>
-        <p>Les futurs audits apparaîtront ici.</p>
-      </section>
-    `;
-  }
-
-  return `
-    <section class="card">
-      <div class="ticket-filter-header">
-        <div>
-          <p class="info-view-kicker">Historique</p>
-          <h3>Rapports d’intégrité disponibles</h3>
-        </div>
-        <div class="ticket-results-count">
-          ${reports.length.toLocaleString("fr-FR")} rapport${reports.length > 1 ? "s" : ""}
-        </div>
-      </div>
-
-      <div id="administrationReportsList" class="ticket-list-grid">
-        ${reports.map((report) => `
-          <article class="ticket-list-card">
-            <div class="ticket-card-badges">
-              <span class="ticket-badge ticket-category-badge">
-                ${escapeHtml(report.level || "audit")}
-              </span>
-              <span class="ticket-badge ticket-status-badge">
-                ${escapeHtml(report.status || "unknown")}
-              </span>
-            </div>
-
-            <h4>${escapeHtml(report.filename || "Rapport")}</h4>
-
-            <div class="ticket-card-meta">
-              <span>${formatAdministrationDate(report.generated_at)}</span>
-              <span>${Number(report.warnings_count || 0).toLocaleString("fr-FR")} avertissement${Number(report.warnings_count || 0) > 1 ? "s" : ""}</span>
-              <span>${Number(report.errors_count || 0).toLocaleString("fr-FR")} erreur${Number(report.errors_count || 0) > 1 ? "s" : ""}</span>
-            </div>
-
-            <div class="ticket-card-actions">
-              <button
-                type="button"
-                class="secondary-btn"
-                data-administration-report-json="${escapeHtml(report.filename || "")}"
-              >
-                Voir JSON
-              </button>
-
-              ${report.text_filename ? `
-                <button
-                  type="button"
-                  class="secondary-btn"
-                  data-administration-report-text="${escapeHtml(report.filename || "")}"
-                >
-                  Voir TXT
-                </button>
-              ` : ""}
-            </div>
-          </article>
-        `).join("")}
-      </div>
-    </section>
-  `;
-}
-
-function renderAdministrationIntegrityControls() {
-  return `
-    <section class="card">
-      <p class="info-view-kicker">Contrôle manuel</p>
-      <h3>Lancer un audit d’intégrité</h3>
-      <p>
-        Le contrôle rapide exécute les vérifications essentielles. Le contrôle complet
-        ajoute notamment <code>PRAGMA integrity_check</code> et produit lui aussi
-        un rapport TXT + JSON dans <code>_audits/</code>.
-      </p>
-
-      <div class="ticket-form-actions">
-        <button id="administrationRunQuickAuditButton" class="secondary-btn" type="button">
-          Lancer un audit rapide
-        </button>
-        <button id="administrationRunFullAuditButton" class="primary-btn" type="button">
-          Lancer un audit complet
-        </button>
-        <button id="administrationRefreshIntegrityButton" class="secondary-btn" type="button">
-          Actualiser l’état
-        </button>
-      </div>
-    </section>
-  `;
-}
-
-function renderAdministrationReportViewerPlaceholder() {
-  return `
-    <section class="card">
-      <p class="info-view-kicker">Lecture de rapport</p>
-      <h3>Détail d’un rapport</h3>
-      <p>Sélectionnez un rapport JSON ou TXT dans l’historique.</p>
-      <pre id="administrationReportViewer" class="ticket-message-markdown"></pre>
-    </section>
-  `;
-}
-
-function scheduleAdministrationIntegrityRefresh(job) {
-  if (administrationIntegrityPollTimer) {
-    clearTimeout(administrationIntegrityPollTimer);
-    administrationIntegrityPollTimer = null;
-  }
-
-  if (!job?.running || appState.currentView !== "admin") {
-    return;
-  }
-
-  administrationIntegrityPollTimer = window.setTimeout(() => {
-    void refreshAdministrationIntegrityPanels();
-  }, 3000);
-}
-
-async function refreshAdministrationIntegrityPanels() {
-  const panelsHost = document.getElementById("administrationIntegrityPanels");
-  const reportsHost = document.getElementById("administrationReportsHost");
-
-  if (!panelsHost || !reportsHost) {
-    return;
-  }
-
-  if (!getAdministrationToken()) {
-    panelsHost.innerHTML = renderAdministrationLockedIntegrityCard();
-    reportsHost.innerHTML = "";
-    return;
-  }
-
-  panelsHost.innerHTML = `
-    <section class="card">
-      <h3>Chargement de l’état d’intégrité…</h3>
-    </section>
-  `;
-
-  reportsHost.innerHTML = "";
-
-  try {
-    const [latestData, jobData, reportsData] = await Promise.all([
-      administrationApiJson("/api/admin/integrity/latest"),
-      administrationApiJson("/api/admin/integrity/job"),
-      administrationApiJson("/api/admin/integrity/reports")
-    ]);
-
-    panelsHost.innerHTML = `
-      ${renderAdministrationLatestReport(latestData)}
-      ${renderAdministrationJobCard(jobData)}
-    `;
-
-    reportsHost.innerHTML = renderAdministrationReportsList(reportsData);
-    scheduleAdministrationIntegrityRefresh(jobData?.job || null);
-  } catch (err) {
-    panelsHost.innerHTML = renderAdministrationLockedIntegrityCard(err.message);
-    reportsHost.innerHTML = "";
-    setAdministrationFeedback(`Impossible de charger l’administration : ${err.message}`, true);
-  }
-}
-
-async function testAdministrationTokenAccess() {
-  try {
-    await administrationApiJson("/api/admin/integrity/latest");
-    setAdministrationFeedback("Jeton accepté. Les routes d’administration sont accessibles.");
-    await refreshAdministrationIntegrityPanels();
-  } catch (err) {
-    setAdministrationFeedback(`Accès refusé : ${err.message}`, true);
-  }
-}
-
-async function runAdministrationIntegrityAudit(level) {
-  const normalizedLevel = level === "quick" ? "quick" : "full";
-
-  try {
-    setAdministrationFeedback(`Lancement de l’audit ${normalizedLevel}…`);
-    const result = await administrationApiJson("/api/admin/integrity/run", {
-      method: "POST",
-      body: JSON.stringify({
-        level: normalizedLevel,
-        prefix: "DBINTEGRITY002"
-      })
-    });
-
-    setAdministrationFeedback(result.message || "Audit d’intégrité lancé.");
-    await refreshAdministrationIntegrityPanels();
-  } catch (err) {
-    setAdministrationFeedback(`Impossible de lancer l’audit : ${err.message}`, true);
-  }
-}
-
-async function openAdministrationJsonReport(filename) {
-  const viewer = document.getElementById("administrationReportViewer");
-  if (!viewer || !filename) return;
-
-  viewer.textContent = "Chargement du rapport JSON…";
-
-  try {
-    const data = await administrationApiJson(
-      `/api/admin/integrity/reports/${encodeURIComponent(filename)}`
-    );
-
-    viewer.textContent = JSON.stringify(data.report || data, null, 2);
-  } catch (err) {
-    viewer.textContent = `Erreur : ${err.message}`;
-  }
-}
-
-async function openAdministrationTextReport(filename) {
-  const viewer = document.getElementById("administrationReportViewer");
-  if (!viewer || !filename) return;
-
-  viewer.textContent = "Chargement du rapport TXT…";
-
-  try {
-    viewer.textContent = await administrationApiText(
-      `/api/admin/integrity/reports/${encodeURIComponent(filename)}/text`
-    );
-  } catch (err) {
-    viewer.textContent = `Erreur : ${err.message}`;
-  }
-}
-
-function bindAdministrationViewInteractions() {
-  const tokenForm = document.getElementById("administrationTokenForm");
-  const tokenInput = document.getElementById("administrationTokenInput");
-  const testButton = document.getElementById("administrationTokenTestButton");
-  const clearButton = document.getElementById("administrationTokenClearButton");
-  const quickButton = document.getElementById("administrationRunQuickAuditButton");
-  const fullButton = document.getElementById("administrationRunFullAuditButton");
-  const refreshButton = document.getElementById("administrationRefreshIntegrityButton");
-  const reportsHost = document.getElementById("administrationReportsHost");
-
-  tokenForm?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    storeAdministrationToken(tokenInput?.value || "");
-    setAdministrationFeedback("Jeton conservé pour cette session.");
-    await refreshAdministrationIntegrityPanels();
-  });
-
-  testButton?.addEventListener("click", async () => {
-    storeAdministrationToken(tokenInput?.value || "");
-    await testAdministrationTokenAccess();
-  });
-
-  clearButton?.addEventListener("click", async () => {
-    clearAdministrationToken();
-    if (tokenInput) tokenInput.value = "";
-    setAdministrationFeedback("Jeton retiré de la session.");
-    await refreshAdministrationIntegrityPanels();
-  });
-
-  quickButton?.addEventListener("click", async () => {
-    await runAdministrationIntegrityAudit("quick");
-  });
-
-  fullButton?.addEventListener("click", async () => {
-    await runAdministrationIntegrityAudit("full");
-  });
-
-  refreshButton?.addEventListener("click", async () => {
-    await refreshAdministrationIntegrityPanels();
-  });
-
-  reportsHost?.addEventListener("click", async (event) => {
-    const jsonButton = event.target.closest("[data-administration-report-json]");
-    if (jsonButton) {
-      await openAdministrationJsonReport(jsonButton.dataset.administrationReportJson);
-      return;
-    }
-
-    const textButton = event.target.closest("[data-administration-report-text]");
-    if (textButton) {
-      await openAdministrationTextReport(textButton.dataset.administrationReportText);
-    }
-  });
-}
-
 async function renderAdministrationView() {
   destroyCartographyMap();
   cleanupPilotageTrajectoryConnectorsIfLeaving("admin");
+
   appState.currentView = "admin";
   syncSidebarView("admin");
   setTitle("Administration & paramètres");
 
-  if (administrationIntegrityPollTimer) {
-    clearTimeout(administrationIntegrityPollTimer);
-    administrationIntegrityPollTimer = null;
-  }
-
   content.innerHTML = `
-    <div class="tickets-view">
-      ${renderAdministrationAuthCard()}
-      ${renderAdministrationIntegrityControls()}
-
-      <section id="administrationIntegrityPanels" class="ticket-list-grid">
-        ${renderAdministrationLockedIntegrityCard()}
-      </section>
-
-      <section id="administrationReportsHost"></section>
-
-      ${renderAdministrationReportViewerPlaceholder()}
-    </div>
+    <section class="card">
+      <div class="stat-label">Administration</div>
+      <h2>Vue à reconstruire</h2>
+    </section>
   `;
-
-  bindAdministrationViewInteractions();
-  await refreshAdministrationIntegrityPanels();
 }
 
 
@@ -10857,132 +10172,10 @@ function escapeMonetaryHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
-function normalizeMlcIdCandidate(value) {
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const normalized = value.trim().toLowerCase();
-
-  if (normalized === "graine" || normalized === "gonette") {
-    return normalized;
-  }
-
-  return null;
-}
-
-function extractMlcIdFromPayload(payload) {
-  if (!payload) {
-    return null;
-  }
-
-  if (typeof payload === "string") {
-    return normalizeMlcIdCandidate(payload);
-  }
-
-  if (typeof payload !== "object") {
-    return null;
-  }
-
-  const directCandidates = [
-    payload.mlc_id,
-    payload.current_mlc_id,
-    payload.active_mlc_id,
-    payload.selected_mlc_id,
-    payload.default_mlc_id,
-    payload.id,
-    payload.slug,
-    payload.current_mlc,
-    payload.active_mlc,
-    payload.selected_mlc,
-    payload.default_mlc,
-    payload.mlc
-  ];
-
-  for (const candidate of directCandidates) {
-    const mlcId = normalizeMlcIdCandidate(candidate);
-    if (mlcId) {
-      return mlcId;
-    }
-  }
-
-  const nestedCandidates = [
-    payload.mlc,
-    payload.current_mlc,
-    payload.active_mlc,
-    payload.selected_mlc,
-    payload.default_mlc,
-    payload.instance,
-    payload.current_instance,
-    payload.user
-  ];
-
-  for (const candidate of nestedCandidates) {
-    if (!candidate || typeof candidate !== "object") {
-      continue;
-    }
-
-    const mlcId = (
-      normalizeMlcIdCandidate(candidate.mlc_id) ||
-      normalizeMlcIdCandidate(candidate.current_mlc_id) ||
-      normalizeMlcIdCandidate(candidate.active_mlc_id) ||
-      normalizeMlcIdCandidate(candidate.id) ||
-      normalizeMlcIdCandidate(candidate.slug) ||
-      normalizeMlcIdCandidate(candidate.name)
-    );
-
-    if (mlcId) {
-      return mlcId;
-    }
-  }
-
-  return null;
-}
-
-async function resolveAdaptiveMonetaryMlcId() {
-  const query = new URLSearchParams(window.location.search || "");
-  const localCandidates = [
-    query.get("mlc"),
-    appState?.currentMlc?.id,
-    appState?.currentMlc?.mlc_id,
-    appState?.currentMlcId,
-    appState?.mlc?.id,
-    appState?.mlc?.mlc_id,
-    appState?.activeMlcId
-  ];
-
-  const localMlcId = localCandidates.find((value) => value);
-  if (localMlcId) {
-    return localMlcId;
-  }
-
-  const endpoints = [
-    "/api/current-mlc",
-    "/api/mlc/current",
-    "/api/me"
-  ];
-
-  for (const endpoint of endpoints) {
-    try {
-      const payload = await apiGet(endpoint);
-      const mlcId = extractMlcIdFromPayload(payload);
-      if (mlcId) {
-        return mlcId;
-      }
-    } catch (error) {
-      // Certains endpoints peuvent ne pas exister selon l'instance.
-    }
-  }
-
-  return null;
-}
-
 async function getAdaptiveMonetaryIndicatorsEndpoint() {
-  const mlcId = await resolveAdaptiveMonetaryMlcId();
-  return mlcId
-    ? `/api/monetary-indicators?mlc=${encodeURIComponent(mlcId)}`
-    : "/api/monetary-indicators";
+  return "/api/monetary-indicators";
 }
+
 
 function monetaryConfidenceLabel(confidence) {
   if (confidence === "high") return "confiance haute";
@@ -17688,7 +16881,7 @@ function getProfessionalAnalysisHeroCopy(tabName) {
       note: "Cet onglet présente le réseau P→P. Les particuliers ne sont pas inclus dans ce graphe ; ils restent analysés dans les autres lectures de la vue."
     },
     clusters: {
-      eyebrow: "Circulation des clusters · pôles d’usage et territoires",
+      eyebrow: "Cartographie des clusters · pôles d’usage et territoires",
       title: "Quels pôles d’usage et communautés d’échange apparaissent dans la circulation ?",
       body: "Cette vue cartographique met en relation les lieux d’activité, les territoires d’usage et les communautés de circulation afin d’identifier les concentrations et les liaisons structurantes.",
       note: "La lecture des clusters vise des dynamiques agrégées. Elle ne doit pas être utilisée comme outil de traçabilité individuelle."
@@ -17743,7 +16936,7 @@ function buildProfessionalAnalysisShell(flowSummary = null, holdingsSummary = nu
         { key: "summary", label: "Synthèse" },
         { key: "circulation", label: "Circulation & multiplicateur" },
         { key: "network", label: "Constellations interpro" },
-        { key: "clusters", label: "Circulation des clusters" },
+        { key: "clusters", label: "Cartographie des clusters" },
         { key: "structures", label: "Analyse sectorielle" },
         { key: "directory", label: "Liste & fiches" }
       ]
@@ -17919,100 +17112,20 @@ function buildProfessionalAnalysisShell(flowSummary = null, holdingsSummary = nu
 
 
 
-/* CLUSTER_FREEZE001_LOCKED_TAB */
-const PROFESSIONAL_CLUSTERS_VIEW_LOCKED = true;
-
-/* CLUSTER_FREEZE001B_ADMIN_BYPASS */
-const professionalClustersAdminBypassState = {
-  checked: false,
-  checking: false,
-  allowed: false
-};
-
-function hasProfessionalClustersAdminBypass() {
-  return professionalClustersAdminBypassState.allowed === true;
-}
-
-function extractProfessionalClustersUserFromMePayload(payload) {
-  if (!payload || typeof payload !== "object") {
-    return null;
-  }
-
-  return payload.user
-    || payload.current_user
-    || payload.account
-    || payload.me
-    || null;
-}
-
-function isProfessionalClustersMainAdminPayload(payload) {
-  const user = extractProfessionalClustersUserFromMePayload(payload);
-  const globalRole = String(
-    user?.global_role
-    || user?.role
-    || payload?.global_role
-    || payload?.role
-    || ""
-  ).toLowerCase();
-
-  return Boolean(
-    payload?.authenticated !== false
-    && (
-      globalRole === "admin"
-      || globalRole === "superadmin"
-      || user?.is_admin === true
-      || payload?.is_admin === true
-    )
-  );
-}
-
-async function refreshProfessionalClustersAdminBypass() {
-  if (professionalClustersAdminBypassState.checking) {
-    return professionalClustersAdminBypassState.allowed;
-  }
-
-  professionalClustersAdminBypassState.checking = true;
-
-  try {
-    const response = await fetch("/api/me", {
-      method: "GET",
-      credentials: "same-origin",
-      headers: {
-        "Accept": "application/json"
-      }
-    });
-
-    if (!response.ok) {
-      professionalClustersAdminBypassState.allowed = false;
-      professionalClustersAdminBypassState.checked = true;
-      return false;
-    }
-
-    const payload = await response.json();
-    professionalClustersAdminBypassState.allowed = isProfessionalClustersMainAdminPayload(payload);
-    professionalClustersAdminBypassState.checked = true;
-    return professionalClustersAdminBypassState.allowed;
-  } catch (_err) {
-    professionalClustersAdminBypassState.allowed = false;
-    professionalClustersAdminBypassState.checked = true;
-    return false;
-  } finally {
-    professionalClustersAdminBypassState.checking = false;
-    syncProfessionalClustersLockedTab();
-  }
-}
+/* FRONT001B2 — cartographie des clusters accessible */
+const PROFESSIONAL_CLUSTERS_VIEW_LOCKED = false;
 
 function isProfessionalClustersViewLocked() {
-  return PROFESSIONAL_CLUSTERS_VIEW_LOCKED === true
-    && !hasProfessionalClustersAdminBypass();
+  return false;
 }
+
 
 function buildProfessionalClustersLockedPanelHtml() {
   return `
     <section class="card professional-clusters-locked-card">
       <div class="professional-clusters-locked-icon" aria-hidden="true">🔒</div>
       <div class="professional-clusters-locked-content">
-        <div class="stat-label">Circulation des clusters</div>
+        <div class="stat-label">Cartographie des clusters</div>
         <h2>Vue en cours de développement</h2>
         <p>
           Cette vue est en cours de développement. Elle sera réactivée lorsque
@@ -18157,19 +17270,26 @@ function showProfessionalClustersDevelopmentPopup() {
 }
 
 function bindProfessionalClustersLockedTabGuard() {
-  if (document.documentElement.dataset.professionalClustersLockGuardBound === "true") {
+  if (
+    document.documentElement.dataset.professionalClustersLockGuardBound
+    === "true"
+  ) {
     return;
   }
 
   document.documentElement.dataset.professionalClustersLockGuardBound = "true";
 
   document.addEventListener("click", event => {
-    if (!isProfessionalClustersViewLocked()) return;
+    const target = event.target instanceof Element
+      ? event.target
+      : null;
 
-    const target = event.target instanceof Element ? event.target : null;
     if (!target) return;
 
-    const lockedTab = target.closest("[data-professional-clusters-locked='true']");
+    const lockedTab = target.closest(
+      "[data-professional-clusters-locked='true']"
+    );
+
     if (!lockedTab) return;
 
     event.preventDefault();
@@ -18179,32 +17299,24 @@ function bindProfessionalClustersLockedTabGuard() {
       event.stopImmediatePropagation();
     }
 
-    // CLUSTER_FREEZE001B_CLICK_ADMIN_RECHECK
-    void refreshProfessionalClustersAdminBypass().then(isAdmin => {
-      if (isAdmin) {
-        syncProfessionalClustersLockedTab();
-        lockedTab.click();
-        return;
-      }
-
-      showProfessionalClustersDevelopmentPopup();
-    });
+    showProfessionalClustersDevelopmentPopup();
   }, true);
 }
 
+
 function initializeProfessionalClustersLockUi() {
   if (!document.body) return;
-
-  void refreshProfessionalClustersAdminBypass();
 
   bindProfessionalClustersLockedTabGuard();
   syncProfessionalClustersLockedTab();
 
   if (
     typeof MutationObserver !== "undefined"
-    && document.documentElement.dataset.professionalClustersLockObserverBound !== "true"
+    && document.documentElement.dataset.professionalClustersLockObserverBound
+      !== "true"
   ) {
-    document.documentElement.dataset.professionalClustersLockObserverBound = "true";
+    document.documentElement.dataset.professionalClustersLockObserverBound =
+      "true";
 
     const observer = new MutationObserver(() => {
       syncProfessionalClustersLockedTab();
@@ -18217,11 +17329,7 @@ function initializeProfessionalClustersLockUi() {
   }
 }
 
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", initializeProfessionalClustersLockUi);
-} else {
-  initializeProfessionalClustersLockUi();
-}
+
 
 window.addEventListener("load", initializeProfessionalClustersLockUi);
 
@@ -18991,108 +18099,39 @@ function buildProfessionalClustersPanelHtml(cartographyData = null, territoriesD
   `;
 }
 
-async function renderProfessionalClustersPanel(forceReload = false) {
-  // CLUSTER_FREEZE001_RENDER_GUARD
-  if (isProfessionalClustersViewLocked()) {
-    const panel = document.getElementById("professionalClustersPanel");
-
-    if (typeof destroyUserPostalClustersMap === "function") {
-      destroyUserPostalClustersMap();
-      destroyUserPostalClustersMap("userPostalClustersZoomMap");
-    }
-
-    appState.userPostalClustersData = null;
-
-    if (panel) {
-      panel.dataset.professionalClustersHydrated = "locked";
-      panel.innerHTML = buildProfessionalClustersLockedPanelHtml();
-    }
-
-    syncProfessionalClustersLockedTab();
-    return;
-  }
-
+async function renderProfessionalClustersPanel(_forceReload = false) {
   const panel = document.getElementById("professionalClustersPanel");
+
   if (!panel) {
     return;
   }
 
-  const periodKey = getPeriodQueryParam() || "__no_period__";
-  const alreadyHydrated = (
-    panel.dataset.professionalClustersHydrated === "true"
-    && panel.dataset.professionalClustersPeriodKey === periodKey
-  );
-
-  if (alreadyHydrated && !forceReload) {
-    window.requestAnimationFrame(() => {
-      renderProfessionalConsumptionMapCanvas();
-
-      if (
-        appState.userPostalClustersMap
-        && typeof appState.userPostalClustersMap.resize === "function"
-      ) {
-        appState.userPostalClustersMap.resize();
-      }
-
-      if (appState.cartography?.map && typeof appState.cartography.map.resize === "function") {
-        appState.cartography.map.resize();
-      }
-    });
-    return;
-  }
-
   destroyCartographyMap();
-  destroyUserPostalClustersMap();
 
-  panel.dataset.professionalClustersHydrated = "false";
-  panel.dataset.professionalClustersPeriodKey = periodKey;
-  panel.innerHTML = buildProfessionalClustersLoadingHtml();
-
-  try {
-    const userPostalClustersQuery = getPeriodQueryParam()
-      ? `${getPeriodQueryParam()}&min_individuals=5`
-      : "?min_individuals=5";
-
-    const [cartographyData, territoriesData, userPostalClustersData] = await Promise.all([
-      apiGet(`/api/professionals-map${getPeriodQueryParam()}`),
-      apiGet(`/api/territories/zip${getPeriodQueryParam()}`),
-      apiGet(`/api/user-postal-clusters${userPostalClustersQuery}`)
-    ]);
-
-    appState.cartography.data = cartographyData;
-    appState.territories.data = territoriesData;
-    appState.userPostalClustersData = userPostalClustersData;
-
-    panel.innerHTML = buildProfessionalClustersPanelHtml(
-      cartographyData,
-      territoriesData,
-      appState.professionalConsumptionMap,
-      userPostalClustersData
-    );
-
-    panel.dataset.professionalClustersHydrated = "true";
-
-    const professionals = Array.isArray(cartographyData?.professionals)
-      ? cartographyData.professionals
-      : [];
-
-    window.requestAnimationFrame(() => {
-      renderProfessionalConsumptionMapCanvas();
-      initializeUserPostalClustersMap(userPostalClustersData?.heatmap_points || []);
-      initializeProfessionalsMap(professionals);
-      bindProfessionalClusterMapZoomButtons();
-      bindProfessionalClustersMapPairResizeSync();
-      syncProfessionalClustersMapPairHeights();
-      window.setTimeout(syncProfessionalClustersMapPairHeights, 180);
-    });
-  } catch (error) {
-    console.warn(
-      "Cartographie des clusters indisponible dans la vue Professionnels & particuliers.",
-      error
-    );
-    panel.innerHTML = buildProfessionalClustersErrorHtml();
-    panel.dataset.professionalClustersHydrated = "false";
+  if (typeof destroyUserPostalClustersMap === "function") {
+    destroyUserPostalClustersMap();
+    destroyUserPostalClustersMap("userPostalClustersZoomMap");
   }
+
+  appState.userPostalClustersData = null;
+  appState.cartography.data = null;
+
+  panel.dataset.professionalClustersHydrated = "placeholder";
+
+  panel.innerHTML = `
+    <section class="card professional-analysis-roadmap-card">
+      <div class="professional-analysis-section-heading">
+        <div class="stat-label">Cartographie des clusters</div>
+        <h3>Vue à reconstruire</h3>
+        <p>
+          Cette vue est désormais accessible dans LKVLT-LITE.
+          La future cartographie des clusters sera reconstruite sur
+          le modèle de données neutre, sans dépendance aux anciennes
+          routes cartographiques.
+        </p>
+      </div>
+    </section>
+  `;
 }
 
 
@@ -19387,15 +18426,9 @@ async function renderProsView(forceReload = false) {
     || !appState.professionalChainFateSummary
   );
 
-  const professionalConsumptionMapQuery = periodQuery
-    ? `${periodQuery}&min_users=2`
-    : "?min_users=2";
-
-  const shouldLoadProfessionalConsumptionMap = (
-    forceReload
-    || !appState.professionalConsumptionMap
-    || appState.professionalConsumptionMapPeriodKey !== professionalConsumptionMapQuery
-  );
+  appState.professionalConsumptionMap = null;
+  appState.professionalConsumptionMapRenderPayload = null;
+  appState.professionalConsumptionMapPlayer = null;
 
   if (shouldLoadProsData && !preserveVisibleView) {
     content.innerHTML = `<div class="card">Chargement.</div>`;
@@ -19479,45 +18512,6 @@ async function renderProsView(forceReload = false) {
       })()
     : Promise.resolve();
 
-  const professionalConsumptionMapPromise = shouldLoadProfessionalConsumptionMap
-    ? (async () => {
-        try {
-          // CARTO_CLUSTER_MAIN_OPT004A_SAFE_FRONTEND_LEAN_INITIAL_PAYLOAD
-          const professionalConsumptionMapApiQuery = getProfessionalConsumptionMapLeanInitialQuery(
-            professionalConsumptionMapQuery
-          );
-
-          appState.professionalConsumptionMap = await apiGet(
-            `/api/user-to-professional-map${professionalConsumptionMapApiQuery}`
-          );
-          appState.professionalConsumptionMapPeriodKey = professionalConsumptionMapQuery;
-          syncMlcInstanceThemeAttributeFromApi();
-          resetProfessionalConsumptionMapRenderCaches();
-          appState.professionalConsumptionMapRenderPayload =
-            getProfessionalConsumptionMapFinalRenderPayload(
-              appState.professionalConsumptionMap
-            );
-          appState.professionalConsumptionMapPlayer = null;
-
-          if (!appState.professionalConsumptionMapViewMode) {
-            appState.professionalConsumptionMapViewMode = "static";
-          }
-        } catch (error) {
-          console.warn(
-            "Carte des bassins de consommation U→P indisponible.",
-            error
-          );
-          appState.professionalConsumptionMap = null;
-          appState.professionalConsumptionMapRenderPayload = null;
-          appState.professionalConsumptionMapPlayer = null;
-          appState.professionalConsumptionMapViewMode = "static";
-          resetProfessionalConsumptionMapRenderCaches();
-          restoreProfessionalConsumptionMapDynamicTheme();
-          appState.professionalConsumptionMapPeriodKey = professionalConsumptionMapQuery;
-        }
-      })()
-    : Promise.resolve();
-
   await Promise.all([
     prosDataPromise,
     professionalActivityFlowSummaryPromise,
@@ -19525,8 +18519,7 @@ async function renderProsView(forceReload = false) {
     professionalPilotageSummaryPromise,
     professionalCirculationTimeseriesPromise,
     professionalReuseYearlySummaryPromise,
-    professionalChainFateSummaryPromise,
-    professionalConsumptionMapPromise
+    professionalChainFateSummaryPromise
   ]);
 
   if (preserveVisibleView) {
@@ -19541,7 +18534,7 @@ async function renderProsView(forceReload = false) {
     appState.professionalCirculationTimeseries,
     appState.professionalReuseYearlySummary,
     appState.professionalChainFateSummary,
-    appState.professionalConsumptionMap
+    null
   );
   drawProsTable();
   bindProfessionalAnalysisTabs();
@@ -19646,7 +18639,6 @@ const PROFESSIONAL_CONSUMPTION_MAP_HELP = {
     "Les points-source synthétiques sont déterministes : ils restent stables d’un affichage à l’autre, sans représenter de localisation individuelle."
   ],
   sources: [
-    "/api/user-to-professional-map",
     "transactions filtrées sur U→P",
     "odoo_individual_enrichment.zip",
     "odoo_professional_enrichment.cyclos_latitude / cyclos_longitude",
@@ -27124,6 +26116,7 @@ function syncSidebarView(view) {
     sectors: "sectors",
     network: "pros",
     info: "info",
+    admin: "admin",
     "pro-detail": "pros"
   };
 
@@ -27138,7 +26131,16 @@ function syncSidebarView(view) {
 }
 
 function refreshThemeSensitiveVisuals() {
-  refreshThemeSensitiveVisuals();
+  try {
+    if (typeof refreshNetworkGraphTheme === "function") {
+      refreshNetworkGraphTheme();
+    }
+  } catch (error) {
+    console.warn(
+      "Rafraîchissement du thème réseau impossible.",
+      error
+    );
+  }
 
   const pilotagePayload =
     window.__pilotageTrajectoryRadarPayload;
@@ -27148,23 +26150,28 @@ function refreshThemeSensitiveVisuals() {
   }
 
   window.requestAnimationFrame(() => {
-    if (
-      document.getElementById(
-        "pilotageTrajectoryRadarChart"
-      )
-    ) {
-      renderPilotageTrajectoryRadarChart(
-        pilotagePayload
-      );
-    }
+    try {
+      if (
+        document.getElementById("pilotageTrajectoryRadarChart")
+        && typeof renderPilotageTrajectoryRadarChart === "function"
+      ) {
+        renderPilotageTrajectoryRadarChart(
+          pilotagePayload
+        );
+      }
 
-    if (
-      document.getElementById(
-        "pilotageTrajectoryRadarZoomChart"
-      )
-    ) {
-      renderPilotageTrajectoryRadarZoomChart(
-        pilotagePayload
+      if (
+        document.getElementById("pilotageTrajectoryRadarZoomChart")
+        && typeof renderPilotageTrajectoryRadarZoomChart === "function"
+      ) {
+        renderPilotageTrajectoryRadarZoomChart(
+          pilotagePayload
+        );
+      }
+    } catch (error) {
+      console.warn(
+        "Rafraîchissement des graphiques sensibles au thème impossible.",
+        error
       );
     }
   });
@@ -27173,75 +26180,75 @@ function refreshThemeSensitiveVisuals() {
 
 function applyTheme(theme, persist = true) {
   const isDark = theme === "dark";
-  document.body.classList.toggle("dark-mode", isDark);
 
-  const btn = document.getElementById("themeToggleBtn");
+  document.body.classList.toggle(
+    "dark-mode",
+    isDark
+  );
+
+  document.documentElement.setAttribute(
+    "data-theme",
+    isDark ? "dark" : "light"
+  );
+
+  const btn = document.getElementById(
+    "themeToggleBtn"
+  );
+
   if (btn) {
-    btn.textContent = isDark ? "☀️ Mode clair" : "🌙 Mode sombre";
+    btn.textContent = isDark
+      ? "☀️ Mode clair"
+      : "🌙 Mode sombre";
+
+    btn.setAttribute(
+      "aria-pressed",
+      isDark ? "true" : "false"
+    );
   }
 
   if (persist) {
-    localStorage.setItem("mlcflux_theme", isDark ? "dark" : "light");
+    localStorage.setItem(
+      "mlcflux_theme",
+      isDark ? "dark" : "light"
+    );
   }
 
-  refreshProfessionalConsumptionMapThemeRendering();
-  refreshNetworkGraphTheme();
+  refreshThemeSensitiveVisuals();
 }
 
-function initThemeToggle() {
-  const savedTheme = localStorage.getItem("mlcflux_theme") || "light";
-  applyTheme(savedTheme);
 
-  const btn = document.getElementById("themeToggleBtn");
-  if (!btn || btn.dataset.bound === "true") return;
+function initThemeToggle() {
+  const savedTheme =
+    localStorage.getItem("mlcflux_theme")
+    || "light";
+
+  applyTheme(savedTheme, false);
+
+  const btn = document.getElementById(
+    "themeToggleBtn"
+  );
+
+  if (
+    !btn
+    || btn.dataset.bound === "true"
+  ) {
+    return;
+  }
 
   btn.addEventListener("click", () => {
-    const nextTheme = document.body.classList.contains("dark-mode")
-      ? "light"
-      : "dark";
+    const nextTheme =
+      document.body.classList.contains(
+        "dark-mode"
+      )
+        ? "light"
+        : "dark";
 
-    if (appState.professionalConsumptionMapThemeOverrideActive) {
-      // L'utilisateur exprime son choix de thème pour l'après-mode dynamique,
-      // mais l'expérience dynamique reste volontairement en dark mode.
-      appState.professionalConsumptionMapThemeBeforeDynamic = nextTheme;
-      localStorage.setItem("mlcflux_theme", nextTheme);
-      applyTheme("dark", false);
-      return;
-    }
-
-    applyTheme(nextTheme);
+    applyTheme(nextTheme, true);
   });
 
   btn.dataset.bound = "true";
 }
 
-if (reloadButton) {
-  reloadButton.addEventListener("click", async () => {
-    try {
-      reloadButton.disabled = true;
-      reloadButton.textContent = "Synchronisation...";
-      const result = await apiPost("/api/reload");
-      alert(result.message || "Synchronisation terminée");
-
-      appState.prosData = [];
-      appState.detailData = null;
-      appState.currentPro = null;
-      appState.statsCache = {};
-      clearMonetaryPilotageCache();
-
-      if (appState.currentView === "pros") {
-        await renderProsView(true);
-      } else {
-        await renderStatsView();
-      }
-    } catch (err) {
-      alert(`Erreur : ${err.message}`);
-    } finally {
-      reloadButton.disabled = false;
-      reloadButton.textContent = "Synchroniser les dernières transactions";
-    }
-  });
-}
 
 document.querySelectorAll('input[name="dataView"]').forEach(input => {
   input.addEventListener("change", (e) => {
@@ -27251,19 +26258,97 @@ document.querySelectorAll('input[name="dataView"]').forEach(input => {
   });
 });
 
-bindNetworkSearchOutsideClick();
-initThemeToggle();
-initSidebarCollapse();
-ensureCollapsedSidebarRail();
-renderProgressiveViewShell("stats");
+async function bootstrapMlcFluxFrontend() {
+  console.info(
+    "MLCFlux frontend bootstrap: start"
+  );
 
-waitForNextBrowserPaint()
-  .then(() => initPeriodFilter())
-  .then(() => runProgressiveViewHydration({
-    viewKey: "stats",
-    hydrate: () => renderStatsView(false),
-    message: "Chargement des statistiques de l’année en cours…"
-  }));
+  try {
+    await MLCFLUX_MLC_CONTEXT_READY;
+  } catch (error) {
+    console.warn(
+      "Contexte MLC non initialisé ; poursuite du bootstrap.",
+      error
+    );
+  }
+
+  try {
+    bindNetworkSearchOutsideClick();
+  } catch (error) {
+    console.warn(
+      "Initialisation recherche réseau impossible.",
+      error
+    );
+  }
+
+  try {
+    initThemeToggle();
+  } catch (error) {
+    console.error(
+      "Initialisation thème impossible.",
+      error
+    );
+  }
+
+  try {
+    initSidebarCollapse();
+    ensureCollapsedSidebarRail();
+    syncCollapsedSidebarState("stats");
+  } catch (error) {
+    console.error(
+      "Initialisation sidebar impossible.",
+      error
+    );
+  }
+
+  try {
+    renderProgressiveViewShell("stats");
+  } catch (error) {
+    console.error(
+      "Shell initial statistiques impossible.",
+      error
+    );
+  }
+
+  await waitForNextBrowserPaint();
+
+  try {
+    await initPeriodFilter();
+  } catch (error) {
+    console.error(
+      "Initialisation période impossible ; chargement des statistiques sans période forcée.",
+      error
+    );
+  }
+
+  try {
+    await runProgressiveViewHydration({
+      viewKey: "stats",
+      hydrate: () => renderStatsView(false),
+      message: "Chargement des statistiques…"
+    });
+  } catch (error) {
+    console.error(
+      "Chargement initial des statistiques impossible.",
+      error
+    );
+
+    content.innerHTML = `
+      <section class="card">
+        <div class="stat-label">Statistiques globales</div>
+        <h2>Impossible de charger la vue</h2>
+        <p>${escapeHtml(error?.message || String(error))}</p>
+      </section>
+    `;
+  }
+
+  console.info(
+    "MLCFlux frontend bootstrap: ready"
+  );
+}
+
+
+void bootstrapMlcFluxFrontend();
 
 
 /* PRODATA002_SCROLL_TO_RAW_TRANSACTIONS */
@@ -27846,7 +26931,6 @@ installProfessionalEconomicEnrichmentRenderHook();
 window.renderSectorsView = renderSectorsView;
 window.renderMonetaryPilotageView = renderMonetaryPilotageView;
 window.renderInfoView = renderInfoView;
-window.renderAdministrationView = renderAdministrationView;
 window.toggleProsSort = toggleProsSort;
 window.changeDetailTransactionPage = changeDetailTransactionPage;
 
@@ -30004,158 +29088,6 @@ function getProfessionalConsumptionMapLeanInitialQuery(baseQuery) {
   } else {
     install();
   }
-})();
-
-
-/* ADMIN_NAV001_STABLE_ADMIN_ROUTE */
-(function () {
-  "use strict";
-
-  function normalizeAdminRouteValue(value) {
-    return String(value || "")
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-z0-9]+/g, " ")
-      .trim();
-  }
-
-  function isAdminNavigationValue(value) {
-    const normalized = normalizeAdminRouteValue(value);
-
-    if (!normalized) {
-      return false;
-    }
-
-    return normalized === "admin"
-      || normalized.includes("administration")
-      || normalized.includes("parametres")
-      || normalized.includes("parametre");
-  }
-
-  function isAdminNavigationElement(element) {
-    if (!element) {
-      return false;
-    }
-
-    const values = [
-      element.value,
-      element.textContent,
-      element.getAttribute && element.getAttribute("title"),
-      element.getAttribute && element.getAttribute("aria-label"),
-      element.getAttribute && element.getAttribute("data-view"),
-      element.getAttribute && element.getAttribute("data-nav-view"),
-      element.getAttribute && element.getAttribute("data-sidebar-view"),
-      element.getAttribute && element.getAttribute("data-main-view"),
-      element.getAttribute && element.getAttribute("data-collapsed-view"),
-      element.getAttribute && element.getAttribute("href")
-    ];
-
-    return values.some(isAdminNavigationValue);
-  }
-
-  function markAdminRadioChecked() {
-    document.querySelectorAll('input[name="dataView"]').forEach((input) => {
-      input.checked = input.value === "admin";
-    });
-  }
-
-  async function openAdministrationViewDirectly() {
-    try {
-      markAdminRadioChecked();
-
-      if (typeof renderAdministrationView === "function") {
-        await renderAdministrationView();
-        return true;
-      }
-
-      throw new Error("renderAdministrationView introuvable");
-    } catch (error) {
-      console.error("ADMIN_NAV001 — impossible d’ouvrir l’administration :", error);
-
-      try {
-        if (typeof appState !== "undefined" && appState) {
-          appState.currentView = "admin";
-        }
-
-        if (typeof syncSidebarView === "function") {
-          syncSidebarView("admin");
-        }
-
-        if (typeof setTitle === "function") {
-          setTitle("Administration & paramètres");
-        }
-
-        if (typeof content !== "undefined" && content) {
-          content.innerHTML = `
-            <section class="card">
-              <p class="info-view-kicker">Administration</p>
-              <h2>Erreur d’ouverture de la vue administration</h2>
-              <p>${String(error && error.message ? error.message : error)}</p>
-            </section>
-          `;
-        }
-      } catch (fallbackError) {
-        console.error("ADMIN_NAV001 — fallback admin impossible :", fallbackError);
-      }
-
-      return false;
-    }
-  }
-
-  function installAdministrationNavigationGuard() {
-    if (window.__MLCFluxAdminNav001Installed) {
-      return;
-    }
-
-    window.__MLCFluxAdminNav001Installed = true;
-
-    document.addEventListener("click", function (event) {
-      const target = event.target && event.target.closest
-        ? event.target.closest('input[name="dataView"], label, a, button, [role="button"], [data-view], [data-nav-view], [data-sidebar-view], [data-main-view], [data-collapsed-view]')
-        : null;
-
-      if (!target) {
-        return;
-      }
-
-      const navRoot = target.closest(".sidebar, .sidebar-collapsed-rail, #collapsedSidebarRail");
-      if (!navRoot && !(target.matches && target.matches('input[name="dataView"]'))) {
-        return;
-      }
-
-      if (!isAdminNavigationElement(target)) {
-        return;
-      }
-
-      event.preventDefault();
-      event.stopImmediatePropagation();
-
-      void openAdministrationViewDirectly();
-    }, true);
-
-    document.addEventListener("change", function (event) {
-      const target = event.target;
-
-      if (
-        !target
-        || !target.matches
-        || !target.matches('input[name="dataView"]')
-        || target.value !== "admin"
-      ) {
-        return;
-      }
-
-      event.preventDefault();
-      event.stopImmediatePropagation();
-
-      void openAdministrationViewDirectly();
-    }, true);
-  }
-
-  window.mlcfluxOpenAdministrationView = openAdministrationViewDirectly;
-
-  installAdministrationNavigationGuard();
 })();
 
 

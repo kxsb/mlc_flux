@@ -1182,7 +1182,7 @@ L’administration peut afficher :
 ### Logique de fonctionnement
 utilisateur / session
 → control.db
-→ routes auth / admin
+→ routes d'authentification
 → authentification
 → accès à l'instance MLC configurée
 
@@ -1192,9 +1192,6 @@ utilisateur / session
 Backend :
 - server/routes/auth.py
 - server/routes/current_mlc.py
-- server/routes/admin_accounts.py
-- server/routes/account_requests.py
-- server/routes/admin_integrity.py
 - server/control_db.py
 - server/auth_guards.py
 - server/security_middleware.py
@@ -1203,18 +1200,16 @@ Routes API :
 - /api/me
 - /api/me/password
 - /api/current-mlc
-- /api/account-requests
-- /api/admin/account-requests
-- /api/admin/accounts
-- /api/admin/integrity/latest
-- /api/admin/integrity/reports
-- /api/admin/integrity/run
+
+La vue « Administration & paramètres » est volontairement conservée
+dans l'interface comme emplacement à reconstruire. Aucun backend
+d'administration n'est exposé dans la baseline LKVLT-LITE actuelle.
 
 ### Graphiques concernés
 
 Aucun graphique métier direct.
 
-L’administration protège l’accès aux données et au pilotage, mais ne constitue pas elle-même une vue d’analyse monétaire.
+L’authentification protège l’accès aux données et au pilotage. La vue Administration est actuellement conservée comme emplacement à reconstruire.
 
 ---
 
@@ -1232,7 +1227,7 @@ L’administration protège l’accès aux données et au pilotage, mais ne cons
 | Soldes                      | Où la monnaie est-elle détenue ?                          | Soldes quotidiens                  | Pilotage, détention               |
 | Réemploi                    | La monnaie reçue est-elle réutilisée ?                    | Chaînes de flux                    | Pilotage, circulation pro         |
 | Documentation               | Comment lire l’outil ?                                    | Markdown                           | Info & méthodologie               |
-| Administration              | Qui accède à quoi ?                                       | control.db, sessions, rôles        | Sélection MLC, admin              |
+| Administration              | Vue réservée à une reconstruction future                 | Authentification existante         | Vue à reconstruire               |
 
 ---
 

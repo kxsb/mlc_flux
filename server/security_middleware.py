@@ -74,9 +74,6 @@ def _rate_limit_for_request():
     if method == "POST" and path == "/login":
         return "login", 12, 10 * 60
 
-    if method == "POST" and path == "/api/account-requests":
-        return "account_request", 6, 60 * 60
-
     if method == "POST" and path == "/api/me/password":
         return "password_change", 6, 10 * 60
 
