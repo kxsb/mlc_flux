@@ -23600,6 +23600,18 @@ function professionalPaymentBasinHash(value) {
 }
 
 function collectProfessionalPaymentBasinCoordinates(payload = {}) {
+  /*
+    GEO002A3
+
+    L'emprise initiale dépend uniquement des objets effectivement
+    représentés sur la carte :
+
+    - professionnel étudié ;
+    - professionnels payeurs P→P ;
+    - futurs foyers U→P géolocalisés.
+
+    Les contours territoriaux ne doivent jamais imposer le zoom.
+  */
   const points = [];
   const center = payload?.center || {};
 
@@ -23607,7 +23619,10 @@ function collectProfessionalPaymentBasinCoordinates(payload = {}) {
     Number.isFinite(Number(center.longitude))
     && Number.isFinite(Number(center.latitude))
   ) {
-    points.push([Number(center.longitude), Number(center.latitude)]);
+    points.push([
+      Number(center.longitude),
+      Number(center.latitude)
+    ]);
   }
 
   (payload?.routes || []).forEach(route => {
@@ -23616,38 +23631,16 @@ function collectProfessionalPaymentBasinCoordinates(payload = {}) {
     }
 
     const source = route?.source || {};
+
     if (
       Number.isFinite(Number(source.longitude))
       && Number.isFinite(Number(source.latitude))
     ) {
-      points.push([Number(source.longitude), Number(source.latitude)]);
+      points.push([
+        Number(source.longitude),
+        Number(source.latitude)
+      ]);
     }
-  });
-
-  const pushGeoJsonCoordinates = coords => {
-    if (!Array.isArray(coords)) return;
-
-    if (
-      coords.length >= 2
-      && Number.isFinite(Number(coords[0]))
-      && Number.isFinite(Number(coords[1]))
-    ) {
-      points.push([Number(coords[0]), Number(coords[1])]);
-      return;
-    }
-
-    coords.forEach(pushGeoJsonCoordinates);
-  };
-
-  [
-    payload?.geometry?.territory_area_geojson,
-    payload?.geometry?.visible_source_area_geojson
-  ].forEach(areaGroup => {
-    Object.values(areaGroup || {}).forEach(featureCollection => {
-      (featureCollection?.features || []).forEach(feature => {
-        pushGeoJsonCoordinates(feature?.geometry?.coordinates || []);
-      });
-    });
   });
 
   return points;
@@ -23671,10 +23664,14 @@ function buildProfessionalPaymentBasinProjection(payload, width, height) {
   const lonSpan = Math.max(maxLon - minLon, 0.01);
   const latSpan = Math.max(maxLat - minLat, 0.01);
 
-  minLon -= lonSpan * 0.08;
-  maxLon += lonSpan * 0.08;
-  minLat -= latSpan * 0.08;
-  maxLat += latSpan * 0.08;
+  /*
+    Petite respiration autour des points, mais plus de grande
+    marge dictée par l'étendue du référentiel territorial.
+  */
+  minLon -= lonSpan * 0.14;
+  maxLon += lonSpan * 0.14;
+  minLat -= latSpan * 0.14;
+  maxLat += latSpan * 0.14;
 
   const margin = {
     top: 34,
@@ -23798,11 +23795,7 @@ function updateProfessionalPaymentBasinScale(projection, payload = {}) {
     1,
     2,
     5,
-    10,
-    20,
-    50,
-    100,
-    200
+    10
   ];
 
   let selectedKilometers = candidates[0];
@@ -23830,8 +23823,30 @@ function getProfessionalPaymentBasinThemePalette() {
     backdrop: isDark ? "rgba(15, 23, 42, 0.12)" : "rgba(255, 255, 255, 0.18)",
     guide: isDark ? "rgba(148, 163, 184, 0.07)" : "rgba(100, 116, 139, 0.06)",
     /* PRO_BASIN004C_TERRITORY_BACKDROP */
-    territoryFill: isDark ? "rgba(148, 163, 184, 0.055)" : "rgba(15, 23, 42, 0.025)",
-    territoryStroke: isDark ? "rgba(226, 232, 240, 0.11)" : "rgba(71, 85, 105, 0.085)",
+    territoryFill: isDark
+      ? "rgba(148, 163, 184, 0.055)"
+      : "rgba(51, 65, 85, 0.060)",
+
+    territoryStroke: isDark
+      ? "rgba(226, 232, 240, 0.11)"
+      : "rgba(51, 65, 85, 0.19)",
+
+    selectedTerritoryFill: isDark
+      ? "rgba(148, 163, 184, 0.115)"
+      : "rgba(51, 65, 85, 0.12)",
+
+    selectedTerritoryStroke: isDark
+      ? "rgba(226, 232, 240, 0.30)"
+      : "rgba(30, 41, 59, 0.38)",
+
+    selectedTerritoryLabel: isDark
+      ? "rgba(226, 232, 240, 0.82)"
+      : "rgba(30, 41, 59, 0.78)",
+
+    selectedTerritoryLabelHalo: isDark
+      ? "rgba(15, 23, 42, 0.92)"
+      : "rgba(255, 255, 255, 0.94)",
+
     areaFill: isDark ? "rgba(148, 163, 184, 0.16)" : "rgba(15, 23, 42, 0.07)",
     areaStroke: isDark ? "rgba(226, 232, 240, 0.24)" : "rgba(71, 85, 105, 0.20)",
     individualRoute: isDark ? "rgba(52, 211, 153, 0.86)" : "rgba(5, 150, 105, 0.78)",
@@ -23892,6 +23907,528 @@ function drawProfessionalPaymentBasinGeoJson(ctx, projection, featureCollection)
   ctx.stroke();
 }
 
+
+
+
+/* GEO002A3_POINT_CENTERED_TERRITORIES */
+
+function getProfessionalPaymentBasinTerritoryFeatures(payload = {}) {
+  const groups =
+    payload?.geometry?.territory_area_geojson || {};
+
+  const features = [];
+
+  Object.values(groups).forEach(featureCollection => {
+    (featureCollection?.features || []).forEach(feature => {
+      if (
+        feature
+        && typeof feature === "object"
+        && feature?.geometry
+      ) {
+        features.push(feature);
+      }
+    });
+  });
+
+  return features;
+}
+
+
+function getProfessionalPaymentBasinTerritoryKey(feature, index = 0) {
+  const properties = feature?.properties || {};
+
+  const sourceCode = String(
+    properties?.code || ""
+  ).trim();
+
+  if (sourceCode) {
+    return `source:${sourceCode}`;
+  }
+
+  const postalCodes = Array.isArray(properties?.codesPostaux)
+    ? properties.codesPostaux
+        .map(value => String(value || "").trim())
+        .filter(Boolean)
+        .sort()
+    : [];
+
+  if (postalCodes.length) {
+    return `postal:${postalCodes.join(",")}`;
+  }
+
+  return `territory:${index}`;
+}
+
+
+function getProfessionalPaymentBasinTerritoryPostalCodes(feature) {
+  const properties = feature?.properties || {};
+
+  const values = Array.isArray(properties?.codesPostaux)
+    ? properties.codesPostaux
+    : [];
+
+  return [
+    ...new Set(
+      values
+        .map(value => String(value || "").trim())
+        .filter(Boolean)
+    )
+  ].sort();
+}
+
+
+function formatProfessionalPaymentBasinTerritoryPostalCodes(feature) {
+  const codes =
+    getProfessionalPaymentBasinTerritoryPostalCodes(feature);
+
+  if (!codes.length) {
+    return "";
+  }
+
+  if (codes.length === 1) {
+    return codes[0];
+  }
+
+  const numeric = codes.map(code => Number(code));
+
+  const canRange = (
+    codes.every(code => /^\d{5}$/.test(code))
+    && numeric.every(Number.isFinite)
+    && numeric.every(
+      (value, index) => (
+        index === 0
+        || value === numeric[index - 1] + 1
+      )
+    )
+  );
+
+  if (canRange) {
+    return `${codes[0]}–${codes[codes.length - 1]}`;
+  }
+
+  if (codes.length <= 3) {
+    return codes.join(" · ");
+  }
+
+  return `${codes.slice(0, 2).join(" · ")} · +${codes.length - 2}`;
+}
+
+
+function getProfessionalPaymentBasinProjectedRing(
+  projection,
+  ring
+) {
+  if (!Array.isArray(ring)) {
+    return [];
+  }
+
+  return ring
+    .filter(coords => (
+      Array.isArray(coords)
+      && coords.length >= 2
+      && Number.isFinite(Number(coords[0]))
+      && Number.isFinite(Number(coords[1]))
+    ))
+    .map(coords => (
+      projection.project(
+        Number(coords[0]),
+        Number(coords[1])
+      )
+    ));
+}
+
+
+function isProfessionalPaymentBasinPointInRing(
+  x,
+  y,
+  points
+) {
+  if (!Array.isArray(points) || points.length < 3) {
+    return false;
+  }
+
+  /*
+    GEO002A3-FIX1
+
+    Ray casting standard.
+
+    Important :
+    on ne remplace surtout pas (yj - yi) par Math.max(...),
+    car le signe du segment est indispensable au calcul.
+  */
+  let inside = false;
+
+  for (
+    let i = 0, j = points.length - 1;
+    i < points.length;
+    j = i, i += 1
+  ) {
+    const xi = Number(points[i].x);
+    const yi = Number(points[i].y);
+    const xj = Number(points[j].x);
+    const yj = Number(points[j].y);
+
+    /*
+      Petite tolérance sur les frontières :
+      un clic presque exactement sur un trait doit sélectionner
+      le territoire plutôt que donner un résultat instable.
+    */
+    const dx = xj - xi;
+    const dy = yj - yi;
+    const lengthSquared = (dx * dx) + (dy * dy);
+
+    if (lengthSquared > 0) {
+      const t = Math.max(
+        0,
+        Math.min(
+          1,
+          (
+            ((x - xi) * dx)
+            + ((y - yi) * dy)
+          ) / lengthSquared
+        )
+      );
+
+      const nearestX = xi + (t * dx);
+      const nearestY = yi + (t * dy);
+
+      if (
+        Math.hypot(
+          x - nearestX,
+          y - nearestY
+        ) <= 1.5
+      ) {
+        return true;
+      }
+    }
+
+    const crossesHorizontalRay = (
+      (yi > y) !== (yj > y)
+    );
+
+    if (!crossesHorizontalRay) {
+      continue;
+    }
+
+    const intersectionX = (
+      ((xj - xi) * (y - yi))
+      / (yj - yi)
+    ) + xi;
+
+    if (x < intersectionX) {
+      inside = !inside;
+    }
+  }
+
+  return inside;
+}
+
+function isProfessionalPaymentBasinPointInPolygon(
+  x,
+  y,
+  projection,
+  polygon
+) {
+  if (!Array.isArray(polygon) || !polygon.length) {
+    return false;
+  }
+
+  const outer =
+    getProfessionalPaymentBasinProjectedRing(
+      projection,
+      polygon[0]
+    );
+
+  if (
+    !isProfessionalPaymentBasinPointInRing(
+      x,
+      y,
+      outer
+    )
+  ) {
+    return false;
+  }
+
+  for (let index = 1; index < polygon.length; index += 1) {
+    const hole =
+      getProfessionalPaymentBasinProjectedRing(
+        projection,
+        polygon[index]
+      );
+
+    if (
+      isProfessionalPaymentBasinPointInRing(
+        x,
+        y,
+        hole
+      )
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+
+function isProfessionalPaymentBasinPointInFeature(
+  x,
+  y,
+  projection,
+  feature
+) {
+  const geometry = feature?.geometry || {};
+
+  if (geometry.type === "Polygon") {
+    return isProfessionalPaymentBasinPointInPolygon(
+      x,
+      y,
+      projection,
+      geometry.coordinates || []
+    );
+  }
+
+  if (geometry.type === "MultiPolygon") {
+    return (geometry.coordinates || []).some(polygon => (
+      isProfessionalPaymentBasinPointInPolygon(
+        x,
+        y,
+        projection,
+        polygon
+      )
+    ));
+  }
+
+  return false;
+}
+
+
+function getProfessionalPaymentBasinFeatureProjectedBounds(
+  projection,
+  feature
+) {
+  const points = [];
+
+  const collect = coords => {
+    if (!Array.isArray(coords)) {
+      return;
+    }
+
+    if (
+      coords.length >= 2
+      && Number.isFinite(Number(coords[0]))
+      && Number.isFinite(Number(coords[1]))
+    ) {
+      points.push(
+        projection.project(
+          Number(coords[0]),
+          Number(coords[1])
+        )
+      );
+      return;
+    }
+
+    coords.forEach(collect);
+  };
+
+  collect(feature?.geometry?.coordinates || []);
+
+  if (!points.length) {
+    return null;
+  }
+
+  return {
+    minX: Math.min(...points.map(point => point.x)),
+    maxX: Math.max(...points.map(point => point.x)),
+    minY: Math.min(...points.map(point => point.y)),
+    maxY: Math.max(...points.map(point => point.y)),
+  };
+}
+
+
+function isProfessionalPaymentBasinTerritoryVisible(
+  projection,
+  feature,
+  padding = 30
+) {
+  const bounds =
+    getProfessionalPaymentBasinFeatureProjectedBounds(
+      projection,
+      feature
+    );
+
+  if (!bounds) {
+    return false;
+  }
+
+  return !(
+    bounds.maxX < -padding
+    || bounds.minX > projection.width + padding
+    || bounds.maxY < -padding
+    || bounds.minY > projection.height + padding
+  );
+}
+
+
+function findProfessionalPaymentBasinTerritoryAtPoint(
+  projection,
+  payload,
+  x,
+  y
+) {
+  const features =
+    getProfessionalPaymentBasinTerritoryFeatures(payload);
+
+  const candidates = [];
+
+  features.forEach((feature, index) => {
+    if (
+      !isProfessionalPaymentBasinTerritoryVisible(
+        projection,
+        feature
+      )
+    ) {
+      return;
+    }
+
+    if (
+      !isProfessionalPaymentBasinPointInFeature(
+        x,
+        y,
+        projection,
+        feature
+      )
+    ) {
+      return;
+    }
+
+    const bounds =
+      getProfessionalPaymentBasinFeatureProjectedBounds(
+        projection,
+        feature
+      );
+
+    if (!bounds) {
+      return;
+    }
+
+    const width = Math.max(
+      0,
+      bounds.maxX - bounds.minX
+    );
+
+    const height = Math.max(
+      0,
+      bounds.maxY - bounds.minY
+    );
+
+    candidates.push({
+      feature,
+      key:
+        getProfessionalPaymentBasinTerritoryKey(
+          feature,
+          index
+        ),
+      projectedArea:
+        width * height
+    });
+  });
+
+  if (!candidates.length) {
+    return null;
+  }
+
+  /*
+    Si plusieurs contours contiennent le point, privilégier
+    le territoire visuellement le plus petit / spécifique.
+  */
+  candidates.sort(
+    (a, b) => (
+      a.projectedArea - b.projectedArea
+    )
+  );
+
+  return candidates[0];
+}
+
+function getProfessionalPaymentBasinTerritoryLabelPoint(
+  projection,
+  feature
+) {
+  const bounds =
+    getProfessionalPaymentBasinFeatureProjectedBounds(
+      projection,
+      feature
+    );
+
+  if (!bounds) {
+    return null;
+  }
+
+  return {
+    x: (bounds.minX + bounds.maxX) / 2,
+    y: (bounds.minY + bounds.maxY) / 2,
+  };
+}
+
+
+function drawProfessionalPaymentBasinTerritoryLabel(
+  ctx,
+  projection,
+  feature
+) {
+  const label =
+    formatProfessionalPaymentBasinTerritoryPostalCodes(
+      feature
+    );
+
+  if (!label) {
+    return;
+  }
+
+  const point =
+    getProfessionalPaymentBasinTerritoryLabelPoint(
+      projection,
+      feature
+    );
+
+  if (!point) {
+    return;
+  }
+
+  const palette =
+    getProfessionalPaymentBasinThemePalette();
+
+  ctx.save();
+
+  ctx.font =
+    "600 10px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineJoin = "round";
+
+  ctx.lineWidth = 3;
+  ctx.strokeStyle =
+    palette.selectedTerritoryLabelHalo;
+
+  ctx.fillStyle =
+    palette.selectedTerritoryLabel;
+
+  ctx.strokeText(
+    label,
+    point.x,
+    point.y
+  );
+
+  ctx.fillText(
+    label,
+    point.x,
+    point.y
+  );
+
+  ctx.restore();
+}
 
 
 function getProfessionalPaymentBasinOutsideTerritoryPoint(projection, payload = {}) {
@@ -23998,38 +24535,108 @@ function drawProfessionalPaymentBasinBackdrop(ctx, projection, payload) {
 
 
 /* PRO_BASIN004C_TERRITORY_BACKDROP */
+/* GEO002A3_POINT_CENTERED_TERRITORIES */
 function drawProfessionalPaymentBasinAreas(ctx, projection, payload) {
   const palette = getProfessionalPaymentBasinThemePalette();
-  const territoryAreaGeojson = payload?.geometry?.territory_area_geojson || {};
-  const visibleSourceAreaGeojson = payload?.geometry?.visible_source_area_geojson || {};
+
+  const territoryFeatures =
+    getProfessionalPaymentBasinTerritoryFeatures(payload)
+      .filter(feature => (
+        isProfessionalPaymentBasinTerritoryVisible(
+          projection,
+          feature
+        )
+      ));
+
+  const visibleSourceAreaGeojson =
+    payload?.geometry?.visible_source_area_geojson || {};
+
+  const viewport =
+    getProfessionalPaymentBasinViewport(payload);
 
   ctx.save();
 
-  const territoryCollections = Object.values(territoryAreaGeojson);
-  if (territoryCollections.length) {
+  if (territoryFeatures.length) {
     ctx.fillStyle = palette.territoryFill;
     ctx.strokeStyle = palette.territoryStroke;
     ctx.lineWidth = 0.7;
 
-    territoryCollections.forEach(featureCollection => {
-      drawProfessionalPaymentBasinGeoJson(ctx, projection, featureCollection);
+    territoryFeatures.forEach(feature => {
+      drawProfessionalPaymentBasinGeoJson(
+        ctx,
+        projection,
+        {
+          type: "FeatureCollection",
+          features: [feature]
+        }
+      );
     });
   }
 
-  const activeCollections = Object.values(visibleSourceAreaGeojson);
+  const activeCollections =
+    Object.values(visibleSourceAreaGeojson);
+
   if (activeCollections.length) {
     ctx.fillStyle = palette.areaFill;
     ctx.strokeStyle = palette.areaStroke;
     ctx.lineWidth = 1.05;
 
     activeCollections.forEach(featureCollection => {
-      drawProfessionalPaymentBasinGeoJson(ctx, projection, featureCollection);
+      drawProfessionalPaymentBasinGeoJson(
+        ctx,
+        projection,
+        featureCollection
+      );
     });
+  }
+
+  const selectedKey =
+    String(
+      viewport?.selectedTerritoryKey || ""
+    );
+
+  if (selectedKey) {
+    const selectedIndex =
+      territoryFeatures.findIndex(
+        (feature, index) => (
+          getProfessionalPaymentBasinTerritoryKey(
+            feature,
+            index
+          ) === selectedKey
+        )
+      );
+
+    if (selectedIndex >= 0) {
+      const selectedFeature =
+        territoryFeatures[selectedIndex];
+
+      ctx.fillStyle =
+        palette.selectedTerritoryFill;
+
+      ctx.strokeStyle =
+        palette.selectedTerritoryStroke;
+
+      ctx.lineWidth = 1.35;
+
+      drawProfessionalPaymentBasinGeoJson(
+        ctx,
+        projection,
+        {
+          type: "FeatureCollection",
+          features: [selectedFeature]
+        }
+      );
+
+      drawProfessionalPaymentBasinTerritoryLabel(
+        ctx,
+        projection,
+        selectedFeature
+      );
+    }
   }
 
   ctx.restore();
 }
-
 
 function drawProfessionalPaymentBasinRoutes(ctx, projection, payload, timestamp) {
   const palette = getProfessionalPaymentBasinThemePalette();
@@ -24496,6 +25103,69 @@ function getProfessionalPaymentBasinHomeZoom() {
   return 1;
 }
 
+
+function getProfessionalPaymentBasinMinZoom(
+  baseProjection,
+  payload = {},
+  width = 960
+) {
+  /*
+    GEO002A4
+
+    Le niveau minimal est calculé pour que la barre d'échelle
+    atteigne environ 10 km au dernier cran de dézoom.
+
+    On ne fixe donc pas un coefficient arbitraire indépendant
+    de l'emprise réelle de la carte.
+  */
+  const latitude =
+    Number(payload?.center?.latitude);
+
+  const basePixelsPerLongitudeDegree =
+    Number(
+      baseProjection?.pixelsPerLongitudeDegree || 0
+    );
+
+  if (
+    !Number.isFinite(latitude)
+    || !Number.isFinite(basePixelsPerLongitudeDegree)
+    || basePixelsPerLongitudeDegree <= 0
+  ) {
+    return 0.2;
+  }
+
+  const kilometersPerLongitudeDegree =
+    111.32 * Math.cos(
+      latitude * Math.PI / 180
+    );
+
+  const targetPixelWidth = Math.min(
+    150,
+    Math.max(
+      88,
+      Number(width || 960) * 0.15
+    )
+  );
+
+  const zoomForTenKilometers =
+    (
+      targetPixelWidth
+      * kilometersPerLongitudeDegree
+    )
+    / (
+      basePixelsPerLongitudeDegree
+      * 10
+    );
+
+  return Math.min(
+    1,
+    Math.max(
+      0.08,
+      zoomForTenKilometers
+    )
+  );
+}
+
 function getProfessionalPaymentBasinViewportSignature(payload = {}) {
   const center = payload?.center || {};
   const routes = Array.isArray(payload?.routes) ? payload.routes : [];
@@ -24531,8 +25201,12 @@ function getProfessionalPaymentBasinViewport(payload = {}) {
       offsetX: 0,
       offsetY: 0,
       isDragging: false,
+      hasDragged: false,
+      pointerDownX: 0,
+      pointerDownY: 0,
       lastX: 0,
-      lastY: 0
+      lastY: 0,
+      selectedTerritoryKey: null
     };
   }
 
@@ -24540,7 +25214,19 @@ function getProfessionalPaymentBasinViewport(payload = {}) {
 }
 
 function clampProfessionalPaymentBasinViewport(viewport, width = 960, height = 560) {
-  viewport.zoom = Math.min(8, Math.max(0.75, Number(viewport.zoom || 1)));
+  const minZoom = (
+    Number.isFinite(Number(viewport?.minZoom))
+      ? Number(viewport.minZoom)
+      : 0.08
+  );
+
+  viewport.zoom = Math.min(
+    8,
+    Math.max(
+      minZoom,
+      Number(viewport.zoom || 1)
+    )
+  );
 
   const maxOffsetX = Math.max(240, width * viewport.zoom * 1.3);
   const maxOffsetY = Math.max(180, height * viewport.zoom * 1.3);
@@ -24557,8 +25243,12 @@ function resetProfessionalPaymentBasinViewport(payload = {}) {
   viewport.offsetX = 0;
   viewport.offsetY = 0;
   viewport.isDragging = false;
+  viewport.hasDragged = false;
+  viewport.pointerDownX = 0;
+  viewport.pointerDownY = 0;
   viewport.lastX = 0;
   viewport.lastY = 0;
+  viewport.selectedTerritoryKey = null;
   return viewport;
 }
 
@@ -24600,7 +25290,20 @@ function zoomProfessionalPaymentBasinViewportAtPoint(
 ) {
   const oldZoom = Number(viewport.zoom || 1);
   const factor = deltaY < 0 ? 1.18 : 0.85;
-  const newZoom = Math.min(8, Math.max(0.75, oldZoom * factor));
+
+  const minZoom = (
+    Number.isFinite(Number(viewport?.minZoom))
+      ? Number(viewport.minZoom)
+      : 0.08
+  );
+
+  const newZoom = Math.min(
+    8,
+    Math.max(
+      minZoom,
+      oldZoom * factor
+    )
+  );
 
   if (Math.abs(newZoom - oldZoom) < 0.0001) {
     return viewport;
@@ -24668,7 +25371,19 @@ function renderProfessionalPaymentBasinMapCanvas(payload = {}) {
 
   const baseProjection = buildProfessionalPaymentBasinProjection(payload, width, height);
   const viewport = getProfessionalPaymentBasinViewport(payload);
-  clampProfessionalPaymentBasinViewport(viewport, width, height);
+
+  viewport.minZoom =
+    getProfessionalPaymentBasinMinZoom(
+      baseProjection,
+      payload,
+      width
+    );
+
+  clampProfessionalPaymentBasinViewport(
+    viewport,
+    width,
+    height
+  );
 
   const getProjection = () => buildProfessionalPaymentBasinViewportProjection(
     baseProjection,
@@ -24749,6 +25464,9 @@ function renderProfessionalPaymentBasinMapCanvas(payload = {}) {
     }
 
     viewport.isDragging = true;
+    viewport.hasDragged = false;
+    viewport.pointerDownX = event.clientX;
+    viewport.pointerDownY = event.clientY;
     viewport.lastX = event.clientX;
     viewport.lastY = event.clientY;
     canvas.style.cursor = "grabbing";
@@ -24765,6 +25483,15 @@ function renderProfessionalPaymentBasinMapCanvas(payload = {}) {
     const mouseY = event.clientY - rect.top;
 
     if (viewport.isDragging) {
+      const dragDistance = Math.hypot(
+        event.clientX - viewport.pointerDownX,
+        event.clientY - viewport.pointerDownY
+      );
+
+      if (dragDistance > 4) {
+        viewport.hasDragged = true;
+      }
+
       viewport.offsetX += event.clientX - viewport.lastX;
       viewport.offsetY += event.clientY - viewport.lastY;
       viewport.lastX = event.clientX;
@@ -24788,7 +25515,17 @@ function renderProfessionalPaymentBasinMapCanvas(payload = {}) {
     );
 
     if (!visual) {
-      canvas.style.cursor = "grab";
+      const territoryHit =
+        findProfessionalPaymentBasinTerritoryAtPoint(
+          getProjection(),
+          payload,
+          mouseX,
+          mouseY
+        );
+
+      canvas.style.cursor =
+        territoryHit ? "pointer" : "grab";
+
       hideProfessionalPaymentBasinTooltip(tooltip);
       return;
     }
@@ -24816,11 +25553,53 @@ function renderProfessionalPaymentBasinMapCanvas(payload = {}) {
     }
   };
 
-  canvas.onpointerup = stopDrag;
-  canvas.onpointercancel = stopDrag;
+  canvas.onpointerup = event => {
+    const wasDragging =
+      Boolean(viewport.hasDragged);
+
+    const rect =
+      canvas.getBoundingClientRect();
+
+    const mouseX =
+      event.clientX - rect.left;
+
+    const mouseY =
+      event.clientY - rect.top;
+
+    stopDrag(event);
+
+    if (!wasDragging) {
+      const territoryHit =
+        findProfessionalPaymentBasinTerritoryAtPoint(
+          getProjection(),
+          payload,
+          mouseX,
+          mouseY
+        );
+
+      if (territoryHit) {
+        viewport.selectedTerritoryKey = (
+          viewport.selectedTerritoryKey
+          === territoryHit.key
+            ? null
+            : territoryHit.key
+        );
+      } else {
+        viewport.selectedTerritoryKey = null;
+      }
+    }
+
+    viewport.hasDragged = false;
+  };
+
+  canvas.onpointercancel = event => {
+    viewport.hasDragged = true;
+    stopDrag(event);
+  };
 
   canvas.onmouseleave = event => {
     stopDrag(event);
+    viewport.hasDragged = false;
     hideProfessionalPaymentBasinTooltip(tooltip);
   };
 

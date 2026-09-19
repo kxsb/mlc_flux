@@ -314,3 +314,229 @@ def init_professional_enrichment_db():
 
     conn.commit()
     conn.close()
+
+
+def init_geography_db():
+    """
+    Initialise le modèle géographique interne neutre de MLCFlux.
+
+    Deux niveaux sont séparés :
+
+    - geographic_areas :
+      référentiel réutilisable des territoires, zones et géométries ;
+
+    - actor_geography :
+      localisation canonique résolue d'un acteur MLCFlux.
+
+    Les tables sources propres à un provider ne doivent pas être
+    interrogées par les analytics ou le frontend. La résolution
+    géographique constitue la frontière entre les données provider
+    et ce modèle interne.
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+
+    # -------------------------------------------------------------
+    # Référentiel géographique
+    # -------------------------------------------------------------
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS geographic_areas (
+            area_id TEXT PRIMARY KEY,
+
+            area_type TEXT NOT NULL,
+            country_code TEXT,
+            area_code TEXT,
+
+            name TEXT,
+            short_name TEXT,
+
+            parent_area_id TEXT,
+
+            latitude REAL,
+            longitude REAL,
+
+            geometry_kind TEXT,
+            geometry_geojson TEXT,
+
+            source_provider TEXT NOT NULL,
+            source_record_id TEXT,
+            source_updated_at TEXT,
+
+            metadata_json TEXT,
+
+            fetched_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+
+            FOREIGN KEY (parent_area_id)
+                REFERENCES geographic_areas(area_id)
+                ON DELETE SET NULL,
+
+            CHECK (
+                latitude IS NULL
+                OR (
+                    latitude >= -90
+                    AND latitude <= 90
+                )
+            ),
+
+            CHECK (
+                longitude IS NULL
+                OR (
+                    longitude >= -180
+                    AND longitude <= 180
+                )
+            ),
+
+            CHECK (
+                (
+                    latitude IS NULL
+                    AND longitude IS NULL
+                )
+                OR
+                (
+                    latitude IS NOT NULL
+                    AND longitude IS NOT NULL
+                )
+            )
+        )
+    """)
+
+    cur.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS
+        idx_geographic_areas_natural_identity
+        ON geographic_areas (
+            country_code,
+            area_type,
+            area_code
+        )
+        WHERE
+            area_code IS NOT NULL
+            AND TRIM(area_code) <> ''
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS
+        idx_geographic_areas_type
+        ON geographic_areas (area_type)
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS
+        idx_geographic_areas_parent
+        ON geographic_areas (parent_area_id)
+    """)
+
+    # -------------------------------------------------------------
+    # Géographie canonique des acteurs
+    # -------------------------------------------------------------
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS actor_geography (
+            actor_ref TEXT PRIMARY KEY,
+            actor_family TEXT NOT NULL,
+
+            mlc_territory_area_id TEXT,
+            postal_area_id TEXT,
+            commune_area_id TEXT,
+
+            street TEXT,
+            postal_code TEXT,
+            city TEXT,
+
+            latitude REAL,
+            longitude REAL,
+
+            precision_level TEXT NOT NULL,
+            confidence_level TEXT NOT NULL,
+            resolution_method TEXT NOT NULL,
+
+            resolution_sources_json TEXT,
+            resolution_trace_json TEXT,
+
+            resolved_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+
+            FOREIGN KEY (mlc_territory_area_id)
+                REFERENCES geographic_areas(area_id)
+                ON DELETE SET NULL,
+
+            FOREIGN KEY (postal_area_id)
+                REFERENCES geographic_areas(area_id)
+                ON DELETE SET NULL,
+
+            FOREIGN KEY (commune_area_id)
+                REFERENCES geographic_areas(area_id)
+                ON DELETE SET NULL,
+
+            CHECK (
+                latitude IS NULL
+                OR (
+                    latitude >= -90
+                    AND latitude <= 90
+                )
+            ),
+
+            CHECK (
+                longitude IS NULL
+                OR (
+                    longitude >= -180
+                    AND longitude <= 180
+                )
+            ),
+
+            CHECK (
+                (
+                    latitude IS NULL
+                    AND longitude IS NULL
+                )
+                OR
+                (
+                    latitude IS NOT NULL
+                    AND longitude IS NOT NULL
+                )
+            )
+        )
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS
+        idx_actor_geography_family
+        ON actor_geography (actor_family)
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS
+        idx_actor_geography_mlc_territory
+        ON actor_geography (mlc_territory_area_id)
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS
+        idx_actor_geography_postal_area
+        ON actor_geography (postal_area_id)
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS
+        idx_actor_geography_commune_area
+        ON actor_geography (commune_area_id)
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS
+        idx_actor_geography_postal_code
+        ON actor_geography (postal_code)
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS
+        idx_actor_geography_precision
+        ON actor_geography (
+            precision_level,
+            confidence_level
+        )
+    """)
+
+    conn.commit()
+    conn.close()

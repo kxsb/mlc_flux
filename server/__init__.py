@@ -13,11 +13,16 @@ from server.routes.info_content import info_content_bp
 from server.routes.monetary_indicators import monetary_indicators_bp
 from server.routes.individual_balances import individual_balances_bp
 from server.routes.professional_detail_dynamics import professional_detail_dynamics_bp
+from server.routes.professional_payment_basin_map import professional_payment_basin_map_bp
 from server.routes.professional_reuse_prospects import professional_reuse_prospects_bp
 from server.routes.professional_activity import professional_activity_bp
 from server.routes.professional_economic_registry import professional_economic_registry_bp
 from server.routes.current_mlc import current_mlc_bp
-from server.database import init_db, init_professional_enrichment_db
+from server.database import (
+    init_db,
+    init_professional_enrichment_db,
+    init_geography_db,
+)
 
 def create_app():
     app = Flask(
@@ -34,6 +39,7 @@ def create_app():
     # Idempotent : CREATE TABLE IF NOT EXISTS ne modifie pas une base déjà initialisée.
     init_db()
     init_professional_enrichment_db()
+    init_geography_db()
     init_control_db()
 
     app.register_blueprint(health_bp)
@@ -45,6 +51,7 @@ def create_app():
     app.register_blueprint(monetary_indicators_bp)
     app.register_blueprint(individual_balances_bp)
     app.register_blueprint(professional_detail_dynamics_bp)
+    app.register_blueprint(professional_payment_basin_map_bp)
     app.register_blueprint(professional_reuse_prospects_bp)
     app.register_blueprint(professional_activity_bp)
     app.register_blueprint(professional_economic_registry_bp)

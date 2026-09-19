@@ -5,7 +5,7 @@ from server.routes.current_mlc import current_mlc
 
 def test_route_count_characterization():
     # Baseline LKVLT-LITE après CLEAN002A.
-    assert len(list(app.url_map.iter_rules())) == 56
+    assert len(list(app.url_map.iter_rules())) == 57
 
 
 def test_administration_backend_routes_are_removed():
@@ -199,14 +199,24 @@ def test_monetary_indicators_query_cannot_switch_mlc(
 
 
 
-def test_legacy_payment_basin_backend_is_removed():
+def test_neutral_payment_basin_backend_is_restored():
     import importlib.util
+
+    routes = {
+        str(rule)
+        for rule in app.url_map.iter_rules()
+    }
 
     assert (
         importlib.util.find_spec(
             "server.services.professional_payment_basin_map"
         )
-        is None
+        is not None
+    )
+
+    assert (
+        "/api/pro/<professional_ref>/payment-basin-map"
+        in routes
     )
 
 def test_ticket_routes_are_removed():

@@ -2344,3 +2344,22 @@ Les caches et indicateurs dérivés sont ensuite reconstruits par MLCFlux.
 Un futur adaptateur Cyclos, Kohinos ou autre devra produire le même modèle interne.
 
 Les différences de provider doivent être absorbées dans `server/adapters/<provider>/` et ne doivent pas réapparaître dans les analytics ou le frontend.
+
+
+## 11. Modèle géographique GEO001
+
+La géographie possède désormais un modèle interne dédié :
+
+- `geographic_areas` : référentiel des territoires, centroïdes
+  et géométries ;
+- `actor_geography` : géographie canonique résolue des acteurs.
+
+Ces deux tables sont indépendantes du provider.
+
+Les champs historiques `street`, `zip`, `city`, `latitude` et
+`longitude` de `professional_enrichment` restent disponibles
+pendant la transition, mais ne constituent plus l'architecture
+géographique cible.
+
+Le contrat détaillé est documenté dans
+`docs/architecture/GEO001-GEOGRAPHY-MODEL.md`.
