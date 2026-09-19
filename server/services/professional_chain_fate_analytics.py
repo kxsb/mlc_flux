@@ -10,6 +10,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from server.mlc_context import get_default_mlc_id
+
 from server.analytics import (
     fetch_transactions,
     _actor_flow_family,
@@ -24,11 +26,7 @@ SERVER_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = SERVER_DIR / "data"
 
 def _active_mlc_id() -> str:
-    return (
-        os.getenv("MLCFLUX_ACTIVE_MLC_ID")
-        or os.getenv("MLCFLUX_DEFAULT_MLC_ID")
-        or "gonette"
-    ).strip()
+    return get_default_mlc_id()
 
 
 def _summary_path() -> Path:
@@ -83,7 +81,7 @@ def _row_sort_key(row: dict) -> tuple:
     return (
         _parse_dt(row.get("date")),
         str(row.get("transaction_number") or ""),
-        str(row.get("cyclos_id") or ""),
+        str(row.get("external_transaction_id") or ""),
         str(row.get("id") or ""),
     )
 
@@ -383,7 +381,7 @@ def _run_model(
     events.sort(key=lambda item: (
         item["date"],
         str(item["row"].get("transaction_number") or ""),
-        str(item["row"].get("cyclos_id") or ""),
+        str(item["row"].get("external_transaction_id") or ""),
     ))
 
     event_counts = Counter(event["kind"] for event in events)

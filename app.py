@@ -3,15 +3,6 @@ from pathlib import Path
 from flask import jsonify, redirect, render_template
 
 from server import create_app
-from server.data_control_registry import (
-    STATUS_META as DATA_CONTROL_STATUS_META,
-    get_data_control_rows,
-    get_data_control_summary,
-)
-from server.data_control_raw import (
-    available_raw_keys,
-    fetch_raw_preview,
-)
 from server.services.monetary_indicators_adaptive import (
     get_adaptive_monetary_indicators,
 )
@@ -57,49 +48,13 @@ def transactions_live():
     return render_template("transactions_live.html")
 
 
-@app.route("/data-control-dev")
-def data_control_dev():
-    return render_template(
-        "data_control_dev.html",
-        rows=get_data_control_rows(),
-        summary=get_data_control_summary(),
-        status_meta=DATA_CONTROL_STATUS_META,
-        raw_keys=available_raw_keys(),
-    )
-
-
-@app.route("/api/dev/data-control/raw/<key>")
-def api_data_control_raw(key):
-    if key not in available_raw_keys():
-        return jsonify({
-            "available": False,
-            "error": "Source PostgreSQL brute non branchée pour cette donnée.",
-        }), 404
-
-    try:
-        result = fetch_raw_preview(key)
-    except Exception:
-        app.logger.exception(
-            "DATACTRL002 raw preview failed for %s",
-            key,
-        )
-        return jsonify({
-            "available": False,
-            "error": "Lecture PostgreSQL impossible.",
-        }), 503
-
-    result["available"] = True
-    return jsonify(result)
-
-
 @app.route("/api/monetary-indicators")
 def api_monetary_indicators():
     """
-    Indicateurs adaptatifs de masse monétaire / garantie.
+    Indicateurs de masse monétaire / garantie.
 
-    Contrat commun multi-MLC :
-    - Gonette : source Odoo comptable si disponible.
-    - Graine : source Cyclos technique cible, proxy par flux en attendant.
+    Les données sont lues depuis le modèle monétaire interne MLCFlux,
+    indépendamment du provider qui les a alimentées.
     """
     from server.mlc_context import get_default_mlc_id
 

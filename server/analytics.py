@@ -5,6 +5,7 @@ from datetime import datetime
 from math import log1p
 
 from server.database import get_connection
+from server.mlc_context import get_default_mlc_id
 
 
 def _is_date_only(value):
@@ -587,7 +588,7 @@ def compute_global_stats(start=None, end=None, year=None, include_transactions=F
 
 
 def _load_profile_operator_professional_refs():
-    mlc_id = os.environ.get("MLCFLUX_DEFAULT_MLC_ID") or "gonette"
+    mlc_id = get_default_mlc_id()
     profile_path = Path("server/data/mlc_profiles") / f"{mlc_id}.json"
 
     try:
@@ -604,11 +605,6 @@ def _load_profile_operator_professional_refs():
         for ref in source:
             ref = str(ref).strip()
             if ref and ref not in refs:
-                refs.append(ref)
-
-    if mlc_id == "gonette":
-        for ref in ["P0000", "P9999"]:
-            if ref not in refs:
                 refs.append(ref)
 
     return set(refs)
@@ -843,95 +839,70 @@ def compute_network_data(start=None, end=None, year=None, include_operators=Fals
         "edges": edges,
     }
 
-def _get_odoo_professional_enrichment_index(professional_refs):
+def _get_professional_enrichment_index(professional_refs):
     """
-    Retourne un index d'enrichissement professionnel.
+    Retourne l'index professionnel depuis le registre interne neutre.
 
-    Nom conservé pour compatibilité historique, mais la fonction lit désormais :
-    1. professional_enrichment — table générique multi-MLC ;
-    2. odoo_professional_enrichment — fallback historique Gonette/Odoo.
-
-    Les clés retournées restent compatibles avec les appels existants :
-    - odoo_name
-    - industry_name
-    - detailed_activity
-    - zip
+    Le nom de fonction historique est temporairement conservé pour éviter
+    de modifier tous les appelants dans cette étape.
     """
     refs = sorted({ref for ref in professional_refs if ref})
     if not refs:
         return {}
 
     conn = get_connection()
-    cur = conn.cursor()
 
-    values_clause = ", ".join(["(?)"] * len(refs))
+    try:
+        values_clause = ", ".join(["(?)"] * len(refs))
 
-    query = f"""
-        WITH requested(professional_ref) AS (
-            VALUES {values_clause}
-        )
-        SELECT
-            r.professional_ref AS professional_ref,
+        rows = conn.execute(
+            f"""
+            WITH requested(professional_ref) AS (
+                VALUES {values_clause}
+            )
+            SELECT
+                r.professional_ref,
 
-            COALESCE(
-                NULLIF(TRIM(pe.display_name), ''),
-                NULLIF(TRIM(oe.odoo_name), ''),
-                r.professional_ref
-            ) AS odoo_name,
+                COALESCE(
+                    NULLIF(TRIM(pe.display_name), ''),
+                    NULLIF(TRIM(pe.legal_name), '')
+                ) AS commercial_name,
 
-            COALESCE(
-                NULLIF(TRIM(pe.display_name), ''),
-                NULLIF(TRIM(oe.odoo_name), '')
-            ) AS commercial_name,
+                CASE
+                    WHEN pe.professional_ref IS NOT NULL THEN 1
+                    ELSE 0
+                END AS is_validated_professional,
 
-            CASE
-                WHEN pe.professional_ref IS NOT NULL THEN 1
-                WHEN oe.professional_ref IS NOT NULL THEN 1
-                ELSE 0
-            END AS is_validated_professional,
+                CASE
+                    WHEN pe.professional_ref IS NOT NULL
+                    THEN 'professional_enrichment'
+                    ELSE 'unresolved'
+                END AS enrichment_status,
 
-            CASE
-                WHEN pe.professional_ref IS NOT NULL THEN 'professional_enrichment'
-                WHEN oe.professional_ref IS NOT NULL THEN 'odoo_professional_enrichment'
-                ELSE 'unresolved'
-            END AS enrichment_status,
+                NULLIF(TRIM(pe.industry_name), '') AS industry_name,
 
-            COALESCE(
-                NULLIF(TRIM(pe.industry_name), ''),
-                NULLIF(TRIM(oe.industry_name), '')
-            ) AS industry_name,
+                COALESCE(
+                    NULLIF(TRIM(pe.detailed_activity), ''),
+                    NULLIF(TRIM(pe.short_description), '')
+                ) AS detailed_activity,
 
-            COALESCE(
-                NULLIF(TRIM(pe.detailed_activity), ''),
-                NULLIF(TRIM(oe.detailed_activity), ''),
-                NULLIF(TRIM(pe.short_description), '')
-            ) AS detailed_activity,
+                NULLIF(TRIM(pe.zip), '') AS postal_code
 
-            COALESCE(
-                NULLIF(TRIM(pe.zip), ''),
-                NULLIF(TRIM(oe.zip), ''),
-                NULLIF(TRIM(oe.cyclos_zip), '')
-            ) AS postal_code
+            FROM requested r
+            LEFT JOIN professional_enrichment pe
+              ON pe.professional_ref = r.professional_ref
+            """,
+            refs,
+        ).fetchall()
 
-        FROM requested r
-        LEFT JOIN professional_enrichment pe
-          ON pe.professional_ref = r.professional_ref
-         AND (
-              pe.cyclos_group_set LIKE 'B %'
-              OR LOWER(COALESCE(pe.cyclos_group, '')) LIKE '%prestataire%'
-              OR pe.actor_type_internal IN ('MonComptePro', 'compteProBillets')
-         )
-        LEFT JOIN odoo_professional_enrichment oe
-          ON oe.professional_ref = r.professional_ref
-    """
+        return {
+            row["professional_ref"]: dict(row)
+            for row in rows
+        }
 
-    rows = cur.execute(query, refs).fetchall()
-    conn.close()
+    finally:
+        conn.close()
 
-    return {
-        row["professional_ref"]: dict(row)
-        for row in rows
-    }
 
 def _format_professional_directory_label(professional_ref, observed_labels, enrichment):
     observed_label = str(observed_labels.get(professional_ref) or "").strip()
@@ -946,10 +917,6 @@ def _format_professional_directory_label(professional_ref, observed_labels, enri
     commercial_name = str((enrichment or {}).get("commercial_name") or "").strip()
     if commercial_name and commercial_name != professional_ref:
         return f"{professional_ref} - {commercial_name}"
-
-    odoo_name = str((enrichment or {}).get("odoo_name") or "").strip()
-    if odoo_name and odoo_name != professional_ref:
-        return f"{professional_ref} - {odoo_name}"
 
     return f"{professional_ref} - professionnel non enrichi"
 
@@ -1024,7 +991,7 @@ def compute_professionals_ranking(start=None, end=None, year=None):
         if from_is_pro and to_is_reconversion:
             reconverted[from_ref] = reconverted.get(from_ref, 0.0) + amount
 
-    enrichment_by_ref = _get_odoo_professional_enrichment_index(pros)
+    enrichment_by_ref = _get_professional_enrichment_index(pros)
     ranking = []
     for pro in pros:
         enrichment = enrichment_by_ref.get(pro, {})
@@ -1084,14 +1051,10 @@ def _get_professional_detail_enrichment(professional_ref):
     """
     Retourne un enrichissement professionnel normalisé pour une fiche Pxxxx.
 
-    Source prioritaire multi-MLC :
+    Source :
     - professional_enrichment
 
-    Fallback historique :
-    - odoo_professional_enrichment
-
-    Le format conserve les clés historiques attendues côté frontend
-    afin de ne pas devoir modifier immédiatement app.js.
+    Le format expose uniquement le registre professionnel interne.
     """
     ref = str(professional_ref or "").strip()
     if not ref:
@@ -1117,11 +1080,6 @@ def _get_professional_detail_enrichment(professional_ref):
                 fetched_at
             FROM professional_enrichment
             WHERE professional_ref = ?
-              AND (
-                    cyclos_group_set LIKE 'B %'
-                    OR LOWER(COALESCE(cyclos_group, '')) LIKE '%prestataire%'
-                    OR actor_type_internal IN ('MonComptePro', 'compteProBillets')
-              )
         """, (ref,)).fetchone()
     except Exception:
         row = None
@@ -1135,7 +1093,6 @@ def _get_professional_detail_enrichment(professional_ref):
 
         return {
             "professional_ref": ref,
-            "odoo_name": commercial_name,
             "commercial_name": commercial_name,
             "display_name": display_name,
             "legal_name": legal_name,
@@ -1153,17 +1110,7 @@ def _get_professional_detail_enrichment(professional_ref):
         }
 
     conn.close()
-
-    # Fallback historique Gonette/Odoo.
-    legacy = _get_odoo_professional_enrichment(ref)
-    if legacy is None:
-        return None
-
-    legacy = dict(legacy)
-    legacy["commercial_name"] = legacy.get("odoo_name") or ref
-    legacy["display_name"] = legacy.get("odoo_name") or ref
-    legacy["enrichment_source"] = "odoo_professional_enrichment"
-    return legacy
+    return None
 
 
 def _get_professional_display_label_from_enrichment(professional_ref, enrichment):
@@ -1174,7 +1121,7 @@ def _get_professional_display_label_from_enrichment(professional_ref, enrichment
     if not enrichment:
         return ref
 
-    for key in ("commercial_name", "display_name", "odoo_name", "legal_name"):
+    for key in ("commercial_name", "display_name", "legal_name"):
         value = str(enrichment.get(key) or "").strip()
         if value and value != ref:
             return f"{ref} - {value}"
@@ -1227,66 +1174,90 @@ def _format_professional_actor_label_for_detail(label, identity_index):
 
 
 
-def _get_odoo_professional_enrichment(professional_ref):
+def _get_professional_enrichment(professional_ref):
     """
-    Retourne les métadonnées Odoo stockées en SQLite pour un professionnel Pxxxx.
+    Retourne l'enrichissement professionnel interne.
 
-    Si aucune correspondance automatique n'existe dans le snapshot Odoo,
-    retourne None.
+    Le nom de fonction historique est temporairement conservé pour
+    compatibilité des appelants.
     """
+    import json
+
     conn = get_connection()
-    cur = conn.cursor()
 
-    row = cur.execute("""
-        SELECT
-            professional_ref,
-            odoo_partner_id,
-            odoo_name,
-            industry_id,
-            industry_name,
-            detailed_activity,
-            website_description_html,
-            keywords,
-            naf,
-            street,
-            zip,
-            city,
-            latitude,
-            longitude,
-            date_localization,
-            membership_state,
-            is_former_member,
-            fetched_at
-        FROM odoo_professional_enrichment
-        WHERE professional_ref = ?
-    """, (professional_ref,)).fetchone()
+    try:
+        row = conn.execute("""
+            SELECT
+                professional_ref,
+                external_professional_ref,
+                display_name,
+                legal_name,
+                industry_name,
+                detailed_activity,
+                keywords,
+                street,
+                zip,
+                city,
+                latitude,
+                longitude,
+                secondary_industries_json,
+                raw_safe_json,
+                fetched_at
+            FROM professional_enrichment
+            WHERE professional_ref = ?
+        """, (professional_ref,)).fetchone()
 
-    if row is None:
-        conn.close()
-        return None
+        if row is None:
+            return None
 
-    secondary_rows = cur.execute("""
-        SELECT
-            industry_id,
-            industry_name
-        FROM odoo_professional_secondary_industries
-        WHERE professional_ref = ?
-        ORDER BY industry_name ASC, industry_id ASC
-    """, (professional_ref,)).fetchall()
+        data = dict(row)
 
-    conn.close()
+        try:
+            raw = json.loads(data.get("raw_safe_json") or "{}")
+        except Exception:
+            raw = {}
 
-    enrichment = dict(row)
-    enrichment["is_former_member"] = bool(enrichment.get("is_former_member"))
-    enrichment["secondary_industries"] = [
-        {
-            "industry_id": secondary["industry_id"],
-            "industry_name": secondary["industry_name"],
+        try:
+            secondary = json.loads(
+                data.get("secondary_industries_json") or "[]"
+            )
+        except Exception:
+            secondary = []
+
+        if not isinstance(secondary, list):
+            secondary = []
+
+        return {
+            "professional_ref": data["professional_ref"],
+            "display_name": (
+                data.get("display_name")
+                or data.get("legal_name")
+                or data["professional_ref"]
+            ),
+            "industry_id": raw.get("industry_id"),
+            "industry_name": data.get("industry_name"),
+            "detailed_activity": data.get("detailed_activity"),
+            "website_description_html": raw.get(
+                "website_description_html"
+            ),
+            "keywords": data.get("keywords"),
+            "naf": raw.get("naf"),
+            "street": data.get("street"),
+            "zip": data.get("zip"),
+            "city": data.get("city"),
+            "latitude": data.get("latitude"),
+            "longitude": data.get("longitude"),
+            "date_localization": raw.get("date_localization"),
+            "membership_state": raw.get("membership_state"),
+            "is_former_member": bool(
+                raw.get("is_former_member")
+            ),
+            "fetched_at": data.get("fetched_at"),
+            "secondary_industries": secondary,
         }
-        for secondary in secondary_rows
-    ]
 
-    return enrichment
+    finally:
+        conn.close()
 
 
 def get_professional_detail(num_professionnel, start=None, end=None, year=None):
@@ -1400,8 +1371,6 @@ def get_professional_detail(num_professionnel, start=None, end=None, year=None):
         "fullname": fullname,
         "stats": stats,
         "transactions": transactions,
-        # Clé historique conservée côté frontend.
-        "odoo_enrichment": professional_enrichment,
         "professional_enrichment": professional_enrichment,
     }
 
@@ -1574,174 +1543,6 @@ def _compute_map_lorenz_relief_scores(professionals):
     return professionals
 
 
-def get_professionals_map_data(start=None, end=None, year=None):
-    """
-    Retourne les professionnels cartographiables, leur activité et les
-    indicateurs de qualité géographique.
-
-    Source prioritaire multi-MLC :
-    - professional_enrichment.
-
-    Fallback historique :
-    - odoo_professional_enrichment.
-
-    Pour les instances sans Odoo, une coordonnée Cyclos/profil professionnel
-    disponible dans professional_enrichment suffit à rendre le professionnel
-    cartographiable.
-    """
-    conn = get_connection()
-    cur = conn.cursor()
-
-    rows = cur.execute("""
-        WITH generic AS (
-            SELECT
-                professional_ref,
-                NULLIF(TRIM(display_name), '') AS name,
-                NULLIF(TRIM(industry_name), '') AS industry_name,
-                COALESCE(
-                    NULLIF(TRIM(detailed_activity), ''),
-                    NULLIF(TRIM(short_description), '')
-                ) AS detailed_activity,
-                NULLIF(TRIM(zip), '') AS zip,
-                NULLIF(TRIM(city), '') AS city,
-                latitude,
-                longitude,
-                CASE
-                    WHEN latitude IS NOT NULL AND longitude IS NOT NULL
-                    THEN 'confirmed'
-                    ELSE 'no_coordinates'
-                END AS geo_match_status,
-                'professional_enrichment' AS enrichment_source
-            FROM professional_enrichment
-            WHERE (
-                cyclos_group_set LIKE 'B %'
-                OR LOWER(COALESCE(cyclos_group, '')) LIKE '%prestataire%'
-                OR actor_type_internal IN ('MonComptePro', 'compteProBillets')
-            )
-        ),
-        odoo AS (
-            SELECT
-                professional_ref,
-                NULLIF(TRIM(odoo_name), '') AS name,
-                NULLIF(TRIM(industry_name), '') AS industry_name,
-                NULLIF(TRIM(detailed_activity), '') AS detailed_activity,
-                NULLIF(TRIM(COALESCE(cyclos_zip, zip)), '') AS zip,
-                NULLIF(TRIM(COALESCE(cyclos_city, city)), '') AS city,
-                COALESCE(cyclos_latitude, latitude) AS latitude,
-                COALESCE(cyclos_longitude, longitude) AS longitude,
-                COALESCE(NULLIF(TRIM(geo_match_status), ''), 'unknown') AS geo_match_status,
-                'odoo_professional_enrichment' AS enrichment_source
-            FROM odoo_professional_enrichment
-            WHERE professional_ref NOT IN (
-                SELECT professional_ref FROM generic
-            )
-        )
-        SELECT *
-        FROM generic
-
-        UNION ALL
-
-        SELECT *
-        FROM odoo
-    """).fetchall()
-
-    conn.close()
-
-    status_counts = {}
-    professionals = []
-    total_enriched = 0
-
-    for row in rows:
-        professional_ref = str(row["professional_ref"] or "").strip()
-        if not professional_ref:
-            continue
-
-        total_enriched += 1
-
-        latitude = row["latitude"]
-        longitude = row["longitude"]
-
-        has_coordinates = (
-            latitude is not None
-            and longitude is not None
-        )
-
-        status = str(row["geo_match_status"] or "unknown").strip() or "unknown"
-        status_counts[status] = status_counts.get(status, 0) + 1
-
-        if not has_coordinates:
-            continue
-
-        try:
-            latitude = float(latitude)
-            longitude = float(longitude)
-        except (TypeError, ValueError):
-            status_counts["invalid_coordinates"] = status_counts.get("invalid_coordinates", 0) + 1
-            continue
-
-        commercial_name = str(row["name"] or "").strip() or professional_ref
-        display_label = (
-            f"{professional_ref} - {commercial_name}"
-            if commercial_name and commercial_name != professional_ref
-            else professional_ref
-        )
-        zip_code = str(row["zip"] or "").strip()
-        city = str(row["city"] or "").strip()
-        industry_name = str(row["industry_name"] or "").strip()
-        detailed_activity = str(row["detailed_activity"] or "").strip()
-
-        professionals.append({
-            "professional_ref": professional_ref,
-            "ref": professional_ref,
-            "id": professional_ref,
-            "name": display_label,
-            "display_name": display_label,
-            "commercial_name": commercial_name,
-            "actor_display_label": display_label,
-            "odoo_name": display_label,
-            "industry_name": industry_name,
-            "detailed_activity": detailed_activity,
-            "zip": zip_code,
-            "postal_code": zip_code,
-            "city": city,
-            "latitude": latitude,
-            "longitude": longitude,
-            "geo_match_status": status,
-            "enrichment_source": row["enrichment_source"],
-        })
-
-    transaction_rows = fetch_transactions(start=start, end=end, year=year)
-
-    professionals = _compute_map_activity_scores(professionals, transaction_rows)
-    professionals = _compute_map_lorenz_relief_scores(professionals)
-
-    return {
-        "summary": {
-            "total_enriched": total_enriched,
-            "cartographiable_count": len(professionals),
-            "confirmed": len(professionals),
-            "mismatch": status_counts.get("mismatch", 0),
-            "no_odoo_coordinates": status_counts.get("no_odoo_coordinates", 0),
-            "no_cyclos_coordinates": status_counts.get("no_cyclos_coordinates", 0),
-            "no_cyclos_address": status_counts.get("no_cyclos_address", 0),
-            "no_coordinates": status_counts.get("no_coordinates", 0),
-            "invalid_coordinates": status_counts.get("invalid_coordinates", 0),
-            "cyclos_error": status_counts.get("cyclos_error", 0),
-            "unknown": status_counts.get("unknown", 0),
-            "generic_coordinates": sum(
-                1 for item in professionals
-                if item.get("enrichment_source") == "professional_enrichment"
-            ),
-            "relief_metric": "lorenz_total_flow_volume",
-            "period": {
-                "start": start,
-                "end": end,
-                "year": year,
-            },
-        },
-        "professionals": professionals,
-    }
-
 
 def compute_zip_territorial_activity(start=None, end=None, year=None):
     """
@@ -1751,7 +1552,7 @@ def compute_zip_territorial_activity(start=None, end=None, year=None):
     - professional_enrichment, table générique multi-MLC.
 
     Fallback :
-    - odoo_professional_enrichment, historique Gonette/Odoo.
+    - professional_enrichment, registre interne.
 
     Périmètre d'activité :
     - reçus : U/P → P ;
@@ -1764,37 +1565,13 @@ def compute_zip_territorial_activity(start=None, end=None, year=None):
     cur = conn.cursor()
 
     enrichment_rows = cur.execute("""
-        WITH generic AS (
-            SELECT
-                professional_ref,
-                NULLIF(TRIM(zip), '') AS zip,
-                NULLIF(TRIM(city), '') AS city,
-                latitude,
-                longitude
-            FROM professional_enrichment
-            WHERE (
-                cyclos_group_set LIKE 'B %'
-                OR LOWER(COALESCE(cyclos_group, '')) LIKE '%prestataire%'
-                OR actor_type_internal IN ('MonComptePro', 'compteProBillets')
-            )
-        ),
-        odoo AS (
-            SELECT
-                professional_ref,
-                NULLIF(TRIM(COALESCE(cyclos_zip, zip)), '') AS zip,
-                NULLIF(TRIM(COALESCE(cyclos_city, city)), '') AS city,
-                COALESCE(cyclos_latitude, latitude) AS latitude,
-                COALESCE(cyclos_longitude, longitude) AS longitude
-            FROM odoo_professional_enrichment
-            WHERE professional_ref NOT IN (
-                SELECT professional_ref FROM generic
-            )
-        )
-        SELECT professional_ref, zip, city, latitude, longitude
-        FROM generic
-        UNION ALL
-        SELECT professional_ref, zip, city, latitude, longitude
-        FROM odoo
+        SELECT
+            professional_ref,
+            NULLIF(TRIM(zip), '') AS zip,
+            NULLIF(TRIM(city), '') AS city,
+            latitude,
+            longitude
+        FROM professional_enrichment
     """).fetchall()
 
     conn.close()
@@ -2190,20 +1967,14 @@ def _load_sector_activity_professional_display_index(professional_refs):
                     COALESCE(
                         NULLIF(TRIM(pe.display_name), ''),
                         NULLIF(TRIM(pe.legal_name), ''),
-                        NULLIF(TRIM(oe.odoo_name), ''),
                         NULLIF(TRIM(er.display_name_snapshot), ''),
                         NULLIF(TRIM(er.legal_name_snapshot), ''),
                         r.professional_ref
                     ) AS display_name,
-                    COALESCE(
-                        NULLIF(TRIM(pe.industry_name), ''),
-                        NULLIF(TRIM(oe.industry_name), '')
-                    ) AS internal_sector
+                    NULLIF(TRIM(pe.industry_name), '') AS internal_sector
                 FROM requested r
                 LEFT JOIN professional_enrichment pe
                   ON pe.professional_ref = r.professional_ref
-                LEFT JOIN odoo_professional_enrichment oe
-                  ON oe.professional_ref = r.professional_ref
                 LEFT JOIN professional_economic_registry er
                   ON er.professional_ref = r.professional_ref
             """
@@ -2217,18 +1988,12 @@ def _load_sector_activity_professional_display_index(professional_refs):
                     COALESCE(
                         NULLIF(TRIM(pe.display_name), ''),
                         NULLIF(TRIM(pe.legal_name), ''),
-                        NULLIF(TRIM(oe.odoo_name), ''),
                         r.professional_ref
                     ) AS display_name,
-                    COALESCE(
-                        NULLIF(TRIM(pe.industry_name), ''),
-                        NULLIF(TRIM(oe.industry_name), '')
-                    ) AS internal_sector
+                    NULLIF(TRIM(pe.industry_name), '') AS internal_sector
                 FROM requested r
                 LEFT JOIN professional_enrichment pe
                   ON pe.professional_ref = r.professional_ref
-                LEFT JOIN odoo_professional_enrichment oe
-                  ON oe.professional_ref = r.professional_ref
             """
 
         rows = conn.execute(query, refs).fetchall()
@@ -2520,31 +2285,10 @@ def compute_sector_activity(start=None, end=None, year=None, sector_mode="intern
         cur = conn.cursor()
 
         enrichment_rows = cur.execute("""
-            WITH generic AS (
-                SELECT
-                    professional_ref,
-                    NULLIF(TRIM(industry_name), '') AS industry_name
-                FROM professional_enrichment
-                WHERE (
-                    cyclos_group_set LIKE 'B %'
-                    OR LOWER(COALESCE(cyclos_group, '')) LIKE '%prestataire%'
-                    OR actor_type_internal IN ('MonComptePro', 'compteProBillets')
-                )
-            ),
-            odoo AS (
-                SELECT
-                    professional_ref,
-                    NULLIF(TRIM(industry_name), '') AS industry_name
-                FROM odoo_professional_enrichment
-                WHERE professional_ref NOT IN (
-                    SELECT professional_ref FROM generic
-                )
-            )
-            SELECT professional_ref, industry_name
-            FROM generic
-            UNION ALL
-            SELECT professional_ref, industry_name
-            FROM odoo
+            SELECT
+                professional_ref,
+                NULLIF(TRIM(industry_name), '') AS industry_name
+            FROM professional_enrichment
         """).fetchall()
 
         conn.close()

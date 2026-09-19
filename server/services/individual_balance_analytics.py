@@ -42,7 +42,7 @@ def _get_balance_bounds(cur) -> dict | None:
         SELECT
             MIN(balance_date) AS min_date,
             MAX(balance_date) AS max_date
-        FROM cyclos_individual_daily_balances
+        FROM individual_daily_balances
     """).fetchone()
 
     if row is None or row["min_date"] is None or row["max_date"] is None:
@@ -133,7 +133,7 @@ def _aggregate_snapshot_for_date(cur, snapshot_date: str) -> dict | None:
             AVG(CASE WHEN balance > 0 THEN balance END) AS average_balance_positive,
             MIN(balance) AS balance_min,
             MAX(balance) AS balance_max
-        FROM cyclos_individual_daily_balances
+        FROM individual_daily_balances
         WHERE balance_date = ?
         GROUP BY balance_date
     """, (snapshot_date,)).fetchone()
@@ -155,7 +155,7 @@ def get_individual_balance_status() -> dict:
             COUNT(DISTINCT balance_date) AS dates_count,
             MIN(balance_date) AS min_date,
             MAX(balance_date) AS max_date
-        FROM cyclos_individual_daily_balances
+        FROM individual_daily_balances
     """).fetchone()
 
     if (
@@ -235,7 +235,7 @@ def get_individual_balance_daily_series(
             AVG(CASE WHEN balance > 0 THEN balance END) AS average_balance_positive,
             MIN(balance) AS balance_min,
             MAX(balance) AS balance_max
-        FROM cyclos_individual_daily_balances
+        FROM individual_daily_balances
         WHERE balance_date BETWEEN ? AND ?
         GROUP BY balance_date
         ORDER BY balance_date ASC
@@ -390,7 +390,7 @@ def get_individual_balance_distribution(requested_date: date | None) -> dict:
             SELECT
                 COUNT(*) AS users_count,
                 COALESCE(SUM(balance), 0.0) AS balance_total
-            FROM cyclos_individual_daily_balances
+            FROM individual_daily_balances
             WHERE balance_date = ?
               AND {bucket["condition_sql"]}
         """, (effective_date,)).fetchone()
@@ -497,7 +497,7 @@ def get_individual_balance_period_summary(
 
     opening_reference_row = cur.execute("""
         SELECT MAX(balance_date) AS opening_date
-        FROM cyclos_individual_daily_balances
+        FROM individual_daily_balances
         WHERE balance_date < ?
     """, (period["effective_start"],)).fetchone()
 

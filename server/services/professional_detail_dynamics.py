@@ -88,7 +88,7 @@ def _resolve_effective_period(
         SELECT
           MIN(balance_date) AS min_balance_date,
           MAX(balance_date) AS max_balance_date
-        FROM cyclos_professional_daily_balances
+        FROM professional_daily_balances
         WHERE professional_ref = ?
         """,
         (professional_ref,),
@@ -151,14 +151,12 @@ def _professional_identity(
         """
         SELECT
           professional_ref,
-          odoo_name,
+          display_name,
           industry_name,
           detailed_activity,
           zip,
-          city,
-          cyclos_zip,
-          cyclos_city
-        FROM odoo_professional_enrichment
+          city
+        FROM professional_enrichment
         WHERE professional_ref = ?
         """,
         (professional_ref,),
@@ -174,12 +172,12 @@ def _professional_identity(
             "city": None,
         }
 
-    city = _clean_text(row["cyclos_city"]) or _clean_text(row["city"])
-    zip_code = _clean_text(row["cyclos_zip"]) or _clean_text(row["zip"])
+    city = _clean_text(row["city"])
+    zip_code = _clean_text(row["zip"])
 
     return {
         "professional_ref": professional_ref,
-        "name": _clean_text(row["odoo_name"]) or professional_ref,
+        "name": _clean_text(row["display_name"]) or professional_ref,
         "industry_name": _clean_text(row["industry_name"]),
         "detailed_activity": _clean_text(row["detailed_activity"]),
         "zip": zip_code,
@@ -255,15 +253,13 @@ def _b2b_direction_rows(
           g.volume,
           g.first_date,
           g.last_date,
-          e.odoo_name,
+          e.display_name,
           e.industry_name,
           e.detailed_activity,
           e.zip,
-          e.city,
-          e.cyclos_zip,
-          e.cyclos_city
+          e.city
         FROM grouped g
-        LEFT JOIN odoo_professional_enrichment e
+        LEFT JOIN professional_enrichment e
           ON e.professional_ref = g.counterparty_ref
         ORDER BY g.volume DESC, g.tx_count DESC, g.counterparty_ref ASC
     """
@@ -274,14 +270,14 @@ def _b2b_direction_rows(
 
     for row in rows:
         counterparty_ref = row["counterparty_ref"]
-        city = _clean_text(row["cyclos_city"]) or _clean_text(row["city"])
-        zip_code = _clean_text(row["cyclos_zip"]) or _clean_text(row["zip"])
-        odoo_name = _clean_text(row["odoo_name"])
+        city = _clean_text(row["city"])
+        zip_code = _clean_text(row["zip"])
+        display_name = _clean_text(row["display_name"])
 
         items.append(
             {
                 "professional_ref": counterparty_ref,
-                "name": odoo_name
+                "name": display_name
                 or _label_name_fallback(row["raw_label"], counterparty_ref),
                 "industry_name": _clean_text(row["industry_name"]),
                 "detailed_activity": _clean_text(row["detailed_activity"]),
@@ -647,7 +643,7 @@ def _build_balance_timeseries(
         SELECT
           balance_date,
           balance
-        FROM cyclos_professional_daily_balances
+        FROM professional_daily_balances
         WHERE {" AND ".join(where_parts)}
         ORDER BY balance_date ASC
         """,

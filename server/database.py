@@ -95,7 +95,7 @@ def init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS transactions (
             transaction_number TEXT PRIMARY KEY,
-            cyclos_id TEXT,
+            external_transaction_id TEXT,
             date TEXT NOT NULL,
             group_label TEXT,
             from_label TEXT,
@@ -106,9 +106,9 @@ def init_db():
     """)
 
     cur.execute("""
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_cyclos_id_unique
-        ON transactions (cyclos_id)
-        WHERE cyclos_id IS NOT NULL AND TRIM(cyclos_id) <> ''
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_external_transaction_id_unique
+        ON transactions (external_transaction_id)
+        WHERE external_transaction_id IS NOT NULL AND TRIM(external_transaction_id) <> ''
     """)
 
     # Optimise les analyses territoriales et de bassins de flux
@@ -125,286 +125,89 @@ def init_db():
         ON transactions (substr(from_label, 1, 5), substr(date, 1, 10))
     """)
 
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS transaction_semantics (
-            transaction_key TEXT PRIMARY KEY,
-            cyclos_id TEXT,
-            transaction_number TEXT,
-            date TEXT NOT NULL,
-            from_label TEXT,
-            to_label TEXT,
-            amount REAL,
-            type_label TEXT,
-            group_label TEXT,
-
-            from_actor_family TEXT NOT NULL DEFAULT 'unknown',
-            to_actor_family TEXT NOT NULL DEFAULT 'unknown',
-            from_account_medium TEXT NOT NULL DEFAULT 'unknown',
-            to_account_medium TEXT NOT NULL DEFAULT 'unknown',
-
-            operation_kind TEXT NOT NULL DEFAULT 'unknown',
-            monetary_circuit TEXT NOT NULL DEFAULT 'unknown',
-
-            is_economic_activity INTEGER NOT NULL DEFAULT 0,
-            is_monetary_supply INTEGER NOT NULL DEFAULT 0,
-            is_monetary_exit INTEGER NOT NULL DEFAULT 0,
-            is_paper_operation INTEGER NOT NULL DEFAULT 0,
-            is_bonus_operation INTEGER NOT NULL DEFAULT 0,
-            is_regularization INTEGER NOT NULL DEFAULT 0,
-
-            confidence TEXT NOT NULL DEFAULT 'low',
-            reason TEXT,
-            classifier_version TEXT NOT NULL,
-            computed_at TEXT NOT NULL
-        )
-    """)
 
     cur.execute("""
-        CREATE INDEX IF NOT EXISTS idx_transaction_semantics_cyclos_id
-        ON transaction_semantics (cyclos_id)
-    """)
-
-    cur.execute("""
-        CREATE INDEX IF NOT EXISTS idx_transaction_semantics_date
-        ON transaction_semantics (date)
-    """)
-
-    cur.execute("""
-        CREATE INDEX IF NOT EXISTS idx_transaction_semantics_operation_kind
-        ON transaction_semantics (operation_kind)
-    """)
-
-    cur.execute("""
-        CREATE INDEX IF NOT EXISTS idx_transaction_semantics_circuit
-        ON transaction_semantics (monetary_circuit)
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS sync_state (
-            sync_name TEXT PRIMARY KEY,
-            last_run_at TEXT,
-            last_status TEXT,
-            last_message TEXT
-        )
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS odoo_professional_enrichment (
-            professional_ref TEXT PRIMARY KEY,
-            odoo_partner_id INTEGER NOT NULL,
-            odoo_name TEXT NOT NULL,
-            industry_id INTEGER,
-            industry_name TEXT,
-            detailed_activity TEXT,
-            website_description_html TEXT,
-            keywords TEXT,
-            naf TEXT,
-            street TEXT,
-            zip TEXT,
-            city TEXT,
-            latitude REAL,
-            longitude REAL,
-            date_localization TEXT,
-            membership_state TEXT,
-            is_former_member INTEGER,
-            cyclos_address_id TEXT,
-            cyclos_address_line1 TEXT,
-            cyclos_zip TEXT,
-            cyclos_city TEXT,
-            cyclos_latitude REAL,
-            cyclos_longitude REAL,
-            geo_distance_meters REAL,
-            geo_match_status TEXT,
-            fetched_at TEXT NOT NULL
-        )
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS odoo_professional_secondary_industries (
-            professional_ref TEXT NOT NULL,
-            industry_id INTEGER NOT NULL,
-            industry_name TEXT NOT NULL,
-            PRIMARY KEY (professional_ref, industry_id)
-        )
-    """)
-
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS odoo_individual_enrichment (
-            pseudonym TEXT PRIMARY KEY,
-            odoo_match_status TEXT NOT NULL,
-            zip TEXT,
-            city TEXT,
-            latitude REAL,
-            longitude REAL,
-            membership_state TEXT,
-            is_former_member INTEGER,
-            has_zip INTEGER NOT NULL DEFAULT 0,
-            has_city INTEGER NOT NULL DEFAULT 0,
-            has_coordinates INTEGER NOT NULL DEFAULT 0,
-            fetched_at TEXT NOT NULL,
-            source TEXT NOT NULL DEFAULT 'odoo_jsonrpc_via_cyclos_numadherent'
-        )
-    """)
-
-    cur.execute("""
-        CREATE INDEX IF NOT EXISTS idx_odoo_individual_enrichment_match_status
-        ON odoo_individual_enrichment (odoo_match_status)
-    """)
-
-    cur.execute("""
-        CREATE INDEX IF NOT EXISTS idx_odoo_individual_enrichment_zip
-        ON odoo_individual_enrichment (zip)
-    """)
-
-    cur.execute("""
-        CREATE INDEX IF NOT EXISTS idx_odoo_individual_enrichment_city
-        ON odoo_individual_enrichment (city)
-    """)
-
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS cyclos_individual_daily_balances (
+        CREATE TABLE IF NOT EXISTS individual_daily_balances (
             pseudonym TEXT NOT NULL,
             balance_date TEXT NOT NULL,
             balance REAL NOT NULL,
             fetched_at TEXT NOT NULL,
-            source TEXT NOT NULL DEFAULT 'cyclos_balances_history_daily',
+            source TEXT NOT NULL,
             PRIMARY KEY (pseudonym, balance_date)
         )
     """)
 
     cur.execute("""
-        CREATE INDEX IF NOT EXISTS idx_cyclos_individual_daily_balances_date
-        ON cyclos_individual_daily_balances (balance_date)
+        CREATE INDEX IF NOT EXISTS idx_individual_daily_balances_date
+        ON individual_daily_balances (balance_date)
     """)
 
     cur.execute("""
-        CREATE INDEX IF NOT EXISTS idx_cyclos_individual_daily_balances_pseudonym
-        ON cyclos_individual_daily_balances (pseudonym)
+        CREATE INDEX IF NOT EXISTS idx_individual_daily_balances_pseudonym
+        ON individual_daily_balances (pseudonym)
     """)
 
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS cyclos_individual_daily_balance_windows (
-            pseudonym TEXT NOT NULL,
-            window_date_from TEXT NOT NULL,
-            window_date_to TEXT NOT NULL,
-            status TEXT NOT NULL,
-            points_received INTEGER NOT NULL DEFAULT 0,
-            points_stored INTEGER NOT NULL DEFAULT 0,
-            attempts INTEGER NOT NULL DEFAULT 0,
-            last_error TEXT,
-            last_run_at TEXT,
-            fetched_at TEXT,
-            PRIMARY KEY (pseudonym, window_date_from, window_date_to)
-        )
-    """)
-
-    cur.execute("""
-        CREATE INDEX IF NOT EXISTS idx_cyclos_individual_daily_balance_windows_status
-        ON cyclos_individual_daily_balance_windows (status)
-    """)
-
-    cur.execute("""
-        CREATE INDEX IF NOT EXISTS idx_cyclos_individual_daily_balance_windows_pseudonym
-        ON cyclos_individual_daily_balance_windows (pseudonym)
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS cyclos_professional_daily_balances (
+        CREATE TABLE IF NOT EXISTS professional_daily_balances (
             professional_ref TEXT NOT NULL,
             balance_date TEXT NOT NULL,
             balance REAL NOT NULL,
             fetched_at TEXT NOT NULL,
-            source TEXT NOT NULL DEFAULT 'cyclos_professional_balances_history_daily',
+            source TEXT NOT NULL,
             PRIMARY KEY (professional_ref, balance_date)
         )
     """)
 
     cur.execute("""
-        CREATE INDEX IF NOT EXISTS idx_cyclos_professional_daily_balances_date
-        ON cyclos_professional_daily_balances (balance_date)
+        CREATE INDEX IF NOT EXISTS idx_professional_daily_balances_date
+        ON professional_daily_balances (balance_date)
     """)
 
     cur.execute("""
-        CREATE INDEX IF NOT EXISTS idx_cyclos_professional_daily_balances_ref
-        ON cyclos_professional_daily_balances (professional_ref)
+        CREATE INDEX IF NOT EXISTS idx_professional_daily_balances_ref
+        ON professional_daily_balances (professional_ref)
     """)
 
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS cyclos_professional_daily_balance_windows (
-            professional_ref TEXT NOT NULL,
-            window_date_from TEXT NOT NULL,
-            window_date_to TEXT NOT NULL,
-            status TEXT NOT NULL,
-            points_received INTEGER NOT NULL DEFAULT 0,
-            points_stored INTEGER NOT NULL DEFAULT 0,
-            attempts INTEGER NOT NULL DEFAULT 0,
-            last_error TEXT,
-            last_run_at TEXT,
-            fetched_at TEXT,
-            PRIMARY KEY (professional_ref, window_date_from, window_date_to)
-        )
-    """)
-
-    cur.execute("""
-        CREATE INDEX IF NOT EXISTS idx_cyclos_professional_daily_balance_windows_status
-        ON cyclos_professional_daily_balance_windows (status)
-    """)
-
-    cur.execute("""
-        CREATE INDEX IF NOT EXISTS idx_cyclos_professional_daily_balance_windows_ref
-        ON cyclos_professional_daily_balance_windows (professional_ref)
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS odoo_monetary_indicators_yearly (
+        CREATE TABLE IF NOT EXISTS monetary_indicators_yearly (
             year INTEGER PRIMARY KEY,
-            gonettes_num_circulation REAL NOT NULL,
-            gonettes_paper_circulation REAL NOT NULL,
-            gonettes_total_circulation REAL NOT NULL,
-            fonds_garantie_num REAL NOT NULL,
-            fonds_garantie_paper REAL NOT NULL,
-            ecart_num REAL NOT NULL,
-            ecart_paper REAL NOT NULL,
+            numeric_circulation REAL NOT NULL,
+            paper_circulation REAL NOT NULL,
+            total_circulation REAL NOT NULL,
+            numeric_guarantee_fund REAL NOT NULL,
+            paper_guarantee_fund REAL NOT NULL,
+            numeric_guarantee_gap REAL NOT NULL,
+            paper_guarantee_gap REAL NOT NULL,
             fetched_at TEXT NOT NULL,
-            source TEXT NOT NULL DEFAULT 'odoo_jsonrpc'
+            source TEXT NOT NULL
         )
     """)
 
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS odoo_monetary_indicators_daily (
+        CREATE TABLE IF NOT EXISTS monetary_indicators_daily (
             snapshot_date TEXT PRIMARY KEY,
             year INTEGER NOT NULL,
             month INTEGER NOT NULL,
             day INTEGER NOT NULL,
-            gonettes_num_circulation REAL NOT NULL,
-            gonettes_paper_circulation REAL NOT NULL,
-            gonettes_total_circulation REAL NOT NULL,
-            fonds_garantie_num REAL NOT NULL,
-            fonds_garantie_paper REAL NOT NULL,
-            ecart_num REAL NOT NULL,
-            ecart_paper REAL NOT NULL,
+            numeric_circulation REAL NOT NULL,
+            paper_circulation REAL NOT NULL,
+            total_circulation REAL NOT NULL,
+            numeric_guarantee_fund REAL NOT NULL,
+            paper_guarantee_fund REAL NOT NULL,
+            numeric_guarantee_gap REAL NOT NULL,
+            paper_guarantee_gap REAL NOT NULL,
             fetched_at TEXT NOT NULL,
-            source TEXT NOT NULL DEFAULT 'odoo_jsonrpc'
+            source TEXT NOT NULL
         )
     """)
 
     cur.execute("""
-        CREATE INDEX IF NOT EXISTS idx_odoo_monetary_indicators_daily_year_month
-        ON odoo_monetary_indicators_daily (year, month, day)
+        CREATE INDEX IF NOT EXISTS idx_monetary_indicators_daily_year_month
+        ON monetary_indicators_daily (year, month, day)
     """)
 
 
 
-    _ensure_column(cur, "odoo_professional_enrichment", "cyclos_address_id", "TEXT")
-    _ensure_column(cur, "odoo_professional_enrichment", "cyclos_address_line1", "TEXT")
-    _ensure_column(cur, "odoo_professional_enrichment", "cyclos_zip", "TEXT")
-    _ensure_column(cur, "odoo_professional_enrichment", "cyclos_city", "TEXT")
-    _ensure_column(cur, "odoo_professional_enrichment", "cyclos_latitude", "REAL")
-    _ensure_column(cur, "odoo_professional_enrichment", "cyclos_longitude", "REAL")
-    _ensure_column(cur, "odoo_professional_enrichment", "geo_distance_meters", "REAL")
-    _ensure_column(cur, "odoo_professional_enrichment", "geo_match_status", "TEXT")
 
     # -----------------------------------------------------------------
     # Index temporels sur transactions
@@ -443,7 +246,7 @@ def init_db():
             day TEXT PRIMARY KEY,
             positive_user_stock REAL NOT NULL,
             positive_professional_network_stock REAL NOT NULL,
-            positive_gonette_business_accounts_stock REAL NOT NULL,
+            positive_operator_professional_stock REAL NOT NULL,
             positive_professional_total_stock REAL NOT NULL,
             numeric_mass REAL NOT NULL,
             computed_at TEXT NOT NULL
@@ -456,10 +259,10 @@ def init_db():
 
 def init_professional_enrichment_db():
     """
-    Initialise la table générique d'enrichissement professionnel multi-MLC.
+    Initialise le registre interne neutre d'enrichissement professionnel.
 
-    Cette table est volontairement distincte de odoo_professional_enrichment,
-    qui reste liée à l'historique Gonette/Odoo.
+    Les adaptateurs amont doivent alimenter cette table sans exposer
+    leur modèle source au reste de l'application.
     """
     conn = get_connection()
     cur = conn.cursor()
@@ -469,8 +272,6 @@ def init_professional_enrichment_db():
             professional_ref TEXT PRIMARY KEY,
             source_provider TEXT NOT NULL,
             external_professional_ref TEXT,
-            cyclos_user_id TEXT,
-            cyclos_actor_id TEXT,
             actor_type_internal TEXT,
             display_name TEXT,
             legal_name TEXT,
@@ -490,9 +291,6 @@ def init_professional_enrichment_db():
             city TEXT,
             latitude REAL,
             longitude REAL,
-            cyclos_group TEXT,
-            cyclos_group_name TEXT,
-            cyclos_group_set TEXT,
             raw_safe_json TEXT,
             fetched_at TEXT NOT NULL,
             updated_at TEXT NOT NULL

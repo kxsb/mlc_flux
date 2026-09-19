@@ -9,13 +9,10 @@ from server.analytics import (
     compute_network_data,
     compute_professionals_ranking,
     get_professional_detail,
-    get_professionals_map_data,
     compute_zip_territorial_activity,
     compute_sector_activity,
     compute_stats_charts,
 )
-from server.utils.sync_auth import require_sync_token
-from server.routes.sync import _format_sync_message
 
 legacy_api_bp = Blueprint("legacy_api", __name__)
 
@@ -220,7 +217,6 @@ def _load_professional_display_index():
                 zip,
                 city,
                 actor_type_internal,
-                cyclos_group_set
             FROM professional_enrichment
         """).fetchall()
     except Exception:
@@ -264,7 +260,6 @@ def _load_professional_display_index():
             "zip": _clean_professional_display_value(row["zip"]),
             "city": _clean_professional_display_value(row["city"]),
             "actor_type_internal": actor_type,
-            "cyclos_group_set": _clean_professional_display_value(row["cyclos_group_set"]),
         }
 
     return index
@@ -345,20 +340,6 @@ def pros():
     return jsonify(_enrich_professional_rows_for_display(rows))
 
 
-@legacy_api_bp.route("/api/professionals-map", methods=["GET"])
-def professionals_map():
-    year = request.args.get("year", default=None, type=int)
-    start = request.args.get("start")
-    end = request.args.get("end")
-
-    return jsonify(
-        get_professionals_map_data(
-            start=start,
-            end=end,
-            year=year,
-        )
-    )
-
 
 @legacy_api_bp.route("/api/territories/zip", methods=["GET"])
 def territories_zip():
@@ -431,26 +412,3 @@ def stats_charts():
         result["weekly_avg"] = result["weekly"]
 
     return jsonify(result)
-
-
-@legacy_api_bp.route("/api/reload", methods=["POST"])
-def reload_data():
-    auth_error = require_sync_token()
-    if auth_error is not None:
-        return auth_error
-
-    from server.sync_transactions import run_sync
-
-    result = run_sync()
-    fetched = result["fetched"]
-    written = result["written"]
-
-    return jsonify({
-        "status": "ok",
-        "rows": written,
-        "fetched": fetched,
-        "written": written,
-        # Alias de compatibilité pour d'éventuels appelants historiques.
-        "inserted": written,
-        "message": _format_sync_message(fetched, written),
-    })

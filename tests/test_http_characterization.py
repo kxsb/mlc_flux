@@ -2,20 +2,19 @@ from app import app
 from server.routes.current_mlc import current_mlc
 
 
+
 def test_route_count_characterization():
-    # Baseline Neutral avec preview analytique contractuelle.
-    assert len(list(app.url_map.iter_rules())) == 78
+    # Baseline LKVLT-LITE après CLEAN001.
+    assert len(list(app.url_map.iter_rules())) == 63
 
 
-def test_neutral_contract_preview_routes_exist():
+def test_neutral_contract_preview_routes_are_removed():
     routes = {
         str(rule)
         for rule in app.url_map.iter_rules()
     }
 
-    assert "/api/neutral/overview" in routes
-    assert "/neutral-preview" in routes
-
+    assert "/api/neutral/overview" not in routes
 
 def test_root_requires_authentication():
     client = app.test_client()
@@ -186,60 +185,16 @@ def test_monetary_indicators_query_cannot_switch_mlc(
     assert response.get_json()["mlc_id"] == "gonette"
 
 
-def test_payment_basin_request_cannot_switch_mlc(
-    monkeypatch,
-):
-    from flask import session
-    from server.services.professional_payment_basin_map import (
-        _payment_basin_active_mlc_id,
-    )
 
-    monkeypatch.setenv(
-        "MLCFLUX_DEFAULT_MLC_ID",
-        "gonette",
-    )
-    monkeypatch.setenv(
-        "MLCFLUX_ACTIVE_MLC_ID",
-        "graine",
-    )
+def test_legacy_payment_basin_backend_is_removed():
+    import importlib.util
 
-    with app.test_request_context(
-        "/?mlc=graine",
-        headers={
-            "X-MLC-Id": "graine",
-            "X-MLCFlux-MLC-Id": "graine",
-        },
-    ):
-        session["active_mlc_id"] = "graine"
-        session["pending_mlc_id"] = "graine"
-
-        assert (
-            _payment_basin_active_mlc_id()
-            == "gonette"
+    assert (
+        importlib.util.find_spec(
+            "server.services.professional_payment_basin_map"
         )
-
-
-def test_user_to_professional_map_cannot_switch_mlc(
-    monkeypatch,
-):
-    from server.routes.user_to_professional_map import (
-        _resolve_mlc_id,
+        is None
     )
-
-    monkeypatch.setenv(
-        "MLCFLUX_DEFAULT_MLC_ID",
-        "gonette",
-    )
-
-    with app.test_request_context(
-        "/api/user-to-professional-map"
-        "?mlc=graine"
-        "&mlc_id=graine"
-        "&instance=graine"
-    ):
-        assert _resolve_mlc_id() == "gonette"
-
-
 
 def test_ticket_routes_are_removed():
     routes = {

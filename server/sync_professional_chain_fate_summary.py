@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 
+from server.mlc_profiles import get_mlc_profile
 from server.services.professional_chain_fate_analytics import (
     compute_professional_chain_fate_summary,
     write_professional_chain_fate_summary,
@@ -14,7 +15,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Pré-calcule le résumé de trajectoires professionnelles pour une instance MLCFlux."
     )
-    parser.add_argument("--mlc", choices=["graine", "gonette"])
+    parser.add_argument(
+        "--mlc",
+        help=(
+            "Identifiant d'un profil MLCFlux existant. "
+            "À défaut, utilise MLCFLUX_DEFAULT_MLC_ID."
+        ),
+    )
     return parser
 
 
@@ -22,8 +29,8 @@ def main() -> None:
     args = build_parser().parse_args()
 
     if args.mlc:
-        os.environ["MLCFLUX_DEFAULT_MLC_ID"] = args.mlc
-        os.environ["MLCFLUX_ACTIVE_MLC_ID"] = args.mlc
+        profile = get_mlc_profile(args.mlc)
+        os.environ["MLCFLUX_DEFAULT_MLC_ID"] = profile.id
 
     payload = compute_professional_chain_fate_summary()
     write_professional_chain_fate_summary(payload)
@@ -33,10 +40,7 @@ def main() -> None:
     extended = payload["models"]["u_to_p_plus_t_to_p_seeds"]
 
     compact = {
-        "mlc_id": (
-            os.getenv("MLCFLUX_ACTIVE_MLC_ID")
-            or os.getenv("MLCFLUX_DEFAULT_MLC_ID")
-        ),
+        "mlc_id": os.getenv("MLCFLUX_DEFAULT_MLC_ID"),
         "generated_at": payload["generated_at"],
         "metadata": payload["metadata"],
         "primary_model": primary_key,

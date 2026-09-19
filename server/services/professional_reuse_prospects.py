@@ -93,7 +93,7 @@ def _professional_enrichment_lookup(
     conn: sqlite3.Connection,
     refs: set[str],
 ) -> dict[str, dict[str, Any]]:
-    """Lookup multi-MLC hors Odoo : professional_enrichment quand disponible."""
+    """Lookup dans le registre interne professional_enrichment."""
     if not refs:
         return {}
 
@@ -104,7 +104,7 @@ def _professional_enrichment_lookup(
 
     ref_column = _select_first_existing_column(
         columns,
-        ["professional_ref", "actor_ref", "ref", "account_number", "cyclos_ref"],
+        ["professional_ref"],
     )
 
     name_columns = [
@@ -112,11 +112,6 @@ def _professional_enrichment_lookup(
         for column in [
             "display_name",
             "legal_name",
-            "name",
-            "odoo_name",
-            "business_name",
-            "commercial_name",
-            "label",
         ]
         if column in columns
     ]
@@ -133,12 +128,12 @@ def _professional_enrichment_lookup(
 
     zip_column = _select_first_existing_column(
         columns,
-        ["cyclos_zip", "zip", "postal_code"],
+        ["zip"],
     )
 
     city_column = _select_first_existing_column(
         columns,
-        ["cyclos_city", "city"],
+        ["city"],
     )
 
     if not ref_column or not name_columns:
@@ -202,14 +197,12 @@ def _professional_identity(
         """
         SELECT
           professional_ref,
-          odoo_name,
+          display_name,
           industry_name,
           detailed_activity,
           zip,
-          city,
-          cyclos_zip,
-          cyclos_city
-        FROM odoo_professional_enrichment
+          city
+        FROM professional_enrichment
         WHERE professional_ref = ?
         """,
         (professional_ref,),
@@ -227,11 +220,11 @@ def _professional_identity(
 
     return {
         "professional_ref": professional_ref,
-        "name": _clean_text(row["odoo_name"]) or professional_ref,
+        "name": _clean_text(row["display_name"]) or professional_ref,
         "industry_name": _clean_text(row["industry_name"]),
         "detailed_activity": _clean_text(row["detailed_activity"]),
-        "zip": _clean_text(row["cyclos_zip"]) or _clean_text(row["zip"]),
-        "city": _clean_text(row["cyclos_city"]) or _clean_text(row["city"]),
+        "zip": _clean_text(row["zip"]),
+        "city": _clean_text(row["city"]),
     }
 
 
@@ -248,14 +241,12 @@ def _professional_lookup(
         f"""
         SELECT
           professional_ref,
-          odoo_name,
+          display_name,
           industry_name,
           detailed_activity,
           zip,
-          city,
-          cyclos_zip,
-          cyclos_city
-        FROM odoo_professional_enrichment
+          city
+        FROM professional_enrichment
         WHERE professional_ref IN ({placeholders})
         """,
         sorted(refs),
@@ -267,16 +258,14 @@ def _professional_lookup(
         ref = row["professional_ref"]
         lookup[ref] = {
             "professional_ref": ref,
-            "name": _clean_text(row["odoo_name"]) or ref,
+            "name": _clean_text(row["display_name"]) or ref,
             "industry_name": _clean_text(row["industry_name"]),
             "detailed_activity": _clean_text(row["detailed_activity"]),
-            "zip": _clean_text(row["cyclos_zip"]) or _clean_text(row["zip"]),
-            "city": _clean_text(row["cyclos_city"]) or _clean_text(row["city"]),
+            "zip": _clean_text(row["zip"]),
+            "city": _clean_text(row["city"]),
         }
 
-    # REUSE_PROSPECTS002_PROFESSIONAL_NAMES
-    # Complément multi-MLC : si Odoo est absent/incomplet, récupérer le libellé
-    # depuis professional_enrichment, utilisé notamment par Graine.
+    # Complète les éventuels champs manquants depuis le registre interne.
     generic_lookup = _professional_enrichment_lookup(conn, refs)
 
     for ref, generic in generic_lookup.items():
@@ -353,7 +342,7 @@ def _same_sector_peers(
     rows = conn.execute(
         """
         SELECT professional_ref
-        FROM odoo_professional_enrichment
+        FROM professional_enrichment
         WHERE professional_ref <> ?
           AND industry_name = ?
         ORDER BY professional_ref ASC
@@ -614,7 +603,7 @@ def get_professional_reuse_prospects(
         target_industry = _clean_text(target.get("industry_name"))
 
         if target_industry:
-            analysis_mode = "same_sector_odoo"
+            analysis_mode = "same_sector"
             same_sector_peers = _same_sector_peers(
                 conn,
                 professional_ref=normalized_ref,

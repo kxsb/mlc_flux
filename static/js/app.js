@@ -924,15 +924,15 @@ function destroyCartographyMap() {
 }
 
 function formatCartographyLocation(professional) {
-  const city = String(professional.cyclos_city || professional.city || "").trim();
-  const zip = String(professional.cyclos_zip || professional.zip || "").trim();
+  const city = String(professional.city || "").trim();
+  const zip = String(professional.zip || "").trim();
 
   if (city && zip) return `${city} (${zip})`;
   return city || zip || "Localisation confirmée";
 }
 
 function buildCartographyTooltip(professional) {
-  const title = `${professional.professional_ref} — ${professional.odoo_name}`;
+  const title = `${professional.professional_ref} — ${professional.display_name || professional.professional_ref}`;
   const industry = professional.industry_name || "Secteur non renseigné";
   const activity = professional.detailed_activity || "";
   const location = formatCartographyLocation(professional);
@@ -10802,9 +10802,9 @@ function buildMonetaryChartItems(dailyPayload) {
 
     return {
       snapshot_date: snapshotDate,
-      gonettes_total_circulation: null,
-      gonettes_num_circulation: null,
-      gonettes_paper_circulation: null,
+      total_circulation: null,
+      numeric_circulation: null,
+      paper_circulation: null,
       is_missing_monetary_snapshot: true
     };
   });
@@ -10838,11 +10838,11 @@ function buildMonetaryYearlyRows(items) {
   return items.map((item) => `
     <tr>
       <td><strong>${item.year}</strong></td>
-      <td>${gonettes(item.gonettes_total_circulation || 0)}</td>
-      <td>${gonettes(item.gonettes_num_circulation || 0)}</td>
-      <td>${gonettes(item.gonettes_paper_circulation || 0)}</td>
-      <td>${accountingEuros(item.fonds_garantie_num || 0)}</td>
-      <td>${accountingEuros(item.fonds_garantie_paper || 0)}</td>
+      <td>${gonettes(item.total_circulation || 0)}</td>
+      <td>${gonettes(item.numeric_circulation || 0)}</td>
+      <td>${gonettes(item.paper_circulation || 0)}</td>
+      <td>${accountingEuros(item.numeric_guarantee_fund || 0)}</td>
+      <td>${accountingEuros(item.paper_guarantee_fund || 0)}</td>
     </tr>
   `).join("");
 }
@@ -11017,33 +11017,11 @@ function adaptiveMonetaryValue(item, keys) {
   return null;
 }
 
-function buildAdaptiveMonetaryYearlyRows(items, source) {
+function buildAdaptiveMonetaryYearlyRows(items) {
   return (Array.isArray(items) ? items : []).map((item) => {
-    const total = adaptiveMonetaryValue(item, [
-      "total_monetary_mass",
-      "digital_circulation_proxy"
-    ]);
-
-    const digital = adaptiveMonetaryValue(item, [
-      "digital_circulation",
-      "digital_circulation_proxy"
-    ]);
-
+    const total = adaptiveMonetaryValue(item, ["total_monetary_mass"]);
+    const digital = adaptiveMonetaryValue(item, ["digital_circulation"]);
     const paper = adaptiveMonetaryValue(item, ["paper_circulation"]);
-    const supply = adaptiveMonetaryValue(item, ["digital_supply_flow"]);
-    const exit = adaptiveMonetaryValue(item, ["digital_exit_flow"]);
-
-    if (source === "cyclos_transaction_proxy") {
-      return `
-        <tr>
-          <td><strong>${escapeMonetaryHtml(item.year)}</strong></td>
-          <td>${gonettes(total || 0)}</td>
-          <td>${gonettes(supply || 0)}</td>
-          <td>${gonettes(exit || 0)}</td>
-          <td>${gonettes(adaptiveMonetaryValue(item, ["net_supply_flow"]) || 0)}</td>
-        </tr>
-      `;
-    }
 
     return `
       <tr>
@@ -11076,51 +11054,32 @@ function renderAdaptiveMonetaryIndicators(host, payload) {
     return;
   }
 
-  const isProxy = source === "cyclos_transaction_proxy";
-  const title = isProxy ? "Masse monétaire estimée" : "Masse monétaire";
-  const total = adaptiveMonetaryValue(latest, [
-    "total_monetary_mass",
-    "digital_circulation_proxy"
-  ]);
-
-  const digital = adaptiveMonetaryValue(latest, [
-    "digital_circulation",
-    "digital_circulation_proxy"
-  ]);
+  const title = "Masse monétaire";
+  const total = adaptiveMonetaryValue(latest, ["total_monetary_mass"]);
+  const digital = adaptiveMonetaryValue(latest, ["digital_circulation"]);
 
   const paper = adaptiveMonetaryValue(latest, ["paper_circulation"]);
   const sourceLabel = payload?.source_label || payload?.source || "Source non précisée";
   const confidenceLabel = monetaryConfidenceLabel(confidence);
 
-  const yearlyHeader = isProxy
-    ? `
-      <tr>
-        <th>Année</th>
-        <th>Proxy cumulé</th>
-        <th>Alimentations</th>
-        <th>Sorties</th>
-        <th>Solde annuel</th>
-      </tr>
-    `
-    : `
-      <tr>
-        <th>Année</th>
-        <th>Masse totale</th>
-        <th>Numérique</th>
-        <th>Papier</th>
-        <th>Garantie num.</th>
-        <th>Garantie papier</th>
-      </tr>
-    `;
+  const yearlyHeader = `
+    <tr>
+      <th>Année</th>
+      <th>Masse totale</th>
+      <th>Numérique</th>
+      <th>Papier</th>
+      <th>Garantie num.</th>
+      <th>Garantie papier</th>
+    </tr>
+  `;
 
   host.innerHTML = `
     <section class="card monetary-intro-card">
       <div class="activity-flow-overview-header">
         <h3>${title}</h3>
         <p>
-          Donnée produite par la source adaptative configurée pour cette monnaie locale.
-          La source et le niveau de confiance sont affichés pour éviter de confondre
-          une donnée comptable et une estimation par flux.
+          Donnée issue du modèle monétaire interne MLCFlux.
+          La source et le niveau de confiance sont affichés avec les données disponibles.
         </p>
       </div>
 
@@ -11136,10 +11095,8 @@ function renderAdaptiveMonetaryIndicators(host, payload) {
     <div class="grid monetary-kpi-grid">
       <div class="card stat-card-static">
         ${statLabelWithHelp(
-          isProxy ? "Masse estimée" : "Masse totale",
-          isProxy
-            ? "Proxy cumulatif calculé depuis les flux Cyclos : alimentations moins sorties. Ce n’est pas un stock comptable officiel."
-            : "Stock monétaire total issu de la source comptable configurée."
+          "Masse totale",
+          "Stock monétaire total disponible dans le modèle interne."
         )}
         <div class="stat-value">${gonettes(total || 0)}</div>
         <div class="stat-subtext">Dernière année disponible : ${escapeMonetaryHtml(latest.year)}</div>
@@ -11147,10 +11104,8 @@ function renderAdaptiveMonetaryIndicators(host, payload) {
 
       <div class="card stat-card-static">
         ${statLabelWithHelp(
-          isProxy ? "Alimentations cumulées nettes" : "Masse numérique",
-          isProxy
-            ? "Valeur numérique estimée par cumul des entrées et sorties identifiées dans les transactions."
-            : "Stock de monnaie numérique en circulation."
+          "Masse numérique",
+          "Stock de monnaie numérique en circulation."
         )}
         <div class="stat-value">${digital === null ? "—" : gonettes(digital)}</div>
         <div class="stat-subtext">${escapeMonetaryHtml(sourceLabel)}</div>
@@ -11162,7 +11117,7 @@ function renderAdaptiveMonetaryIndicators(host, payload) {
           "Stock papier disponible lorsque la source monétaire fournit cette distinction."
         )}
         <div class="stat-value">${paper === null ? "—" : gonettes(paper)}</div>
-        <div class="stat-subtext">${isProxy ? "Non disponible via le proxy transactionnel" : "Source comptable"}</div>
+        <div class="stat-subtext">Donnée disponible selon la source monétaire</div>
       </div>
     </div>
 
@@ -11170,16 +11125,14 @@ function renderAdaptiveMonetaryIndicators(host, payload) {
       <div class="activity-flow-overview-header">
         <h3>Historique annuel</h3>
         <p>
-          ${isProxy
-            ? "Historique indicatif construit depuis les flux transactionnels."
-            : "Historique annuel issu de la source monétaire configurée."}
+          Historique annuel issu du modèle monétaire interne.
         </p>
       </div>
 
       <div class="table-wrapper">
         <table>
           <thead>${yearlyHeader}</thead>
-          <tbody>${buildAdaptiveMonetaryYearlyRows(items, source)}</tbody>
+          <tbody>${buildAdaptiveMonetaryYearlyRows(items)}</tbody>
         </table>
       </div>
     </section>
@@ -11231,21 +11184,21 @@ async function renderMonetaryIndicatorsTab() {
       return;
     }
 
-    const total = Number(closing.gonettes_total_circulation || 0);
-    const numeric = Number(closing.gonettes_num_circulation || 0);
-    const paper = Number(closing.gonettes_paper_circulation || 0);
+    const total = Number(closing.total_circulation || 0);
+    const numeric = Number(closing.numeric_circulation || 0);
+    const paper = Number(closing.paper_circulation || 0);
 
     const numericShare = total > 0 ? (numeric / total) * 100 : 0;
     const paperShare = total > 0 ? (paper / total) * 100 : 0;
 
     const numericCoverageRate = monetaryCoverageRate(
-      closing.fonds_garantie_num,
-      closing.gonettes_num_circulation
+      closing.numeric_guarantee_fund,
+      closing.numeric_circulation
     );
 
     const paperCoverageRate = monetaryCoverageRate(
-      closing.fonds_garantie_paper,
-      closing.gonettes_paper_circulation
+      closing.paper_guarantee_fund,
+      closing.paper_circulation
     );
 
     const effectiveStartLabel = formatIsoDateFr(effectivePeriod.start);
@@ -11345,7 +11298,7 @@ async function renderMonetaryIndicatorsTab() {
                 <strong>${
                   opening?.is_synthetic
                     ? "—"
-                    : formatNullableGonettes(opening?.gonettes_total_circulation)
+                    : formatNullableGonettes(opening?.total_circulation)
                 }</strong>
               </div>
             </div>
@@ -11362,7 +11315,7 @@ async function renderMonetaryIndicatorsTab() {
             <div class="activity-flow-metrics">
               <div class="activity-flow-metric">
                 <span class="activity-flow-metric-label">Masse moyenne</span>
-                <strong>${gonettes(metrics.average_gonettes_total_circulation || 0)}</strong>
+                <strong>${gonettes(metrics.average_total_circulation || 0)}</strong>
               </div>
             </div>
           </article>
@@ -11378,7 +11331,7 @@ async function renderMonetaryIndicatorsTab() {
             <div class="activity-flow-metrics">
               <div class="activity-flow-metric">
                 <span class="activity-flow-metric-label">Masse totale</span>
-                <strong>${gonettes(closing.gonettes_total_circulation || 0)}</strong>
+                <strong>${gonettes(closing.total_circulation || 0)}</strong>
               </div>
             </div>
           </article>
@@ -11422,11 +11375,11 @@ async function renderMonetaryIndicatorsTab() {
             <div class="activity-flow-metrics">
               <div class="activity-flow-metric">
                 <span class="activity-flow-metric-label">Variation</span>
-                <strong>${formatSignedGonetteDelta(metrics.variation_gonettes_total_circulation)}</strong>
+                <strong>${formatSignedGonetteDelta(metrics.variation_total_circulation)}</strong>
               </div>
               <div class="activity-flow-metric">
                 <span class="activity-flow-metric-label">Taux</span>
-                <strong>${formatSignedRate(metrics.variation_rate_gonettes_total_circulation)}</strong>
+                <strong>${formatSignedRate(metrics.variation_rate_total_circulation)}</strong>
               </div>
             </div>
           </article>
@@ -11442,11 +11395,11 @@ async function renderMonetaryIndicatorsTab() {
             <div class="activity-flow-metrics">
               <div class="activity-flow-metric">
                 <span class="activity-flow-metric-label">Variation</span>
-                <strong>${formatSignedGonetteDelta(metrics.variation_gonettes_num_circulation)}</strong>
+                <strong>${formatSignedGonetteDelta(metrics.variation_numeric_circulation)}</strong>
               </div>
               <div class="activity-flow-metric">
                 <span class="activity-flow-metric-label">Taux</span>
-                <strong>${formatSignedRate(metrics.variation_rate_gonettes_num_circulation)}</strong>
+                <strong>${formatSignedRate(metrics.variation_rate_numeric_circulation)}</strong>
               </div>
             </div>
           </article>
@@ -11462,11 +11415,11 @@ async function renderMonetaryIndicatorsTab() {
             <div class="activity-flow-metrics">
               <div class="activity-flow-metric">
                 <span class="activity-flow-metric-label">Variation</span>
-                <strong>${formatSignedGonetteDelta(metrics.variation_gonettes_paper_circulation)}</strong>
+                <strong>${formatSignedGonetteDelta(metrics.variation_paper_circulation)}</strong>
               </div>
               <div class="activity-flow-metric">
                 <span class="activity-flow-metric-label">Taux</span>
-                <strong>${formatSignedRate(metrics.variation_rate_gonettes_paper_circulation)}</strong>
+                <strong>${formatSignedRate(metrics.variation_rate_paper_circulation)}</strong>
               </div>
             </div>
           </article>
@@ -11495,15 +11448,15 @@ async function renderMonetaryIndicatorsTab() {
             <div class="activity-flow-metrics">
               <div class="activity-flow-metric">
                 <span class="activity-flow-metric-label">Fonds de garantie</span>
-                <strong>${accountingEuros(closing.fonds_garantie_num || 0)}</strong>
+                <strong>${accountingEuros(closing.numeric_guarantee_fund || 0)}</strong>
               </div>
               <div class="activity-flow-metric">
                 <span class="activity-flow-metric-label">Masse numérique</span>
-                <strong>${gonettes(closing.gonettes_num_circulation || 0)}</strong>
+                <strong>${gonettes(closing.numeric_circulation || 0)}</strong>
               </div>
               <div class="activity-flow-metric">
                 <span class="activity-flow-metric-label">Écart</span>
-                <strong class="monetary-delta">${signedAccountingGap(closing.ecart_num || 0)}</strong>
+                <strong class="monetary-delta">${signedAccountingGap(closing.numeric_guarantee_gap || 0)}</strong>
               </div>
               <div class="activity-flow-metric">
                 <span class="activity-flow-metric-label">
@@ -11530,15 +11483,15 @@ async function renderMonetaryIndicatorsTab() {
             <div class="activity-flow-metrics">
               <div class="activity-flow-metric">
                 <span class="activity-flow-metric-label">Fonds de garantie</span>
-                <strong>${accountingEuros(closing.fonds_garantie_paper || 0)}</strong>
+                <strong>${accountingEuros(closing.paper_guarantee_fund || 0)}</strong>
               </div>
               <div class="activity-flow-metric">
                 <span class="activity-flow-metric-label">Masse papier</span>
-                <strong>${gonettes(closing.gonettes_paper_circulation || 0)}</strong>
+                <strong>${gonettes(closing.paper_circulation || 0)}</strong>
               </div>
               <div class="activity-flow-metric">
                 <span class="activity-flow-metric-label">Écart</span>
-                <strong class="monetary-delta">${signedAccountingGap(closing.ecart_paper || 0)}</strong>
+                <strong class="monetary-delta">${signedAccountingGap(closing.paper_guarantee_gap || 0)}</strong>
               </div>
               <div class="activity-flow-metric">
                 <span class="activity-flow-metric-label">
@@ -11611,9 +11564,9 @@ async function renderMonetaryIndicatorsTab() {
 
 function buildMonetaryStockHistoryChartConfig(items) {
   const labels = items.map((item) => formatIsoDateFr(item.snapshot_date));
-  const totalValues = items.map((item) => monetaryChartValue(item, "gonettes_total_circulation"));
-  const numericValues = items.map((item) => monetaryChartValue(item, "gonettes_num_circulation"));
-  const paperValues = items.map((item) => monetaryChartValue(item, "gonettes_paper_circulation"));
+  const totalValues = items.map((item) => monetaryChartValue(item, "total_circulation"));
+  const numericValues = items.map((item) => monetaryChartValue(item, "numeric_circulation"));
+  const paperValues = items.map((item) => monetaryChartValue(item, "paper_circulation"));
 
   const pointRadius = items.length <= 120 ? 2 : 0;
 
@@ -12680,7 +12633,7 @@ function buildPilotageHoldingsStockShareChartConfig(items) {
         },
         {
           label: "Stock comptes entreprise Gonette moyen",
-          data: items.map((item) => item.average_positive_gonette_business_accounts_stock ?? null),
+          data: items.map((item) => item.average_positive_operator_professional_stock ?? null),
           yAxisID: "yStock",
           tension: 0.28,
           pointRadius: 4,
@@ -12760,7 +12713,7 @@ function buildPilotageHoldingsMassCompositionChartConfig(items) {
       item.average_professional_network_stock_share_of_numeric_mass
     );
     const gonetteShare = sharePercent(
-      item.average_gonette_business_accounts_stock_share_of_numeric_mass
+      item.average_operator_professional_stock_share_of_numeric_mass
     );
 
     if (
@@ -12799,7 +12752,7 @@ function buildPilotageHoldingsMassCompositionChartConfig(items) {
         {
           label: "Comptes entreprise Gonette",
           data: items.map((item) => sharePercent(
-            item.average_gonette_business_accounts_stock_share_of_numeric_mass
+            item.average_operator_professional_stock_share_of_numeric_mass
           )),
           stack: "massComposition"
         },
@@ -12822,7 +12775,7 @@ function buildPilotageHoldingsMassCompositionChartConfig(items) {
         },
         {
           label: "Comptes association / opérateurs",
-          data: items.map((item) => moneyValue(item.average_positive_gonette_business_accounts_stock)),
+          data: items.map((item) => moneyValue(item.average_positive_operator_professional_stock)),
           stack: "observedHoldings"
         }
       ];
@@ -14052,7 +14005,7 @@ const PILOTAGE_INDICATOR_HELP = {
     ],
     sources: [
       "pilotage-summary.pilotage_metrics.entry_exit_pressure.net_flow_pressure",
-      "pilotage-summary.flow_reference.net_cyclos_flow"
+      "pilotage-summary.flow_reference.net_circuit_flow"
     ]
   },
 
@@ -14166,7 +14119,7 @@ const PILOTAGE_INDICATOR_HELP = {
       "Flux net Cyclos = alimentations − sorties."
     ],
     sources: [
-      "pilotage-summary.pilotage_metrics.stock_flow_reconciliation.net_cyclos_flow"
+      "pilotage-summary.pilotage_metrics.stock_flow_reconciliation.net_circuit_flow"
     ]
   },
 
@@ -14261,8 +14214,8 @@ const PILOTAGE_INDICATOR_HELP = {
       "Part de masse = stock comptes entreprise Gonette / masse numérique moyenne."
     ],
     sources: [
-      "pilotage-holdings-summary.holdings_reference.average_positive_gonette_business_accounts_stock",
-      "pilotage-holdings-summary.holdings_reference.average_gonette_business_accounts_stock_share_of_numeric_mass"
+      "pilotage-holdings-summary.holdings_reference.average_positive_operator_professional_stock",
+      "pilotage-holdings-summary.holdings_reference.average_operator_professional_stock_share_of_numeric_mass"
     ]
   },
 
@@ -14911,8 +14864,8 @@ function buildPilotageReferenceLegend(benchmarks = {}) {
 function buildPilotageFlowBalanceCard(flow = {}) {
   const inflow = Math.max(0, Number(flow.inflow_volume || 0));
   const outflow = Math.max(0, Number(flow.outflow_volume || 0));
-  const netFlow = Number.isFinite(Number(flow.net_cyclos_flow))
-    ? Number(flow.net_cyclos_flow)
+  const netFlow = Number.isFinite(Number(flow.net_circuit_flow))
+    ? Number(flow.net_circuit_flow)
     : inflow - outflow;
 
   const maxValue = Math.max(inflow, outflow, 1);
@@ -15534,16 +15487,16 @@ async function renderMonetaryPilotageView(forceReload = false) {
               helpKey: "netFlowPressure",
               group: "Flux",
               label: "Solde net",
-              valueHtml: formatPilotageSignedGonettes(flow.net_cyclos_flow || 0),
+              valueHtml: formatPilotageSignedGonettes(flow.net_circuit_flow || 0),
               subtext: "alimentations − sorties",
-              barValue: Math.abs(Number(flow.net_cyclos_flow || 0)),
+              barValue: Math.abs(Number(flow.net_circuit_flow || 0)),
               barMax: Math.max(
-                Math.abs(Number(flow.net_cyclos_flow || 0)),
+                Math.abs(Number(flow.net_circuit_flow || 0)),
                 Number(flow.inflow_volume || 0),
                 1
               ),
-              barTone: Number(flow.net_cyclos_flow || 0) >= 0 ? "net-positive" : "net-negative",
-              barLabel: `${formatPilotagePercent(getPilotageSafeRatio(Math.abs(Number(flow.net_cyclos_flow || 0)), flow.inflow_volume))} des alimentations`,
+              barTone: Number(flow.net_circuit_flow || 0) >= 0 ? "net-positive" : "net-negative",
+              barLabel: `${formatPilotagePercent(getPilotageSafeRatio(Math.abs(Number(flow.net_circuit_flow || 0)), flow.inflow_volume))} des alimentations`,
               emphasis: true
             })}
 
@@ -15859,7 +15812,7 @@ async function renderMonetaryPilotageView(forceReload = false) {
                 <strong>${formatPilotageSignedPercent(entryExit.net_flow_pressure)}</strong>
                 <small>
                   Solde net :
-                  ${formatPilotageSignedGonettes(flow.net_cyclos_flow || 0)}
+                  ${formatPilotageSignedGonettes(flow.net_circuit_flow || 0)}
                 </small>
               </article>
             </div>
@@ -15928,7 +15881,7 @@ async function renderMonetaryPilotageView(forceReload = false) {
 
               <article class="pilotage-metric-card" data-pilotage-help="netCyclosFlow">
                 <span>Flux net Cyclos</span>
-                <strong>${formatPilotageSignedGonettes(reconciliation.net_cyclos_flow)}</strong>
+                <strong>${formatPilotageSignedGonettes(reconciliation.net_circuit_flow)}</strong>
                 <small>Alimentations − sorties observées</small>
               </article>
 
@@ -15998,13 +15951,13 @@ async function renderMonetaryPilotageView(forceReload = false) {
               <span>Stock comptes association / opérateurs</span>
               <strong>${
                 Number(holdingsReference.operator_professional_refs_count || 0) > 0
-                  ? gonettes(holdingsReference.average_positive_gonette_business_accounts_stock || 0)
+                  ? gonettes(holdingsReference.average_positive_operator_professional_stock || 0)
                   : "—"
               }</strong>
               <small>
                 ${
                   Number(holdingsReference.operator_professional_refs_count || 0) > 0
-                    ? formatPilotagePercent(holdingsReference.average_gonette_business_accounts_stock_share_of_numeric_mass)
+                    ? formatPilotagePercent(holdingsReference.average_operator_professional_stock_share_of_numeric_mass)
                     : "Non configuré pour cette instance"
                 }
               </small>
@@ -19917,7 +19870,7 @@ const STATS_CHART_HELP = {
     sources: [
       "pilotage-holdings-timeseries.items[].average_user_stock_share_of_numeric_mass",
       "pilotage-holdings-timeseries.items[].average_professional_network_stock_share_of_numeric_mass",
-      "pilotage-holdings-timeseries.items[].average_gonette_business_accounts_stock_share_of_numeric_mass",
+      "pilotage-holdings-timeseries.items[].average_operator_professional_stock_share_of_numeric_mass",
       "pilotage-holdings-timeseries.items[].average_numeric_mass"
     ]
   },
@@ -19955,7 +19908,7 @@ const STATS_CHART_HELP = {
     sources: [
       "pilotage-holdings-timeseries.items[].average_positive_user_stock",
       "pilotage-holdings-timeseries.items[].average_positive_professional_network_stock",
-      "pilotage-holdings-timeseries.items[].average_positive_gonette_business_accounts_stock"
+      "pilotage-holdings-timeseries.items[].average_positive_operator_professional_stock"
     ]
   },
 
@@ -22141,10 +22094,10 @@ function drawProMeetingHeroSection() {
   const numProf = appState.currentPro;
   const tx = data.transactions || [];
   const filteredStats = computeStatsFromTransactions(tx, numProf);
-  const enrichment = data.odoo_enrichment || {};
+  const enrichment = data.professional_enrichment || {};
 
   let professionalName = String(
-    data.fullname || enrichment.odoo_name || numProf
+    data.fullname || enrichment.commercial_name || enrichment.display_name || numProf
   ).trim();
 
   const prefixHyphen = `${numProf} - `;
@@ -22258,7 +22211,7 @@ function drawProOdooEnrichmentSection() {
   const container = document.getElementById("proOdooEnrichmentSection");
   if (!container || !appState.detailData) return;
 
-  const enrichment = appState.detailData.odoo_enrichment;
+  const enrichment = appState.detailData.professional_enrichment;
   if (!enrichment) {
     container.innerHTML = "";
     return;
@@ -22268,11 +22221,11 @@ function drawProOdooEnrichmentSection() {
     enrichment.short_description || enrichment.detailed_activity || ""
   );
   const industryName = String(enrichment.industry_name || "").trim();
-  const odooName = String(enrichment.odoo_name || "").trim();
+  const directoryName = String(enrichment.commercial_name || enrichment.display_name || "").trim();
   const displayedName = String(appState.detailData.fullname || "").trim();
-  const shouldShowOdooName = Boolean(
-    odooName
-    && odooName.toLocaleLowerCase("fr-FR") !== displayedName.toLocaleLowerCase("fr-FR")
+  const shouldShowDirectoryName = Boolean(
+    directoryName
+    && directoryName.toLocaleLowerCase("fr-FR") !== displayedName.toLocaleLowerCase("fr-FR")
   );
   const naf = String(enrichment.naf || "").trim();
   const location = formatProfessionalLocation(enrichment);
@@ -22286,7 +22239,7 @@ function drawProOdooEnrichmentSection() {
   const hasVisibleContent = Boolean(
     detailedActivity ||
     industryName ||
-    shouldShowOdooName ||
+    shouldShowDirectoryName ||
     naf ||
     location ||
     secondaryIndustries.length
@@ -22299,11 +22252,11 @@ function drawProOdooEnrichmentSection() {
 
   const metaItems = [];
 
-  if (shouldShowOdooName) {
+  if (shouldShowDirectoryName) {
     metaItems.push(`
       <div class="pro-context-meta-item">
         <span class="pro-context-meta-label">Nom annuaire</span>
-        <span class="pro-context-meta-value">${escapeHtml(odooName)}</span>
+        <span class="pro-context-meta-value">${escapeHtml(directoryName)}</span>
       </div>
     `);
   }
@@ -31017,4 +30970,3 @@ function getProfessionalConsumptionMapLeanInitialQuery(baseQuery) {
     window.setTimeout(window.syncSectorAnalysisSwitchVisualState, 80);
   }
 })();
-

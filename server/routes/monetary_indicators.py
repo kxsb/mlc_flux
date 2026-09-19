@@ -27,13 +27,13 @@ monetary_indicators_bp = Blueprint("monetary_indicators", __name__)
 
 MONETARY_INDICATOR_COLUMNS = """
     year,
-    gonettes_num_circulation,
-    gonettes_paper_circulation,
-    gonettes_total_circulation,
-    fonds_garantie_num,
-    fonds_garantie_paper,
-    ecart_num,
-    ecart_paper,
+    numeric_circulation,
+    paper_circulation,
+    total_circulation,
+    numeric_guarantee_fund,
+    paper_guarantee_fund,
+    numeric_guarantee_gap,
+    paper_guarantee_gap,
     fetched_at,
     source
 """
@@ -45,13 +45,13 @@ def _row_to_dict(row):
 
     return {
         "year": row["year"],
-        "gonettes_num_circulation": row["gonettes_num_circulation"],
-        "gonettes_paper_circulation": row["gonettes_paper_circulation"],
-        "gonettes_total_circulation": row["gonettes_total_circulation"],
-        "fonds_garantie_num": row["fonds_garantie_num"],
-        "fonds_garantie_paper": row["fonds_garantie_paper"],
-        "ecart_num": row["ecart_num"],
-        "ecart_paper": row["ecart_paper"],
+        "numeric_circulation": row["numeric_circulation"],
+        "paper_circulation": row["paper_circulation"],
+        "total_circulation": row["total_circulation"],
+        "numeric_guarantee_fund": row["numeric_guarantee_fund"],
+        "paper_guarantee_fund": row["paper_guarantee_fund"],
+        "numeric_guarantee_gap": row["numeric_guarantee_gap"],
+        "paper_guarantee_gap": row["paper_guarantee_gap"],
         "fetched_at": row["fetched_at"],
         "source": row["source"],
     }
@@ -65,7 +65,7 @@ def monetary_indicators_yearly():
     rows = cur.execute(f"""
         SELECT
             {MONETARY_INDICATOR_COLUMNS}
-        FROM odoo_monetary_indicators_yearly
+        FROM monetary_indicators_yearly
         ORDER BY year ASC
     """).fetchall()
 
@@ -85,7 +85,7 @@ def monetary_indicators_latest():
     row = cur.execute(f"""
         SELECT
             {MONETARY_INDICATOR_COLUMNS}
-        FROM odoo_monetary_indicators_yearly
+        FROM monetary_indicators_yearly
         ORDER BY year DESC
         LIMIT 1
     """).fetchone()
@@ -110,13 +110,13 @@ DAILY_MONETARY_COLUMNS = """
     year,
     month,
     day,
-    gonettes_num_circulation,
-    gonettes_paper_circulation,
-    gonettes_total_circulation,
-    fonds_garantie_num,
-    fonds_garantie_paper,
-    ecart_num,
-    ecart_paper,
+    numeric_circulation,
+    paper_circulation,
+    total_circulation,
+    numeric_guarantee_fund,
+    paper_guarantee_fund,
+    numeric_guarantee_gap,
+    paper_guarantee_gap,
     fetched_at,
     source
 """
@@ -131,13 +131,13 @@ def _daily_row_to_dict(row):
         "year": row["year"],
         "month": row["month"],
         "day": row["day"],
-        "gonettes_num_circulation": row["gonettes_num_circulation"],
-        "gonettes_paper_circulation": row["gonettes_paper_circulation"],
-        "gonettes_total_circulation": row["gonettes_total_circulation"],
-        "fonds_garantie_num": row["fonds_garantie_num"],
-        "fonds_garantie_paper": row["fonds_garantie_paper"],
-        "ecart_num": row["ecart_num"],
-        "ecart_paper": row["ecart_paper"],
+        "numeric_circulation": row["numeric_circulation"],
+        "paper_circulation": row["paper_circulation"],
+        "total_circulation": row["total_circulation"],
+        "numeric_guarantee_fund": row["numeric_guarantee_fund"],
+        "paper_guarantee_fund": row["paper_guarantee_fund"],
+        "numeric_guarantee_gap": row["numeric_guarantee_gap"],
+        "paper_guarantee_gap": row["paper_guarantee_gap"],
         "fetched_at": row["fetched_at"],
         "source": row["source"],
     }
@@ -160,7 +160,7 @@ def _get_daily_bounds(cur):
         SELECT
             MIN(snapshot_date) AS min_date,
             MAX(snapshot_date) AS max_date
-        FROM odoo_monetary_indicators_daily
+        FROM monetary_indicators_daily
     """).fetchone()
 
     if row is None or row["min_date"] is None or row["max_date"] is None:
@@ -222,13 +222,13 @@ def _zero_opening_snapshot(day_before_start):
         "year": day_before_start.year,
         "month": day_before_start.month,
         "day": day_before_start.day,
-        "gonettes_num_circulation": 0.0,
-        "gonettes_paper_circulation": 0.0,
-        "gonettes_total_circulation": 0.0,
-        "fonds_garantie_num": 0.0,
-        "fonds_garantie_paper": 0.0,
-        "ecart_num": 0.0,
-        "ecart_paper": 0.0,
+        "numeric_circulation": 0.0,
+        "paper_circulation": 0.0,
+        "total_circulation": 0.0,
+        "numeric_guarantee_fund": 0.0,
+        "paper_guarantee_fund": 0.0,
+        "numeric_guarantee_gap": 0.0,
+        "paper_guarantee_gap": 0.0,
         "fetched_at": None,
         "source": "synthetic_zero_opening_before_first_daily_snapshot",
         "is_synthetic": True,
@@ -296,7 +296,7 @@ def monetary_indicators_daily():
     rows = cur.execute(f"""
         SELECT
             {DAILY_MONETARY_COLUMNS}
-        FROM odoo_monetary_indicators_daily
+        FROM monetary_indicators_daily
         WHERE snapshot_date BETWEEN ? AND ?
         ORDER BY snapshot_date ASC
     """, (
@@ -360,7 +360,7 @@ def monetary_indicators_period_summary():
     opening_row = cur.execute(f"""
         SELECT
             {DAILY_MONETARY_COLUMNS}
-        FROM odoo_monetary_indicators_daily
+        FROM monetary_indicators_daily
         WHERE snapshot_date < ?
         ORDER BY snapshot_date DESC
         LIMIT 1
@@ -375,7 +375,7 @@ def monetary_indicators_period_summary():
     closing_row = cur.execute(f"""
         SELECT
             {DAILY_MONETARY_COLUMNS}
-        FROM odoo_monetary_indicators_daily
+        FROM monetary_indicators_daily
         WHERE snapshot_date <= ?
         ORDER BY snapshot_date DESC
         LIMIT 1
@@ -388,12 +388,12 @@ def monetary_indicators_period_summary():
     averages = cur.execute("""
         SELECT
             COUNT(*) AS day_count,
-            AVG(gonettes_num_circulation) AS avg_num,
-            AVG(gonettes_paper_circulation) AS avg_paper,
-            AVG(gonettes_total_circulation) AS avg_total,
-            AVG(fonds_garantie_num) AS avg_fdg_num,
-            AVG(fonds_garantie_paper) AS avg_fdg_paper
-        FROM odoo_monetary_indicators_daily
+            AVG(numeric_circulation) AS avg_num,
+            AVG(paper_circulation) AS avg_paper,
+            AVG(total_circulation) AS avg_total,
+            AVG(numeric_guarantee_fund) AS avg_fdg_num,
+            AVG(paper_guarantee_fund) AS avg_fdg_paper
+        FROM monetary_indicators_daily
         WHERE snapshot_date BETWEEN ? AND ?
     """, (
         period["effective_start"],
@@ -404,42 +404,42 @@ def monetary_indicators_period_summary():
 
     period_metrics = {
         "day_count": averages["day_count"],
-        "average_gonettes_num_circulation": round(float(averages["avg_num"] or 0.0), 2),
-        "average_gonettes_paper_circulation": round(float(averages["avg_paper"] or 0.0), 2),
-        "average_gonettes_total_circulation": round(float(averages["avg_total"] or 0.0), 2),
-        "average_fonds_garantie_num": round(float(averages["avg_fdg_num"] or 0.0), 2),
-        "average_fonds_garantie_paper": round(float(averages["avg_fdg_paper"] or 0.0), 2),
+        "average_numeric_circulation": round(float(averages["avg_num"] or 0.0), 2),
+        "average_paper_circulation": round(float(averages["avg_paper"] or 0.0), 2),
+        "average_total_circulation": round(float(averages["avg_total"] or 0.0), 2),
+        "average_numeric_guarantee_fund": round(float(averages["avg_fdg_num"] or 0.0), 2),
+        "average_paper_guarantee_fund": round(float(averages["avg_fdg_paper"] or 0.0), 2),
 
-        "variation_gonettes_num_circulation": _compute_variation(
+        "variation_numeric_circulation": _compute_variation(
             closing_snapshot,
             opening_snapshot,
-            "gonettes_num_circulation",
+            "numeric_circulation",
         ),
-        "variation_gonettes_paper_circulation": _compute_variation(
+        "variation_paper_circulation": _compute_variation(
             closing_snapshot,
             opening_snapshot,
-            "gonettes_paper_circulation",
+            "paper_circulation",
         ),
-        "variation_gonettes_total_circulation": _compute_variation(
+        "variation_total_circulation": _compute_variation(
             closing_snapshot,
             opening_snapshot,
-            "gonettes_total_circulation",
+            "total_circulation",
         ),
 
-        "variation_rate_gonettes_num_circulation": _compute_variation_rate(
+        "variation_rate_numeric_circulation": _compute_variation_rate(
             closing_snapshot,
             opening_snapshot,
-            "gonettes_num_circulation",
+            "numeric_circulation",
         ),
-        "variation_rate_gonettes_paper_circulation": _compute_variation_rate(
+        "variation_rate_paper_circulation": _compute_variation_rate(
             closing_snapshot,
             opening_snapshot,
-            "gonettes_paper_circulation",
+            "paper_circulation",
         ),
-        "variation_rate_gonettes_total_circulation": _compute_variation_rate(
+        "variation_rate_total_circulation": _compute_variation_rate(
             closing_snapshot,
             opening_snapshot,
-            "gonettes_total_circulation",
+            "total_circulation",
         ),
     }
 
@@ -1152,7 +1152,7 @@ def _build_pilotage_monetary_bundle(cur, period):
     opening_row = cur.execute(f"""
         SELECT
             {DAILY_MONETARY_COLUMNS}
-        FROM odoo_monetary_indicators_daily
+        FROM monetary_indicators_daily
         WHERE snapshot_date < ?
         ORDER BY snapshot_date DESC
         LIMIT 1
@@ -1167,7 +1167,7 @@ def _build_pilotage_monetary_bundle(cur, period):
     closing_row = cur.execute(f"""
         SELECT
             {DAILY_MONETARY_COLUMNS}
-        FROM odoo_monetary_indicators_daily
+        FROM monetary_indicators_daily
         WHERE snapshot_date <= ?
         ORDER BY snapshot_date DESC
         LIMIT 1
@@ -1180,12 +1180,12 @@ def _build_pilotage_monetary_bundle(cur, period):
     averages = cur.execute("""
         SELECT
             COUNT(*) AS day_count,
-            AVG(gonettes_num_circulation) AS avg_num,
-            AVG(gonettes_paper_circulation) AS avg_paper,
-            AVG(gonettes_total_circulation) AS avg_total,
-            AVG(fonds_garantie_num) AS avg_fdg_num,
-            AVG(fonds_garantie_paper) AS avg_fdg_paper
-        FROM odoo_monetary_indicators_daily
+            AVG(numeric_circulation) AS avg_num,
+            AVG(paper_circulation) AS avg_paper,
+            AVG(total_circulation) AS avg_total,
+            AVG(numeric_guarantee_fund) AS avg_fdg_num,
+            AVG(paper_guarantee_fund) AS avg_fdg_paper
+        FROM monetary_indicators_daily
         WHERE snapshot_date BETWEEN ? AND ?
     """, (
         period["effective_start"],
@@ -1194,26 +1194,26 @@ def _build_pilotage_monetary_bundle(cur, period):
 
     period_metrics = {
         "day_count": averages["day_count"],
-        "average_gonettes_num_circulation": _money2(averages["avg_num"]),
-        "average_gonettes_paper_circulation": _money2(averages["avg_paper"]),
-        "average_gonettes_total_circulation": _money2(averages["avg_total"]),
-        "average_fonds_garantie_num": _money2(averages["avg_fdg_num"]),
-        "average_fonds_garantie_paper": _money2(averages["avg_fdg_paper"]),
+        "average_numeric_circulation": _money2(averages["avg_num"]),
+        "average_paper_circulation": _money2(averages["avg_paper"]),
+        "average_total_circulation": _money2(averages["avg_total"]),
+        "average_numeric_guarantee_fund": _money2(averages["avg_fdg_num"]),
+        "average_paper_guarantee_fund": _money2(averages["avg_fdg_paper"]),
 
-        "variation_gonettes_num_circulation": _compute_variation(
+        "variation_numeric_circulation": _compute_variation(
             closing_snapshot,
             opening_snapshot,
-            "gonettes_num_circulation",
+            "numeric_circulation",
         ),
-        "variation_gonettes_paper_circulation": _compute_variation(
+        "variation_paper_circulation": _compute_variation(
             closing_snapshot,
             opening_snapshot,
-            "gonettes_paper_circulation",
+            "paper_circulation",
         ),
-        "variation_gonettes_total_circulation": _compute_variation(
+        "variation_total_circulation": _compute_variation(
             closing_snapshot,
             opening_snapshot,
-            "gonettes_total_circulation",
+            "total_circulation",
         ),
     }
 
@@ -1332,7 +1332,7 @@ def _build_pilotage_monthly_item(
     outflow_volume = _money2(outflows.get("volume"))
     outflow_transaction_count = int(outflows.get("transaction_count") or 0)
 
-    net_cyclos_flow = _money2(inflow_volume - outflow_volume)
+    net_circuit_flow = _money2(inflow_volume - outflow_volume)
 
     economic_activity_intensity = _ratio(
         economic_activity_volume,
@@ -1347,7 +1347,7 @@ def _build_pilotage_monthly_item(
         average_numeric_mass,
     )
     net_flow_pressure = _ratio(
-        net_cyclos_flow,
+        net_circuit_flow,
         average_numeric_mass,
     )
     outflow_inflow_ratio = _ratio(
@@ -1355,7 +1355,7 @@ def _build_pilotage_monthly_item(
         inflow_volume,
     )
     net_inflow_retention_rate = _ratio(
-        net_cyclos_flow,
+        net_circuit_flow,
         inflow_volume,
     )
 
@@ -1397,7 +1397,7 @@ def _build_pilotage_monthly_item(
         "outflow_transaction_count": outflow_transaction_count,
         "outflow_volume": outflow_volume,
 
-        "net_cyclos_flow": net_cyclos_flow,
+        "net_circuit_flow": net_circuit_flow,
 
         "economic_activity_intensity": economic_activity_intensity,
         "annualized_economic_activity_intensity_indicative": (
@@ -1449,10 +1449,10 @@ def _resolve_pilotage_timeseries_period(
     """
     Résout une période pour les séries de pilotage.
 
-    Historiquement, la période dépendait de odoo_monetary_indicators_daily.
+    Historiquement, la période dépendait de monetary_indicators_daily.
     En multi-MLC, certaines instances, comme la Graine, disposent de flux
     Cyclos et de caches de soldes sans Odoo daily. On garde donc _resolve_period
-    en priorité, puis on bascule sur transaction_semantics si nécessaire.
+    en priorité, puis on bascule sur transactions si nécessaire.
     """
     if period["effective_start"] is not None and period["effective_end"] is not None:
         return period
@@ -1461,7 +1461,7 @@ def _resolve_pilotage_timeseries_period(
         SELECT
             MIN(substr(date, 1, 10)) AS min_date,
             MAX(substr(date, 1, 10)) AS max_date
-        FROM transaction_semantics
+        FROM transactions
     """).fetchone()
 
     if row is None or row["min_date"] is None or row["max_date"] is None:
@@ -1480,7 +1480,7 @@ def _resolve_pilotage_timeseries_period(
         return period
 
     bounds = dict(period.get("bounds") or {})
-    bounds["transaction_semantics"] = {
+    bounds["transactions"] = {
         "min_date": data_min,
         "max_date": data_max,
     }
@@ -1505,7 +1505,7 @@ def _fetch_pilotage_timeseries_monthly_rows(cur, effective_start, effective_end)
     Priorité :
     1. Odoo daily : source historique Gonette ;
     2. pilotage_holdings_daily_cache : source multi-MLC avec masse numérique ;
-    3. transaction_semantics : fallback flux seul, sans stock moyen.
+    3. transactions : fallback temporel sans stock moyen.
     """
     rows = cur.execute("""
         SELECT
@@ -1513,9 +1513,9 @@ def _fetch_pilotage_timeseries_monthly_rows(cur, effective_start, effective_end)
             year,
             month,
             COUNT(*) AS day_count,
-            AVG(gonettes_num_circulation) AS avg_numeric_mass,
-            AVG(fonds_garantie_num) AS avg_numeric_guarantee
-        FROM odoo_monetary_indicators_daily
+            AVG(numeric_circulation) AS avg_numeric_mass,
+            AVG(numeric_guarantee_fund) AS avg_numeric_guarantee
+        FROM monetary_indicators_daily
         WHERE snapshot_date BETWEEN ? AND ?
         GROUP BY
             substr(snapshot_date, 1, 7),
@@ -1528,7 +1528,7 @@ def _fetch_pilotage_timeseries_monthly_rows(cur, effective_start, effective_end)
     )).fetchall()
 
     if rows:
-        return rows, "odoo_monetary_indicators_daily"
+        return rows, "monetary_indicators_daily"
 
     rows = cur.execute("""
         SELECT
@@ -1562,7 +1562,7 @@ def _fetch_pilotage_timeseries_monthly_rows(cur, effective_start, effective_end)
             COUNT(DISTINCT substr(date, 1, 10)) AS day_count,
             NULL AS avg_numeric_mass,
             NULL AS avg_numeric_guarantee
-        FROM transaction_semantics
+        FROM transactions
         WHERE substr(date, 1, 10) BETWEEN ? AND ?
         GROUP BY
             substr(date, 1, 7),
@@ -1574,7 +1574,7 @@ def _fetch_pilotage_timeseries_monthly_rows(cur, effective_start, effective_end)
         effective_end,
     )).fetchall()
 
-    return rows, "transaction_semantics"
+    return rows, "transactions"
 
 
 @monetary_indicators_bp.route(
@@ -1980,244 +1980,6 @@ def _build_pilotage_summary_benchmarks():
     }
 
 
-
-
-def _table_exists(cur, table_name):
-    row = cur.execute("""
-        SELECT 1
-        FROM sqlite_master
-        WHERE type = 'table'
-          AND name = ?
-        LIMIT 1
-    """, (table_name,)).fetchone()
-
-    return row is not None
-
-
-def _system_balance_average_by_role(cur, effective_start, effective_end, role):
-    if not _table_exists(cur, "cyclos_system_daily_balances"):
-        return None
-
-    row = cur.execute("""
-        SELECT AVG(balance) AS average_balance
-        FROM cyclos_system_daily_balances
-        WHERE balance_date BETWEEN ? AND ?
-          AND role = ?
-    """, (
-        effective_start,
-        effective_end,
-        role,
-    )).fetchone()
-
-    if row is None or row["average_balance"] is None:
-        return None
-
-    return _money2(row["average_balance"])
-
-
-def _system_balance_snapshot_by_role(cur, day, role):
-    if not _table_exists(cur, "cyclos_system_daily_balances"):
-        return None
-
-    row = cur.execute("""
-        SELECT balance
-        FROM cyclos_system_daily_balances
-        WHERE balance_date = ?
-          AND role = ?
-        LIMIT 1
-    """, (
-        day,
-        role,
-    )).fetchone()
-
-    if row is None or row["balance"] is None:
-        return None
-
-    return _money2(row["balance"])
-
-
-
-
-def _pilotage_bundle_has_usable_period_metrics(bundle):
-    metrics = (bundle or {}).get("period_metrics") or {}
-
-    if not metrics:
-        return False
-
-    day_count = int(metrics.get("day_count") or 0)
-    average_numeric_mass = metrics.get("average_gonettes_num_circulation")
-
-    return day_count > 0 and average_numeric_mass is not None
-
-
-def _build_pilotage_monetary_bundle_from_adaptive_sources(cur, period):
-    """
-    Fallback multi-MLC du bundle de pilotage.
-
-    Source principale :
-    - pilotage_holdings_daily_cache pour la masse numérique moyenne ;
-    - cyclos_system_daily_balances pour les comptes système de garantie /
-      nantissement quand ils existent.
-
-    Cela permet à une instance sans Odoo daily, comme la Graine, d'alimenter
-    les KPI de pression, variation de stock et robustesse.
-    """
-    effective_start = period.get("effective_start")
-    effective_end = period.get("effective_end")
-
-    if effective_start is None or effective_end is None:
-        return {
-            "opening_snapshot": None,
-            "closing_snapshot": None,
-            "period_metrics": None,
-        }
-
-    if not _table_exists(cur, "pilotage_holdings_daily_cache"):
-        return {
-            "opening_snapshot": None,
-            "closing_snapshot": None,
-            "period_metrics": None,
-        }
-
-    metrics_row = cur.execute("""
-        SELECT
-            COUNT(*) AS day_count,
-            AVG(CASE WHEN numeric_mass > 0 THEN numeric_mass ELSE NULL END)
-                AS average_numeric_mass,
-            MIN(day) AS min_day,
-            MAX(day) AS max_day
-        FROM pilotage_holdings_daily_cache
-        WHERE day BETWEEN ? AND ?
-    """, (
-        effective_start,
-        effective_end,
-    )).fetchone()
-
-    if (
-        metrics_row is None
-        or int(metrics_row["day_count"] or 0) == 0
-        or metrics_row["average_numeric_mass"] is None
-    ):
-        return {
-            "opening_snapshot": None,
-            "closing_snapshot": None,
-            "period_metrics": None,
-        }
-
-    opening_row = cur.execute("""
-        SELECT day, numeric_mass
-        FROM pilotage_holdings_daily_cache
-        WHERE day BETWEEN ? AND ?
-        ORDER BY day ASC
-        LIMIT 1
-    """, (
-        effective_start,
-        effective_end,
-    )).fetchone()
-
-    closing_row = cur.execute("""
-        SELECT day, numeric_mass
-        FROM pilotage_holdings_daily_cache
-        WHERE day BETWEEN ? AND ?
-        ORDER BY day DESC
-        LIMIT 1
-    """, (
-        effective_start,
-        effective_end,
-    )).fetchone()
-
-    opening_day = opening_row["day"] if opening_row else None
-    closing_day = closing_row["day"] if closing_row else None
-
-    opening_numeric_mass = (
-        _money2(opening_row["numeric_mass"])
-        if opening_row is not None and opening_row["numeric_mass"] is not None
-        else None
-    )
-    closing_numeric_mass = (
-        _money2(closing_row["numeric_mass"])
-        if closing_row is not None and closing_row["numeric_mass"] is not None
-        else None
-    )
-
-    average_numeric_mass = _money2(metrics_row["average_numeric_mass"])
-
-    # Pour la Graine, le compte numeriqueCompteDedie sert de référence
-    # d'adossement / garantie numérique apparente. Si absent, on garde la
-    # masse numérique moyenne comme proxy strictement interne.
-    average_numeric_guarantee = _system_balance_average_by_role(
-        cur,
-        effective_start,
-        effective_end,
-        "digital_dedicated",
-    )
-    if average_numeric_guarantee is None:
-        average_numeric_guarantee = average_numeric_mass
-
-    average_paper_guarantee = _system_balance_average_by_role(
-        cur,
-        effective_start,
-        effective_end,
-        "paper_guarantee",
-    )
-
-    opening_numeric_guarantee = (
-        _system_balance_snapshot_by_role(cur, opening_day, "digital_dedicated")
-        if opening_day
-        else None
-    )
-    closing_numeric_guarantee = (
-        _system_balance_snapshot_by_role(cur, closing_day, "digital_dedicated")
-        if closing_day
-        else None
-    )
-
-    if opening_numeric_guarantee is None:
-        opening_numeric_guarantee = opening_numeric_mass
-    if closing_numeric_guarantee is None:
-        closing_numeric_guarantee = closing_numeric_mass
-
-    numeric_variation = (
-        _money2(closing_numeric_mass - opening_numeric_mass)
-        if closing_numeric_mass is not None and opening_numeric_mass is not None
-        else None
-    )
-
-    opening_snapshot = {
-        "snapshot_date": opening_day,
-        "day": opening_day,
-        "gonettes_num_circulation": opening_numeric_mass,
-        "fonds_garantie_num": opening_numeric_guarantee,
-        "is_synthetic": False,
-        "source": "pilotage_holdings_daily_cache",
-    }
-
-    closing_snapshot = {
-        "snapshot_date": closing_day,
-        "day": closing_day,
-        "gonettes_num_circulation": closing_numeric_mass,
-        "fonds_garantie_num": closing_numeric_guarantee,
-        "is_synthetic": False,
-        "source": "pilotage_holdings_daily_cache",
-    }
-
-    period_metrics = {
-        "day_count": int(metrics_row["day_count"] or 0),
-        "average_gonettes_num_circulation": average_numeric_mass,
-        "average_fonds_garantie_num": average_numeric_guarantee,
-        "average_fonds_garantie_paper": average_paper_guarantee,
-        "variation_gonettes_num_circulation": numeric_variation,
-        "source": "pilotage_holdings_daily_cache",
-        "guarantee_source": "cyclos_system_daily_balances",
-    }
-
-    return {
-        "opening_snapshot": opening_snapshot,
-        "closing_snapshot": closing_snapshot,
-        "period_metrics": period_metrics,
-    }
-
-
 @monetary_indicators_bp.route(
     "/api/monetary-indicators/pilotage-summary",
     methods=["GET"],
@@ -2248,12 +2010,10 @@ def monetary_indicators_pilotage_summary():
         conn.close()
         return jsonify({"status": "error", "error": str(exc)}), 400
 
-    bundle = _build_pilotage_monetary_bundle(cur, period)
-    if not _pilotage_bundle_has_usable_period_metrics(bundle):
-        bundle = _build_pilotage_monetary_bundle_from_adaptive_sources(
-            cur,
-            period,
-        )
+    bundle = _build_pilotage_monetary_bundle(
+        cur,
+        period,
+    )
 
     conn.close()
 
@@ -2282,10 +2042,10 @@ def monetary_indicators_pilotage_summary():
 
     day_count = int(period_metrics.get("day_count") or 0)
     average_numeric_mass = _money2(
-        period_metrics.get("average_gonettes_num_circulation")
+        period_metrics.get("average_numeric_circulation")
     )
     average_numeric_guarantee = _money2(
-        period_metrics.get("average_fonds_garantie_num")
+        period_metrics.get("average_numeric_guarantee_fund")
     )
 
     economic_activity_volume = _money2(
@@ -2297,10 +2057,10 @@ def monetary_indicators_pilotage_summary():
     outflow_volume = _money2(
         stats.get("volume_sorti_circuit")
     )
-    net_cyclos_flow = _money2(inflow_volume - outflow_volume)
+    net_circuit_flow = _money2(inflow_volume - outflow_volume)
 
     raw_numeric_stock_variation = period_metrics.get(
-        "variation_gonettes_num_circulation"
+        "variation_numeric_circulation"
     )
 
     numeric_stock_variation = (
@@ -2310,7 +2070,7 @@ def monetary_indicators_pilotage_summary():
     )
 
     reconciliation_residual = (
-        _money2(numeric_stock_variation - net_cyclos_flow)
+        _money2(numeric_stock_variation - net_circuit_flow)
         if numeric_stock_variation is not None
         else None
     )
@@ -2328,7 +2088,7 @@ def monetary_indicators_pilotage_summary():
         average_numeric_mass,
     )
     net_flow_pressure = _ratio(
-        net_cyclos_flow,
+        net_circuit_flow,
         average_numeric_mass,
     )
     outflow_inflow_ratio = _ratio(
@@ -2337,7 +2097,7 @@ def monetary_indicators_pilotage_summary():
     )
 
     net_inflow_retention_rate = _ratio(
-        net_cyclos_flow,
+        net_circuit_flow,
         inflow_volume,
     )
 
@@ -2458,7 +2218,7 @@ def monetary_indicators_pilotage_summary():
                 stats.get("nb_sorties_circuit") or 0
             ),
             "outflow_volume": outflow_volume,
-            "net_cyclos_flow": net_cyclos_flow,
+            "net_circuit_flow": net_circuit_flow,
         },
         "pilotage_metrics": {
             "circulation": {
@@ -2489,7 +2249,7 @@ def monetary_indicators_pilotage_summary():
             },
             "stock_flow_reconciliation": {
                 "numeric_stock_variation": numeric_stock_variation,
-                "net_cyclos_flow": net_cyclos_flow,
+                "net_circuit_flow": net_circuit_flow,
                 "residual": reconciliation_residual,
             },
             "reconversion_coverage_proxy": {
@@ -2565,4 +2325,3 @@ def monetary_indicators_pilotage_holdings_timeseries():
         "status": "ok",
         **payload,
     })
-

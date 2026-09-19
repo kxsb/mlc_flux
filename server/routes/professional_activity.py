@@ -14,10 +14,6 @@ from server.services.professional_chain_fate_analytics import (
     load_professional_chain_fate_summary,
 )
 
-from server.services.professional_consumption_map_analytics import (
-    get_professional_consumption_map_payload,
-)
-
 professional_activity_bp = Blueprint("professional_activity", __name__)
 
 
@@ -136,25 +132,3 @@ def professionals_chain_fate_summary():
         "status": "ok",
         **payload,
     })
-
-
-@professional_activity_bp.route(
-    "/api/professionals/consumption-map",
-    methods=["GET"],
-)
-def professionals_consumption_map():
-    start = request.args.get("start")
-    end = request.args.get("end")
-    min_users = request.args.get("min_users", default=2, type=int)
-
-    payload = get_professional_consumption_map_payload(
-        start=start,
-        end=end,
-        min_users=min_users or 5,
-    )
-
-    return jsonify({
-        "status": "ok",
-        **payload,
-    })
-
